@@ -6,6 +6,7 @@ import {
   CheckSquare, Plus, Users, LayoutDashboard,
   BarChart2, Settings, LogOut
 } from 'lucide-react'
+import NotificationBell from '../notifications/NotificationBell'
 
 export default function Layout({ children }) {
   const { profile, isAdmin, isManager } = useAuth()
@@ -86,6 +87,11 @@ export default function Layout({ children }) {
             </NavLink>
           ))}
         </nav>
+
+        {/* Notifications */}
+        <div className="px-3 py-2 border-t border-white/8">
+          <NotificationBell onTaskClick={(taskId) => navigate('/my-tasks')} />
+        </div>
 
         {/* Sign out */}
         <div className="p-3 border-t border-white/8">
