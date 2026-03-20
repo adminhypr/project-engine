@@ -1,10 +1,10 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        // Clean light palette inspired by Blester
         slate: {
           50:  '#f8f9fc',
           100: '#f1f3f8',
@@ -30,7 +30,6 @@ export default {
           800: '#3730a3',
           900: '#312e81',
         },
-        // Keep legacy navy references working during transition
         navy: {
           50:  '#f8f9fc',
           100: '#f1f3f8',
@@ -43,6 +42,14 @@ export default {
           800: '#1f2937',
           900: '#111827',
           950: '#0b0f19',
+        },
+        // Dark mode surface colors
+        dark: {
+          bg:      '#0f1117',
+          surface: '#181a24',
+          card:    '#1e2030',
+          border:  '#2a2d3e',
+          hover:   '#252839',
         },
         orange: {
           50:  '#fff7ed',
@@ -82,7 +89,6 @@ export default {
         'card':    '0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.04)',
         'elevated':'0 4px 24px rgba(0,0,0,0.08)',
         'panel':   '0 8px 40px rgba(0,0,0,0.12)',
-        // Keep legacy glass references
         'glass':    '0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.04)',
         'glass-lg': '0 4px 24px rgba(0,0,0,0.08)',
         'glass-xl': '0 8px 40px rgba(0,0,0,0.12)',

@@ -138,7 +138,7 @@ export default function NotificationBell({ onTaskClick }) {
     <div className="relative" ref={panelRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2.5 rounded-xl bg-white border border-slate-200 shadow-soft text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all duration-200"
+        className="relative p-2.5 rounded-xl bg-white dark:bg-dark-card border border-slate-200 dark:border-dark-border shadow-soft text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-dark-hover transition-all duration-200"
       >
         <Bell size={18} />
         {count > 0 && (
@@ -156,19 +156,19 @@ export default function NotificationBell({ onTaskClick }) {
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 max-w-80 bg-white rounded-2xl shadow-elevated border border-slate-200 z-50 overflow-hidden"
+            className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 max-w-80 bg-white dark:bg-dark-card rounded-2xl shadow-elevated border border-slate-200 dark:border-dark-border z-50 overflow-hidden"
             initial={{ opacity: 0, y: -8, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.95 }}
             transition={{ duration: 0.15 }}
           >
             {/* Header */}
-            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-900">Notifications</h3>
+            <div className="px-4 py-3 border-b border-slate-100 dark:border-dark-border flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Notifications</h3>
               {count > 0 && (
                 <button
                   onClick={clearAll}
-                  className="text-xs text-slate-400 hover:text-slate-700 transition-colors"
+                  className="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
                 >
                   Clear all
                 </button>
@@ -179,14 +179,14 @@ export default function NotificationBell({ onTaskClick }) {
             <div className="max-h-[400px] overflow-y-auto">
               {notifications.length === 0 ? (
                 <div className="py-8 text-center">
-                  <Bell size={24} className="text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm text-slate-400">All caught up!</p>
+                  <Bell size={24} className="text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                  <p className="text-sm text-slate-400 dark:text-slate-500">All caught up!</p>
                 </div>
               ) : (
                 notifications.map((n, i) => (
                   <motion.div
                     key={n.id}
-                    className="px-4 py-3 border-b border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer flex gap-3"
+                    className="px-4 py-3 border-b border-slate-100 dark:border-dark-border hover:bg-slate-50 dark:hover:bg-dark-hover transition-colors cursor-pointer flex gap-3"
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.03 }}
@@ -199,13 +199,13 @@ export default function NotificationBell({ onTaskClick }) {
                       {n.icon}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-slate-700">{n.title}</p>
-                      <p className="text-xs text-slate-500 truncate">{n.body}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{timeAgo(n.time)}</p>
+                      <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{n.title}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{n.body}</p>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{timeAgo(n.time)}</p>
                     </div>
                     <button
                       onClick={(e) => { e.stopPropagation(); dismiss(n.id) }}
-                      className="p-1 rounded-lg text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-colors flex-shrink-0"
+                      className="p-1 rounded-lg text-slate-300 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-dark-hover transition-colors flex-shrink-0"
                     >
                       <X size={12} />
                     </button>

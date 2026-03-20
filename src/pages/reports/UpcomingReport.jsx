@@ -21,7 +21,7 @@ export default function UpcomingReport({ tasks }) {
     <div>
       <ExportBtn data={csvData} filename="upcoming-tasks.csv" />
       {upcoming.length === 0
-        ? <div className="card text-center py-12 text-slate-400">No upcoming tasks with due dates.</div>
+        ? <div className="card text-center py-12 text-slate-400 dark:text-slate-500">No upcoming tasks with due dates.</div>
         : <div className="card">
             <div className="overflow-x-auto -mx-4 sm:mx-0">
             <table className="w-full text-sm">
@@ -36,7 +36,7 @@ export default function UpcomingReport({ tasks }) {
               </tr></thead>
               <tbody>
                 {upcoming.map(t => (
-                  <tr key={t.id} className={`border-b border-slate-100 priority-${t.priority}`}>
+                  <tr key={t.id} className={`border-b border-slate-100 dark:border-dark-border priority-${t.priority}`}>
                     <td className="table-td font-medium">{t.title}</td>
                     <td className="table-td">{t.assignee?.full_name}</td>
                     <td className="table-td">{t.team?.name}</td>

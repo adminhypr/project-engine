@@ -6,10 +6,10 @@ import { AnimatedNumber } from './animations'
 // ── Page header ──────────────────────────────
 export function PageHeader({ title, subtitle, actions }) {
   return (
-    <div className="bg-white border-b border-slate-200/60 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between sticky top-0 z-10">
+    <div className="bg-white dark:bg-dark-surface border-b border-slate-200/60 dark:border-dark-border px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between sticky top-0 z-10">
       <div>
-        <h2 className="text-lg font-bold text-slate-900">{title}</h2>
-        {subtitle && <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>}
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white">{title}</h2>
+        {subtitle && <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{subtitle}</p>}
       </div>
       {actions && <div className="flex items-center gap-3">{actions}</div>}
     </div>
@@ -23,12 +23,12 @@ export function StatsStrip({ stats }) {
       {stats.map(({ label, value, color }, i) => (
         <motion.div
           key={label}
-          className="bg-white rounded-2xl border border-slate-200/60 p-4 shadow-soft"
+          className="bg-white dark:bg-dark-card rounded-2xl border border-slate-200/60 dark:border-dark-border p-4 shadow-soft dark:shadow-none"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: i * 0.05 }}
         >
-          <p className="text-xs text-slate-500 font-medium mb-1">{label}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-1">{label}</p>
           <p className={`text-3xl font-bold ${color || 'text-slate-900'}`}>
             <AnimatedNumber value={value} />
           </p>
@@ -60,9 +60,9 @@ export function AssignmentBadge({ type }) {
 // ── Urgency badge ─────────────────────────────
 export function UrgencyBadge({ urgency }) {
   const styles = {
-    High: 'bg-red-50 text-red-700',
-    Med:  'bg-orange-50 text-orange-700',
-    Low:  'bg-emerald-50 text-emerald-700'
+    High: 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-400',
+    Med:  'bg-orange-50 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400',
+    Low:  'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'
   }
   return <span className={`badge ${styles[urgency] || 'bg-slate-100 text-slate-500'}`}>{urgency}</span>
 }
@@ -70,10 +70,10 @@ export function UrgencyBadge({ urgency }) {
 // ── Status badge ──────────────────────────────
 export function StatusBadge({ status }) {
   const styles = {
-    'Not Started': 'bg-slate-100 text-slate-600',
-    'In Progress': 'bg-blue-50 text-blue-700',
-    'Blocked':     'bg-red-50 text-red-700',
-    'Done':        'bg-emerald-50 text-emerald-700'
+    'Not Started': 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+    'In Progress': 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400',
+    'Blocked':     'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-400',
+    'Done':        'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'
   }
   return <span className={`badge ${styles[status] || 'bg-slate-100 text-slate-500'}`}>{status}</span>
 }
@@ -113,8 +113,8 @@ export function EmptyState({ icon, title, description, action }) {
       transition={{ duration: 0.3 }}
     >
       {icon && <div className="text-4xl mb-3">{icon}</div>}
-      <h3 className="font-semibold text-slate-700 mb-1">{title}</h3>
-      {description && <p className="text-sm text-slate-400 mb-4">{description}</p>}
+      <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-1">{title}</h3>
+      {description && <p className="text-sm text-slate-400 dark:text-slate-500 mb-4">{description}</p>}
       {action}
     </motion.div>
   )

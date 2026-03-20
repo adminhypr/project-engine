@@ -67,7 +67,7 @@ export function SlidePanel({ isOpen, onClose, children, width = 520 }) {
       {isOpen && (
         <>
           <motion.div
-            className="fixed inset-0 bg-slate-900/20 z-40"
+            className="fixed inset-0 bg-slate-900/20 dark:bg-black/50 z-40"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -75,7 +75,7 @@ export function SlidePanel({ isOpen, onClose, children, width = 520 }) {
             onClick={onClose}
           />
           <motion.div
-            className="fixed top-0 right-0 h-full w-full sm:w-auto bg-white shadow-panel z-50 flex flex-col border-l border-slate-200"
+            className="fixed top-0 right-0 h-full w-full sm:w-auto bg-white dark:bg-dark-surface shadow-panel z-50 flex flex-col border-l border-slate-200 dark:border-dark-border"
             style={{ maxWidth: width }}
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
@@ -149,7 +149,7 @@ export function ModalWrapper({ isOpen, onClose, children }) {
       {isOpen && (
         <>
           <motion.div
-            className="fixed inset-0 bg-slate-900/25 z-50"
+            className="fixed inset-0 bg-slate-900/25 dark:bg-black/50 z-50"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -159,7 +159,7 @@ export function ModalWrapper({ isOpen, onClose, children }) {
             className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 pointer-events-none"
           >
             <motion.div
-              className="bg-white rounded-2xl shadow-panel border border-slate-200 pointer-events-auto w-full max-w-md"
+              className="bg-white dark:bg-dark-card rounded-2xl shadow-panel border border-slate-200 dark:border-dark-border pointer-events-auto w-full max-w-md"
               initial={{ opacity: 0, scale: 0.95, y: 8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 8 }}

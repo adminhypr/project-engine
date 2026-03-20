@@ -54,7 +54,7 @@ export default function SettingsPage() {
     else { showToast('Team deleted'); fetchAll() }
   }
 
-  if (loading) return <div className="p-8 text-slate-400">Loading...</div>
+  if (loading) return <div className="p-8 text-slate-400 dark:text-slate-500">Loading...</div>
 
   return (
     <PageTransition>
@@ -70,7 +70,7 @@ export default function SettingsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">Teams</p>
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Teams</p>
             <div className="flex gap-2 mb-4">
               <input
                 type="text"
@@ -86,13 +86,13 @@ export default function SettingsPage() {
               {teams.map(t => (
                 <motion.div
                   key={t.id}
-                  className="flex items-center gap-2 bg-white rounded-xl px-3 py-1.5 border border-slate-100"
+                  className="flex items-center gap-2 bg-white dark:bg-dark-surface rounded-xl px-3 py-1.5 border border-slate-100 dark:border-dark-border"
                   layout
                 >
                   <span className="text-sm font-medium">{t.name}</span>
                   <button
                     onClick={() => deleteTeam(t.id)}
-                    className="text-slate-400 hover:text-red-500 text-xs transition-colors"
+                    className="text-slate-400 dark:text-slate-500 hover:text-red-500 text-xs transition-colors"
                   >✕</button>
                 </motion.div>
               ))}
@@ -106,10 +106,10 @@ export default function SettingsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.05 }}
           >
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">
               Users ({profiles.length})
             </p>
-            <p className="text-xs text-slate-400 mb-4">
+            <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
               New users appear here after they sign in for the first time. Assign them a team and role.
             </p>
             <div className="overflow-x-auto -mx-4 sm:mx-0">
@@ -164,7 +164,7 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave }) {
   )
 
   return (
-    <tr className={`border-b border-slate-100 ${!user.team_id ? 'bg-yellow-500/5' : ''}`}>
+    <tr className={`border-b border-slate-100 dark:border-dark-border ${!user.team_id ? 'bg-yellow-500/5' : ''}`}>
       <td className="table-td font-medium">
         <div className="flex items-center gap-2">
           {user.avatar_url
@@ -178,7 +178,7 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave }) {
           {isSelf && <span className="badge bg-brand-50 text-brand-700 text-xs">You</span>}
         </div>
       </td>
-      <td className="table-td text-slate-500 text-xs">{user.email}</td>
+      <td className="table-td text-slate-500 dark:text-slate-400 text-xs">{user.email}</td>
       <td className="table-td">
         <select
           value={teamId}

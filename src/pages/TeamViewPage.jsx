@@ -38,7 +38,7 @@ export default function TeamViewPage() {
     { label: 'Red',        value: viewTasks.filter(t => t.priority === 'red').length,    color: 'text-red-500' },
     { label: 'In Progress',value: viewTasks.filter(t => t.status === 'In Progress').length, color: 'text-sky-600' },
     { label: 'Blocked',    value: viewTasks.filter(t => t.status === 'Blocked').length,  color: 'text-red-600' },
-    { label: 'Total',      value: viewTasks.length,                                       color: 'text-slate-900' },
+    { label: 'Total',      value: viewTasks.length,                                       color: 'text-slate-900 dark:text-white' },
   ]
 
   if (loading) return <LoadingScreen />
@@ -85,9 +85,9 @@ export default function TeamViewPage() {
                       {hasManagers
                         ? managerGroups.map(group => (
                             <div key={group.name || '_unassigned'} className="mb-3">
-                              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-1.5">
+                              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-4 py-1.5">
                                 {group.name ? `Reports to ${group.name}` : 'No reporting manager'}
-                                <span className="ml-1.5 text-slate-300">({group.tasks.length})</span>
+                                <span className="ml-1.5 text-slate-300 dark:text-slate-600">({group.tasks.length})</span>
                               </p>
                               <TaskTable
                                 tasks={group.tasks}

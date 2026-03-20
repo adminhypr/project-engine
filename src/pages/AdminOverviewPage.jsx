@@ -31,7 +31,7 @@ export default function AdminOverviewPage() {
     { label: 'Red Org-wide',  value: tasks.filter(t => t.priority === 'red').length,    color: 'text-red-500' },
     { label: 'Urgent',        value: tasks.filter(t => t.priority === 'orange').length,  color: 'text-orange-500' },
     { label: 'Completed',     value: tasks.filter(t => t.status === 'Done').length,      color: 'text-emerald-600' },
-    { label: 'Total Tasks',   value: tasks.length,                                        color: 'text-slate-900' },
+    { label: 'Total Tasks',   value: tasks.length,                                        color: 'text-slate-900 dark:text-white' },
   ]
 
   if (loading) return <LoadingScreen />
@@ -52,7 +52,7 @@ export default function AdminOverviewPage() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">By Team</p>
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">By Team</p>
             <table className="w-full text-sm">
               <thead>
                 <tr>
@@ -64,10 +64,10 @@ export default function AdminOverviewPage() {
               </thead>
               <tbody>
                 {teamBreakdown.map(([name, s]) => (
-                  <tr key={name} className="border-b border-slate-100 last:border-0">
+                  <tr key={name} className="border-b border-slate-100 dark:border-dark-border last:border-0">
                     <td className="py-2 px-2 font-medium">{name}</td>
                     <td className="py-2 px-2 text-center">{s.total}</td>
-                    <td className={`py-2 px-2 text-center font-semibold ${s.red > 0 ? 'text-red-500' : 'text-slate-400'}`}>{s.red}</td>
+                    <td className={`py-2 px-2 text-center font-semibold ${s.red > 0 ? 'text-red-500' : 'text-slate-400 dark:text-slate-500'}`}>{s.red}</td>
                     <td className="py-2 px-2 text-center text-emerald-600">{s.done}</td>
                   </tr>
                 ))}
@@ -77,7 +77,7 @@ export default function AdminOverviewPage() {
 
           {/* Full task list */}
           <div className="card">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">All Tasks</p>
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">All Tasks</p>
             <FilterRow
               filters={filters}
               onChange={(k, v) => setFilters(f => ({ ...f, [k]: v }))}

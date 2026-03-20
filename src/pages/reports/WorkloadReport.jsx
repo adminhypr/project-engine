@@ -29,9 +29,9 @@ export default function WorkloadReport({ tasks, profiles }) {
           </tr></thead>
           <tbody>
             {data.map(r => (
-              <tr key={r.name} className={`border-b border-slate-100 ${r.outstanding > 10 ? 'bg-red-500/5' : ''}`}>
+              <tr key={r.name} className={`border-b border-slate-100 dark:border-dark-border ${r.outstanding > 10 ? 'bg-red-500/5' : ''}`}>
                 <td className="table-td font-medium">{r.name}</td>
-                <td className="table-td text-slate-500">{r.team}</td>
+                <td className="table-td text-slate-500 dark:text-slate-400">{r.team}</td>
                 <td className="table-td text-center">{r.assigned}</td>
                 <td className={`table-td text-center font-semibold ${r.outstanding > 10 ? 'text-red-600' : ''}`}>{r.outstanding}</td>
                 <td className="table-td text-center text-emerald-600">{r.done}</td>

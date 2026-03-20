@@ -35,13 +35,13 @@ export default function AssignmentTypesReport({ tasks }) {
             </tr></thead>
             <tbody>
               {pieData.sort((a, b) => b.value - a.value).map((r, i) => (
-                <tr key={r.name} className="border-b border-slate-100">
+                <tr key={r.name} className="border-b border-slate-100 dark:border-dark-border">
                   <td className="table-td">
                     <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ background: COLORS[i % COLORS.length] }} />
                     {r.name}
                   </td>
                   <td className="table-td text-center font-semibold">{r.value}</td>
-                  <td className="table-td text-center text-slate-500">{total ? Math.round((r.value / total) * 100) : 0}%</td>
+                  <td className="table-td text-center text-slate-500 dark:text-slate-400">{total ? Math.round((r.value / total) * 100) : 0}%</td>
                 </tr>
               ))}
             </tbody>

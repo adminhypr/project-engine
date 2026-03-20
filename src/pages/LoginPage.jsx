@@ -3,10 +3,10 @@ import { signInWithGoogle } from '../lib/auth'
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6">
+    <div className="min-h-screen bg-slate-50 dark:bg-dark-bg flex items-center justify-center p-4 sm:p-6">
 
       <motion.div
-        className="bg-white rounded-3xl shadow-panel border border-slate-200 p-6 sm:p-10 w-full max-w-sm text-center"
+        className="bg-white dark:bg-dark-card rounded-3xl shadow-panel border border-slate-200 dark:border-dark-border p-6 sm:p-10 w-full max-w-sm text-center"
         initial={{ opacity: 0, scale: 0.95, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.4, ease: 'easeOut' }}
@@ -22,14 +22,14 @@ export default function LoginPage() {
           </svg>
         </motion.div>
 
-        <h1 className="text-2xl font-bold text-slate-900 mb-2">Project Engine</h1>
-        <p className="text-slate-500 text-sm mb-8 leading-relaxed">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Project Engine</h1>
+        <p className="text-slate-500 dark:text-slate-400 text-sm mb-8 leading-relaxed">
           Task management for your team.<br />Sign in with your company Google account.
         </p>
 
         <motion.button
           onClick={signInWithGoogle}
-          className="w-full flex items-center justify-center gap-3 px-5 py-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:bg-white hover:border-slate-300 transition-all duration-200 shadow-card"
+          className="w-full flex items-center justify-center gap-3 px-5 py-3 bg-white dark:bg-dark-surface border border-slate-200 dark:border-dark-border rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-dark-hover hover:border-slate-300 dark:hover:border-slate-600 transition-all duration-200 shadow-card"
           whileHover={{ y: -1, boxShadow: '0 8px 30px rgba(26, 39, 68, 0.1)' }}
           whileTap={{ scale: 0.98 }}
         >
@@ -42,7 +42,7 @@ export default function LoginPage() {
           Continue with Google
         </motion.button>
 
-        <p className="mt-6 text-xs text-slate-400">
+        <p className="mt-6 text-xs text-slate-400 dark:text-slate-500">
           By signing in you agree to your organization's terms of use.
         </p>
       </motion.div>

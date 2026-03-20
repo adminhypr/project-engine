@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-900 antialiased;
+    @apply bg-slate-50 text-slate-900 antialiased dark:bg-dark-bg dark:text-slate-100;
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', sans-serif;
   }
 }
@@ -24,20 +24,24 @@
   .btn-secondary {
     @apply btn bg-white text-slate-700
            border border-slate-200 shadow-soft
-           hover:bg-slate-50 hover:border-slate-300 hover:-translate-y-[1px];
+           hover:bg-slate-50 hover:border-slate-300 hover:-translate-y-[1px]
+           dark:bg-dark-card dark:text-slate-200 dark:border-dark-border dark:hover:bg-dark-hover;
   }
   .btn-danger {
     @apply btn bg-red-50 text-red-700
            border border-red-200
-           hover:bg-red-100;
+           hover:bg-red-100
+           dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20 dark:hover:bg-red-500/20;
   }
   .btn-ghost {
-    @apply btn bg-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-700;
+    @apply btn bg-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-700
+           dark:text-slate-400 dark:hover:bg-dark-hover dark:hover:text-slate-200;
   }
 
   /* ── Card ──────────────────────────────── */
   .card {
-    @apply bg-white rounded-2xl border border-slate-200/60 p-5 shadow-card;
+    @apply bg-white rounded-2xl border border-slate-200/60 p-5 shadow-card
+           dark:bg-dark-card dark:border-dark-border dark:shadow-none;
   }
 
   /* ── Badge ───────────────────────────────── */
@@ -52,37 +56,32 @@
            outline-none
            focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20
            transition-all duration-200
-           placeholder:text-slate-400;
+           placeholder:text-slate-400
+           dark:bg-dark-surface dark:border-dark-border dark:text-slate-100
+           dark:placeholder:text-slate-500 dark:focus:border-brand-400;
   }
 
   .form-label {
-    @apply block text-sm font-medium text-slate-600 mb-1.5;
+    @apply block text-sm font-medium text-slate-600 mb-1.5
+           dark:text-slate-300;
   }
 
-  /* ── Table ───────────────────────────────── */
+  /* ── Table — clean, modern, spacious ─────── */
   .table-th {
-    @apply text-left text-xs font-semibold text-slate-500 uppercase tracking-wider
-           px-4 py-3 bg-slate-50 border-b border-slate-200;
+    @apply text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider
+           px-4 py-3 border-b border-slate-100
+           dark:text-slate-500 dark:border-dark-border;
   }
 
   .table-td {
-    @apply px-4 py-3 text-sm border-b border-slate-100 align-middle;
-  }
-
-  /* ── Sidebar ─────────────────────────────── */
-  .sidebar-item {
-    @apply flex items-center gap-3 px-4 py-2.5 text-sm
-           cursor-pointer transition-all duration-200 rounded-xl w-full text-left border-0
-           bg-transparent hover:bg-slate-100 text-slate-600 hover:text-slate-900;
-  }
-
-  .sidebar-item.active {
-    @apply bg-brand-50 text-brand-700 font-semibold;
+    @apply px-4 py-3.5 text-sm border-b border-slate-100/80 align-middle
+           dark:border-dark-border/60;
   }
 
   /* ── Skeleton loading ──────────────────── */
   .skeleton {
-    @apply bg-slate-100 rounded-xl animate-pulse;
+    @apply bg-slate-100 rounded-xl animate-pulse
+           dark:bg-dark-hover;
   }
 }
 
@@ -91,6 +90,11 @@
 .priority-orange { background: rgba(249, 115, 22, 0.06); border-left: 3px solid #f97316; }
 .priority-yellow { background: rgba(234, 179, 8, 0.06);  border-left: 3px solid #eab308; }
 .priority-green  { background: rgba(34, 197, 94, 0.06);  border-left: 3px solid #22c55e; }
+
+:is(.dark) .priority-red    { background: rgba(239, 68, 68, 0.10); }
+:is(.dark) .priority-orange { background: rgba(249, 115, 22, 0.10); }
+:is(.dark) .priority-yellow { background: rgba(234, 179, 8, 0.08); }
+:is(.dark) .priority-green  { background: rgba(34, 197, 94, 0.08); }
 
 /* ── Detail panel slide-in ──────────────── */
 .detail-panel {
@@ -106,3 +110,5 @@
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.1); border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.18); }
+:is(.dark) ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); }
+:is(.dark) ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.15); }

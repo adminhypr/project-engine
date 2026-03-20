@@ -10,15 +10,16 @@ import AdminOverviewPage from './pages/AdminOverviewPage'
 import ReportsPage from './pages/reports/ReportsPage'
 import SettingsPage from './pages/SettingsPage'
 import ErrorBoundary from './components/ErrorBoundary'
+import { ThemeProvider } from './hooks/useTheme'
 
 function AppRoutes() {
   const { session, loading, profile, refreshProfile } = useAuth()
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg">
       <div className="text-center">
         <div className="w-10 h-10 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-slate-500 text-sm">Loading...</p>
+        <p className="text-slate-500 dark:text-slate-400 text-sm">Loading...</p>
       </div>
     </div>
   )
@@ -26,11 +27,11 @@ function AppRoutes() {
   if (!session) return <LoginPage />
 
   if (!profile || (!profile.team_id && profile.role !== 'Admin')) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-elevated max-w-md w-full text-center p-6 sm:p-8">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg px-4">
+      <div className="bg-white dark:bg-dark-card rounded-3xl border border-slate-200 dark:border-dark-border shadow-elevated max-w-md w-full text-center p-6 sm:p-8">
         <div className="text-4xl mb-4">👋</div>
-        <h2 className="text-xl font-bold text-slate-900 mb-2">Welcome to Project Engine</h2>
-        <p className="text-slate-500">
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Welcome to Project Engine</h2>
+        <p className="text-slate-500 dark:text-slate-400">
           {!profile
             ? 'Loading your profile... If this persists, try refreshing.'
             : 'Your account has been created. An admin needs to assign your team and role before you can access the app.'}
@@ -70,10 +71,12 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
-    </BrowserRouter>
+    <ThemeProvider>
+      <BrowserRouter>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </BrowserRouter>
+    </ThemeProvider>
   )
 }

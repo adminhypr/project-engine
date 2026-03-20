@@ -51,7 +51,7 @@ export default function AuditLogReport({ dateFrom, dateTo }) {
 
       {/* Event type breakdown */}
       <div className="card">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Event Summary</p>
+        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Event Summary</p>
         <div className="flex flex-wrap gap-2">
           {Object.entries(byType)
             .sort(([,a], [,b]) => b - a)
@@ -62,7 +62,7 @@ export default function AuditLogReport({ dateFrom, dateTo }) {
                 className={`badge cursor-pointer transition-all ${
                   filterType === type
                     ? 'bg-brand-500 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-100'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-dark-hover'
                 }`}
                 whileTap={{ scale: 0.95 }}
               >
@@ -99,7 +99,7 @@ export default function AuditLogReport({ dateFrom, dateTo }) {
             Clear
           </button>
         )}
-        <span className="text-xs text-slate-400 ml-2">
+        <span className="text-xs text-slate-400 dark:text-slate-500 ml-2">
           {filtered.length} of {events.length} events
         </span>
       </div>
@@ -107,7 +107,7 @@ export default function AuditLogReport({ dateFrom, dateTo }) {
       {/* Events table */}
       <div className="card overflow-x-auto">
         {filtered.length === 0 ? (
-          <p className="text-center py-8 text-slate-400 text-sm">No audit events match your filters.</p>
+          <p className="text-center py-8 text-slate-400 dark:text-slate-500 text-sm">No audit events match your filters.</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
@@ -125,26 +125,26 @@ export default function AuditLogReport({ dateFrom, dateTo }) {
               {filtered.slice(0, 200).map((e, i) => (
                 <motion.tr
                   key={e.id}
-                  className="border-b border-slate-100"
+                  className="border-b border-slate-100 dark:border-dark-border"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: i * 0.01 }}
                 >
-                  <td className="table-td text-xs text-slate-500 whitespace-nowrap">
+                  <td className="table-td text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
                     {formatDate(e.created_at)}
                   </td>
                   <td className="table-td">
-                    <span className="badge bg-slate-100 text-slate-600 text-xs">
+                    <span className="badge bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs">
                       {formatEventType(e.event_type)}
                     </span>
                   </td>
                   <td className="table-td">
-                    <div className="font-medium text-slate-800 truncate max-w-[200px]">
+                    <div className="font-medium text-slate-800 dark:text-slate-200 truncate max-w-[200px]">
                       {e.task?.title || '—'}
                     </div>
-                    <div className="text-xs text-slate-400">{e.task?.task_id}</div>
+                    <div className="text-xs text-slate-400 dark:text-slate-500">{e.task?.task_id}</div>
                   </td>
-                  <td className="table-td text-xs text-slate-500">
+                  <td className="table-td text-xs text-slate-500 dark:text-slate-400">
                     {e.task?.team?.name || '—'}
                   </td>
                   <td className="table-td text-xs">
@@ -155,13 +155,13 @@ export default function AuditLogReport({ dateFrom, dateTo }) {
                       <span>
                         <span className="text-slate-400 line-through">{e.old_value}</span>
                         {' → '}
-                        <span className="font-medium text-slate-700">{e.new_value}</span>
+                        <span className="font-medium text-slate-700 dark:text-slate-200">{e.new_value}</span>
                       </span>
                     ) : e.new_value ? (
-                      <span className="text-slate-700">{e.new_value}</span>
+                      <span className="text-slate-700 dark:text-slate-200">{e.new_value}</span>
                     ) : '—'}
                   </td>
-                  <td className="table-td text-xs text-slate-400 max-w-[200px] truncate">
+                  <td className="table-td text-xs text-slate-400 dark:text-slate-500 max-w-[200px] truncate">
                     {e.note || '—'}
                   </td>
                 </motion.tr>

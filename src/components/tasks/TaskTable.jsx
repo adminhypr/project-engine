@@ -9,7 +9,7 @@ export default function TaskTable({
   onAccept, onDecline, showAcceptanceActions = false
 }) {
   if (!tasks.length) return (
-    <div className="text-center py-12 text-slate-400 text-sm">No tasks match your filters.</div>
+    <div className="text-center py-12 text-slate-400 dark:text-slate-500 text-sm">No tasks match your filters.</div>
   )
 
   return (
@@ -53,7 +53,7 @@ export default function TaskTable({
               >
                 <td className="table-td min-w-[140px] sm:min-w-[200px]">
                   <div className="flex items-center gap-2">
-                    <div className="font-medium text-slate-900 leading-snug">{task.title}</div>
+                    <div className="font-medium text-slate-900 dark:text-white leading-snug">{task.title}</div>
                     {isPending && (
                       <span className="badge bg-yellow-500/15 text-yellow-700 text-[10px]">Pending</span>
                     )}
@@ -61,13 +61,13 @@ export default function TaskTable({
                       <span className="badge bg-red-500/15 text-red-700 text-[10px]">Declined</span>
                     )}
                   </div>
-                  <div className="text-xs text-slate-400 mt-0.5">
+                  <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
                     {task.task_id}
                     {task.who_due_to && <span> · For: {task.who_due_to}</span>}
                   </div>
                   {/* Show assignee inline on mobile when column is hidden */}
                   {showAssignedTo && (
-                    <div className="text-xs text-slate-500 mt-0.5 sm:hidden">
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 sm:hidden">
                       → {task.assignee?.full_name}
                     </div>
                   )}
@@ -75,13 +75,13 @@ export default function TaskTable({
                 {showAssignedTo && (
                   <td className="table-td hidden sm:table-cell">
                     <div className="text-sm">{task.assignee?.full_name}</div>
-                    <div className="text-xs text-slate-400">{task.team?.name}</div>
+                    <div className="text-xs text-slate-400 dark:text-slate-500">{task.team?.name}</div>
                   </td>
                 )}
                 {showAssignedBy && (
                   <td className="table-td hidden lg:table-cell">
                     <div className="text-sm">{task.assigner?.full_name}</div>
-                    <div className="text-xs text-slate-400">{task.assigner?.teams?.name}</div>
+                    <div className="text-xs text-slate-400 dark:text-slate-500">{task.assigner?.teams?.name}</div>
                   </td>
                 )}
                 <td className="table-td hidden xl:table-cell">
@@ -96,15 +96,15 @@ export default function TaskTable({
                 <td className="table-td">
                   <StatusBadge status={task.status} />
                 </td>
-                <td className="table-td text-xs text-slate-500 whitespace-nowrap hidden lg:table-cell">
+                <td className="table-td text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap hidden lg:table-cell">
                   {formatDateShort(task.date_assigned)}
                 </td>
-                <td className="table-td text-xs text-slate-500 whitespace-nowrap hidden md:table-cell">
+                <td className="table-td text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap hidden md:table-cell">
                   {task.due_date ? formatDateShort(task.due_date) : '—'}
                 </td>
                 <td className="table-td text-center hidden sm:table-cell">
                   {task.comment_count > 0 && (
-                    <span className="inline-flex items-center gap-1 text-xs text-slate-400">
+                    <span className="inline-flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
                       <MessageSquare size={12} />
                       {task.comment_count}
                     </span>

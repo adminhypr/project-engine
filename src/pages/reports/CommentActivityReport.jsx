@@ -28,7 +28,7 @@ export default function CommentActivityReport({ tasks, comments, profiles }) {
       <ExportBtn data={byPerson} filename="comment-activity.csv" />
 
       <div className="card">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Comment Activity by Person</p>
+        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Comment Activity by Person</p>
         <div className="overflow-x-auto -mx-4 sm:mx-0">
         <table className="w-full text-sm">
           <thead><tr>
@@ -40,9 +40,9 @@ export default function CommentActivityReport({ tasks, comments, profiles }) {
           </tr></thead>
           <tbody>
             {byPerson.map(r => (
-              <tr key={r.name} className="border-b border-slate-100">
+              <tr key={r.name} className="border-b border-slate-100 dark:border-dark-border">
                 <td className="table-td font-medium">{r.name}</td>
-                <td className="table-td text-slate-500">{r.team}</td>
+                <td className="table-td text-slate-500 dark:text-slate-400">{r.team}</td>
                 <td className="table-td text-center font-semibold">{r.comments}</td>
                 <td className="table-td text-center">{r.tasksCommented}</td>
                 <td className="table-td text-center">{r.avgPerTask}</td>
@@ -54,7 +54,7 @@ export default function CommentActivityReport({ tasks, comments, profiles }) {
       </div>
 
       <div className="card">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Most Discussed Tasks (Top 10)</p>
+        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Most Discussed Tasks (Top 10)</p>
         <div className="overflow-x-auto -mx-4 sm:mx-0">
         <table className="w-full text-sm">
           <thead><tr>
@@ -64,9 +64,9 @@ export default function CommentActivityReport({ tasks, comments, profiles }) {
           </tr></thead>
           <tbody>
             {byTask.filter(t => t.commentCount > 0).map(t => (
-              <tr key={t.id} className="border-b border-slate-100">
+              <tr key={t.id} className="border-b border-slate-100 dark:border-dark-border">
                 <td className="table-td font-medium">{t.title}</td>
-                <td className="table-td text-slate-500">{t.assignee?.full_name}</td>
+                <td className="table-td text-slate-500 dark:text-slate-400">{t.assignee?.full_name}</td>
                 <td className="table-td text-center font-semibold text-brand-500">💬 {t.commentCount}</td>
               </tr>
             ))}
@@ -76,11 +76,11 @@ export default function CommentActivityReport({ tasks, comments, profiles }) {
       </div>
 
       <div className="card">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
           Silent Tasks — No Comments ({zeroCommentTasks.length})
         </p>
         {zeroCommentTasks.length === 0
-          ? <p className="text-sm text-slate-400">All active tasks have at least one comment.</p>
+          ? <p className="text-sm text-slate-400 dark:text-slate-500">All active tasks have at least one comment.</p>
           : <div className="overflow-x-auto -mx-4 sm:mx-0">
             <table className="w-full text-sm">
               <thead><tr>
@@ -91,11 +91,11 @@ export default function CommentActivityReport({ tasks, comments, profiles }) {
               </tr></thead>
               <tbody>
                 {zeroCommentTasks.slice(0, 20).map(t => (
-                  <tr key={t.id} className="border-b border-slate-100">
+                  <tr key={t.id} className="border-b border-slate-100 dark:border-dark-border">
                     <td className="table-td font-medium">{t.title}</td>
-                    <td className="table-td text-slate-500">{t.assignee?.full_name}</td>
+                    <td className="table-td text-slate-500 dark:text-slate-400">{t.assignee?.full_name}</td>
                     <td className="table-td">{t.status}</td>
-                    <td className="table-td text-xs text-slate-400">{formatDateShort(t.date_assigned)}</td>
+                    <td className="table-td text-xs text-slate-400 dark:text-slate-500">{formatDateShort(t.date_assigned)}</td>
                   </tr>
                 ))}
               </tbody>

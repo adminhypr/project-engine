@@ -110,18 +110,18 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   return (
     <SlidePanel isOpen={!!task} onClose={onClose}>
       {/* Header */}
-      <div className="px-5 py-4 border-b border-slate-100 flex items-start gap-3">
+      <div className="px-5 py-4 border-b border-slate-100 dark:border-dark-border flex items-start gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <p className="text-xs text-slate-400 font-mono">{task.task_id}</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 font-mono">{task.task_id}</p>
             {isPending && <span className="badge bg-yellow-500/15 text-yellow-700 text-[10px]">Pending</span>}
             {isDeclined && <span className="badge bg-red-500/15 text-red-700 text-[10px]">Declined</span>}
           </div>
-          <h3 className="font-semibold text-slate-900 leading-snug">{task.title}</h3>
+          <h3 className="font-semibold text-slate-900 dark:text-white leading-snug">{task.title}</h3>
         </div>
         <button
           onClick={onClose}
-          className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-100 transition-all duration-200 flex-shrink-0"
+          className="text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-dark-hover transition-all duration-200 flex-shrink-0"
         >
           <X size={20} />
         </button>
@@ -132,7 +132,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
 
         {/* Acceptance actions */}
         {canAcceptDecline && (
-          <div className="px-5 py-4 border-b border-slate-100 bg-yellow-500/5">
+          <div className="px-5 py-4 border-b border-slate-100 dark:border-dark-border bg-yellow-500/5">
             <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wider mb-3">This task requires your acceptance</p>
             <div className="flex gap-2">
               <SuccessBurst trigger={acceptAnim}>
@@ -159,12 +159,12 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
 
         {/* Declined info + reassign */}
         {isDeclined && (
-          <div className="px-5 py-4 border-b border-slate-100 bg-red-500/5">
+          <div className="px-5 py-4 border-b border-slate-100 dark:border-dark-border bg-red-500/5">
             <p className="text-xs font-semibold text-red-700 uppercase tracking-wider mb-2">Task Declined</p>
             {task.decline_reason && (
-              <p className="text-sm text-slate-700 mb-2 italic">"{task.decline_reason}"</p>
+              <p className="text-sm text-slate-700 dark:text-slate-200 mb-2 italic">"{task.decline_reason}"</p>
             )}
-            <p className="text-xs text-slate-500 mb-3">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
               Declined by {task.assignee?.full_name}
               {task.declined_at && <> on {formatDate(task.declined_at)}</>}
             </p>
@@ -181,7 +181,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
         )}
 
         {/* Meta grid */}
-        <div className="px-4 sm:px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-3 border-b border-slate-100">
+        <div className="px-4 sm:px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-3 border-b border-slate-100 dark:border-dark-border">
           {[
             { label: 'Assigned To',   value: task.assignee?.full_name },
             { label: 'Assigned By',   value: task.assigner?.full_name },
@@ -195,7 +195,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
           ].map(({ label, value }) => (
             <div key={label}>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">{label}</p>
-              <div className="text-sm text-slate-800">{value}</div>
+              <div className="text-sm text-slate-800 dark:text-slate-200">{value}</div>
             </div>
           ))}
           <div>
@@ -209,9 +209,9 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
           <div>
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Acceptance</p>
             {task.acceptance_status === 'Accepted' && task.assignment_type === 'Superior' ? (
-              <span className="text-xs text-slate-400">Auto-accepted — Superior assigned</span>
+              <span className="text-xs text-slate-400 dark:text-slate-500">Auto-accepted — Superior assigned</span>
             ) : task.acceptance_status === 'Accepted' && task.assignment_type === 'Self' ? (
-              <span className="text-xs text-slate-400">Auto-accepted — Self assigned</span>
+              <span className="text-xs text-slate-400 dark:text-slate-500">Auto-accepted — Self assigned</span>
             ) : (
               <span className={`badge ${
                 task.acceptance_status === 'Accepted' ? 'bg-emerald-500/15 text-emerald-700' :
@@ -226,8 +226,8 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
 
         {/* Status + notes update */}
         {canEdit && task.acceptance_status !== 'Declined' && (
-          <div className="px-5 py-4 border-b border-slate-100 bg-slate-50">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Update Task</p>
+          <div className="px-5 py-4 border-b border-slate-100 dark:border-dark-border bg-slate-50 dark:bg-dark-bg">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Update Task</p>
             <div className="flex gap-2 items-center mb-3">
               <select
                 value={status}
@@ -259,7 +259,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
 
         {/* Comments */}
         <div className="px-5 py-4">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
             Comments ({comments.length})
           </p>
 
@@ -290,7 +290,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
           ) : (
             <div className="space-y-3">
               {comments.map(c => (
-                <div key={c.id} className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                <div key={c.id} className="bg-slate-50 dark:bg-dark-bg rounded-xl p-3 border border-slate-100 dark:border-dark-border">
                   <div className="flex items-center gap-2 mb-1.5">
                     {c.author?.avatar_url
                       ? <img src={c.author.avatar_url} className="w-5 h-5 rounded-full" alt="" />
@@ -298,10 +298,10 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
                           {c.author?.full_name?.[0] || '?'}
                         </div>
                     }
-                    <span className="text-xs font-semibold text-slate-700">{c.author?.full_name}</span>
-                    <span className="text-xs text-slate-400">{formatDate(c.created_at)}</span>
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{c.author?.full_name}</span>
+                    <span className="text-xs text-slate-400 dark:text-slate-500">{formatDate(c.created_at)}</span>
                   </div>
-                  <p className="text-sm text-slate-700 leading-relaxed">{c.content}</p>
+                  <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">{c.content}</p>
                 </div>
               ))}
             </div>

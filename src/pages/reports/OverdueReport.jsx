@@ -44,10 +44,10 @@ export default function OverdueReport({ tasks }) {
               </tr></thead>
               <tbody>
                 {overdue.map(t => (
-                  <tr key={t.id} className="border-b border-slate-100 bg-red-500/5">
+                  <tr key={t.id} className="border-b border-slate-100 dark:border-dark-border bg-red-500/5">
                     <td className="table-td">
                       <div className="font-medium">{t.title}</div>
-                      <div className="text-xs text-slate-400">{t.task_id}</div>
+                      <div className="text-xs text-slate-400 dark:text-slate-500">{t.task_id}</div>
                     </td>
                     <td className="table-td">{t.assignee?.full_name}</td>
                     <td className="table-td">{t.team?.name}</td>
