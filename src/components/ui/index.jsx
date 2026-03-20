@@ -6,10 +6,10 @@ import { AnimatedNumber } from './animations'
 // ── Page header ──────────────────────────────
 export function PageHeader({ title, subtitle, actions }) {
   return (
-    <div className="bg-white/50 backdrop-blur-xl border-b border-white/30 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between sticky top-0 z-10">
+    <div className="bg-white border-b border-slate-200/60 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between sticky top-0 z-10">
       <div>
-        <h2 className="text-lg font-semibold text-navy-900">{title}</h2>
-        {subtitle && <p className="text-sm text-navy-500 mt-0.5">{subtitle}</p>}
+        <h2 className="text-lg font-bold text-slate-900">{title}</h2>
+        {subtitle && <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>}
       </div>
       {actions && <div className="flex items-center gap-3">{actions}</div>}
     </div>
@@ -23,13 +23,13 @@ export function StatsStrip({ stats }) {
       {stats.map(({ label, value, color }, i) => (
         <motion.div
           key={label}
-          className="card"
+          className="bg-white rounded-2xl border border-slate-200/60 p-4 shadow-soft"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: i * 0.05 }}
         >
-          <p className="text-xs text-navy-500 font-medium mb-1">{label}</p>
-          <p className={`text-3xl font-bold ${color || 'text-navy-900'}`}>
+          <p className="text-xs text-slate-500 font-medium mb-1">{label}</p>
+          <p className={`text-3xl font-bold ${color || 'text-slate-900'}`}>
             <AnimatedNumber value={value} />
           </p>
         </motion.div>
@@ -60,29 +60,29 @@ export function AssignmentBadge({ type }) {
 // ── Urgency badge ─────────────────────────────
 export function UrgencyBadge({ urgency }) {
   const styles = {
-    High: 'bg-red-500/15 text-red-700 backdrop-blur-sm',
-    Med:  'bg-orange-500/15 text-orange-700 backdrop-blur-sm',
-    Low:  'bg-emerald-500/15 text-emerald-700 backdrop-blur-sm'
+    High: 'bg-red-50 text-red-700',
+    Med:  'bg-orange-50 text-orange-700',
+    Low:  'bg-emerald-50 text-emerald-700'
   }
-  return <span className={`badge ${styles[urgency] || 'bg-navy-50 text-navy-500'}`}>{urgency}</span>
+  return <span className={`badge ${styles[urgency] || 'bg-slate-100 text-slate-500'}`}>{urgency}</span>
 }
 
 // ── Status badge ──────────────────────────────
 export function StatusBadge({ status }) {
   const styles = {
-    'Not Started': 'bg-navy-100/50 text-navy-600',
-    'In Progress': 'bg-sky-500/15 text-sky-700 backdrop-blur-sm',
-    'Blocked':     'bg-red-500/15 text-red-700 backdrop-blur-sm',
-    'Done':        'bg-emerald-500/15 text-emerald-700 backdrop-blur-sm'
+    'Not Started': 'bg-slate-100 text-slate-600',
+    'In Progress': 'bg-blue-50 text-blue-700',
+    'Blocked':     'bg-red-50 text-red-700',
+    'Done':        'bg-emerald-50 text-emerald-700'
   }
-  return <span className={`badge ${styles[status] || 'bg-navy-50 text-navy-500'}`}>{status}</span>
+  return <span className={`badge ${styles[status] || 'bg-slate-100 text-slate-500'}`}>{status}</span>
 }
 
 // ── Spinner ───────────────────────────────────
 export function Spinner({ size = 'md' }) {
   const s = size === 'sm' ? 'w-4 h-4 border-2' : 'w-8 h-8 border-3'
   return (
-    <div className={`${s} border-orange-500 border-t-transparent rounded-full animate-spin`} />
+    <div className={`${s} border-brand-500 border-t-transparent rounded-full animate-spin`} />
   )
 }
 
@@ -97,7 +97,7 @@ export function LoadingScreen() {
         transition={{ duration: 0.3 }}
       >
         <Spinner />
-        <p className="text-navy-400 text-sm mt-3">Loading...</p>
+        <p className="text-slate-400 text-sm mt-3">Loading...</p>
       </motion.div>
     </div>
   )
@@ -113,8 +113,8 @@ export function EmptyState({ icon, title, description, action }) {
       transition={{ duration: 0.3 }}
     >
       {icon && <div className="text-4xl mb-3">{icon}</div>}
-      <h3 className="font-semibold text-navy-700 mb-1">{title}</h3>
-      {description && <p className="text-sm text-navy-400 mb-4">{description}</p>}
+      <h3 className="font-semibold text-slate-700 mb-1">{title}</h3>
+      {description && <p className="text-sm text-slate-400 mb-4">{description}</p>}
       {action}
     </motion.div>
   )
@@ -173,12 +173,12 @@ export function FilterRow({ filters, onChange, onClear, showTeamFilter, teams })
           {(teams || []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       )}
-      <button className="btn-secondary text-xs px-3 py-1.5" onClick={onClear}>Clear</button>
+      <button className="btn-ghost text-xs px-3 py-2" onClick={onClear}>Clear</button>
     </div>
   )
 }
 
-// ── Toast notification (animated) ─────────────
+// ── Toast notification ─────────────────────────
 let toastTimeout
 export function showToast(msg, type = 'success') {
   const existing = document.getElementById('app-toast')
@@ -187,12 +187,11 @@ export function showToast(msg, type = 'success') {
 
   const el = document.createElement('div')
   el.id = 'app-toast'
-  el.className = `fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 rounded-2xl text-sm font-medium
-    z-50 transition-all duration-300
-    backdrop-blur-xl border
+  el.className = `fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 rounded-xl text-sm font-medium
+    z-50 transition-all duration-300 shadow-elevated
     ${type === 'error'
-      ? 'bg-red-600/90 text-white border-red-500/30 shadow-glow-red'
-      : 'bg-navy-900/90 text-white border-white/10 shadow-glass-lg'}`
+      ? 'bg-red-600 text-white'
+      : 'bg-slate-900 text-white'}`
   el.style.transform = 'translate(-50%, 20px)'
   el.style.opacity = '0'
   el.textContent = msg

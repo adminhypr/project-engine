@@ -81,8 +81,8 @@ export default function ReportsPage() {
       <div className="flex flex-col md:flex-row h-full">
 
         {/* Report list — horizontal scroll on mobile, sidebar on desktop */}
-        <aside className="md:w-52 md:min-w-[13rem] border-b md:border-b-0 md:border-r border-navy-100/30 bg-white/40 backdrop-blur-sm py-2 md:py-4">
-          <p className="px-4 text-xs font-semibold text-navy-400 uppercase tracking-wider mb-2 hidden md:block">Reports</p>
+        <aside className="md:w-52 md:min-w-[13rem] border-b md:border-b-0 md:border-r border-slate-100 bg-white py-2 md:py-4">
+          <p className="px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 hidden md:block">Reports</p>
           <div className="flex md:flex-col overflow-x-auto md:overflow-x-visible px-2 md:px-0 gap-1 md:gap-0">
             {visibleReports.map(r => (
               <button
@@ -90,13 +90,13 @@ export default function ReportsPage() {
                 onClick={() => setActiveReport(r.id)}
                 className={`relative whitespace-nowrap text-left px-3 md:px-4 py-2 md:py-2.5 text-sm rounded-lg md:rounded-none transition-all duration-200
                   ${activeReport === r.id
-                    ? 'text-orange-600 font-semibold bg-orange-500/10 md:bg-transparent'
-                    : 'text-navy-600 hover:bg-navy-50/50'}`}
+                    ? 'text-brand-600 font-semibold bg-brand-50 md:bg-transparent'
+                    : 'text-slate-600 hover:bg-slate-50'}`}
               >
                 {activeReport === r.id && (
                   <motion.div
                     layoutId="report-active"
-                    className="absolute inset-0 hidden md:block bg-orange-500/8 border-r-2 border-orange-500"
+                    className="absolute inset-0 hidden md:block bg-brand-50 border-r-2 border-brand-500"
                     transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                   />
                 )}
@@ -113,9 +113,9 @@ export default function ReportsPage() {
             actions={
               <div className="flex items-center gap-2 sm:gap-3">
                 <div className="flex items-center gap-1.5 sm:gap-2 text-sm">
-                  <label className="text-navy-500 font-medium hidden sm:inline">From</label>
+                  <label className="text-slate-500 font-medium hidden sm:inline">From</label>
                   <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="form-input w-28 sm:w-36 py-1.5 text-xs sm:text-sm" />
-                  <label className="text-navy-500 font-medium hidden sm:inline">To</label>
+                  <label className="text-slate-500 font-medium hidden sm:inline">To</label>
                   <input type="date" value={dateTo}   onChange={e => setDateTo(e.target.value)}   className="form-input w-28 sm:w-36 py-1.5 text-xs sm:text-sm" />
                 </div>
               </div>

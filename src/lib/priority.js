@@ -31,9 +31,9 @@ export const PRIORITY_LABELS = {
 }
 
 export const PRIORITY_COLORS = {
-  red:    { row: 'bg-red-500/10 border-l-4 border-l-red-500',    badge: 'bg-red-500/15 text-red-700 backdrop-blur-sm' },
-  orange: { row: 'bg-orange-500/10 border-l-4 border-l-orange-500', badge: 'bg-orange-500/15 text-orange-700 backdrop-blur-sm' },
-  yellow: { row: 'bg-yellow-500/10 border-l-4 border-l-yellow-500', badge: 'bg-yellow-500/15 text-yellow-700 backdrop-blur-sm' },
-  green:  { row: 'bg-emerald-500/10 border-l-4 border-l-emerald-500',  badge: 'bg-emerald-500/15 text-emerald-700 backdrop-blur-sm' },
-  none:   { row: '',                                             badge: 'bg-navy-50 text-navy-500' }
+  red:    { row: 'bg-red-50 border-l-3 border-l-red-500',    badge: 'bg-red-50 text-red-700' },
+  orange: { row: 'bg-orange-50 border-l-3 border-l-orange-500', badge: 'bg-orange-50 text-orange-700' },
+  yellow: { row: 'bg-yellow-50 border-l-3 border-l-yellow-500', badge: 'bg-yellow-50 text-yellow-700' },
+  green:  { row: 'bg-emerald-50 border-l-3 border-l-emerald-500',  badge: 'bg-emerald-50 text-emerald-700' },
+  none:   { row: '',                                             badge: 'bg-slate-100 text-slate-500' }
 }

@@ -37,7 +37,7 @@ export default function CompletedTrendReport({ tasks }) {
           </tr></thead>
           <tbody>
             {data.map(r => (
-              <tr key={r.week} className="border-b border-navy-100/20">
+              <tr key={r.week} className="border-b border-slate-100">
                 <td className="table-td">{r.week}</td>
                 <td className="table-td text-center font-semibold text-emerald-600">{r.completed}</td>
               </tr>

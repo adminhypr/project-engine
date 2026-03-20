@@ -6,7 +6,7 @@ export default function AcceptanceBanner({ count, onClick }) {
 
   return (
     <motion.div
-      className="mx-4 sm:mx-6 mt-4 sm:mt-6 mb-0 p-3 sm:p-4 rounded-2xl bg-yellow-500/10 backdrop-blur-sm border border-yellow-500/20 flex items-center justify-between"
+      className="mx-4 sm:mx-6 mt-4 sm:mt-6 mb-0 p-3 sm:p-4 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-between"
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 300, damping: 25 }}

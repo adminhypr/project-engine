@@ -64,21 +64,21 @@ export default function AssignmentMatrixReport({ tasks, profiles }) {
         </select>
       </div>
       <div className="card overflow-x-auto">
-        <p className="text-xs text-navy-500 mb-3">Rows = who assigned, Columns = who received. Darker = more tasks.</p>
+        <p className="text-xs text-slate-500 mb-3">Rows = who assigned, Columns = who received. Darker = more tasks.</p>
         {names.length === 0 ? (
-          <p className="text-center py-8 text-navy-400 text-sm">No assignment data for this filter.</p>
+          <p className="text-center py-8 text-slate-400 text-sm">No assignment data for this filter.</p>
         ) : (
           <table className="text-xs border-collapse">
             <thead>
               <tr>
-                <th className="table-th sticky left-0 bg-white/70 backdrop-blur-sm min-w-[120px]">Assigner ↓ / Assignee →</th>
+                <th className="table-th sticky left-0 bg-white min-w-[120px]">Assigner ↓ / Assignee →</th>
                 {assignees.map(a => <th key={a} className="table-th text-center min-w-[90px]">{a.split(' ')[0]}</th>)}
               </tr>
             </thead>
             <tbody>
               {matrix.map(row => (
                 <tr key={row.assigner}>
-                  <td className="table-td sticky left-0 bg-white/70 backdrop-blur-sm font-medium">{row.assigner}</td>
+                  <td className="table-td sticky left-0 bg-white font-medium">{row.assigner}</td>
                   {assignees.map(a => {
                     const val     = row[a] || 0
                     const opacity = val ? 0.15 + (val / maxVal) * 0.85 : 0

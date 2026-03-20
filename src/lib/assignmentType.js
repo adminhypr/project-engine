@@ -15,10 +15,10 @@ export function getAssignmentType(assigner, assignee) {
 }
 
 export const ASSIGNMENT_TYPE_STYLES = {
-  Superior:  'bg-navy-100 text-navy-700',
-  Peer:      'bg-sky-500/15 text-sky-700 backdrop-blur-sm',
-  CrossTeam: 'bg-sky-500/25 text-sky-800 backdrop-blur-sm',
-  Upward:    'bg-purple-500/15 text-purple-700 backdrop-blur-sm',
-  Self:      'bg-navy-50 text-navy-400',
-  Unknown:   'bg-navy-50 text-navy-400'
+  Superior:  'bg-slate-100 text-slate-700',
+  Peer:      'bg-sky-50 text-sky-700',
+  CrossTeam: 'bg-blue-50 text-blue-700',
+  Upward:    'bg-purple-50 text-purple-700',
+  Self:      'bg-slate-50 text-slate-400',
+  Unknown:   'bg-slate-50 text-slate-400'
 }

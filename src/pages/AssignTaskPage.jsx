@@ -74,13 +74,13 @@ export default function AssignTaskPage() {
               >
                 <CheckCircle size={48} className="text-emerald-500 mx-auto mb-4" />
               </motion.div>
-              <h3 className="text-lg font-semibold text-navy-900 mb-2">Task Assigned!</h3>
-              <p className="text-navy-500 text-sm mb-3">
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">Task Assigned!</h3>
+              <p className="text-slate-500 text-sm mb-3">
                 Task <span className="font-mono font-semibold">{result.taskId}</span> has been assigned to{' '}
                 <strong>{profiles.find(p => p.id === form.assigneeId)?.full_name || 'them'}</strong>.
               </p>
               <div className="flex items-center justify-center gap-2 mb-6">
-                <span className="text-sm text-navy-500">Assignment type:</span>
+                <span className="text-sm text-slate-500">Assignment type:</span>
                 <AssignmentBadge type={result.assignmentType} />
               </div>
               <div className="flex gap-3 justify-center">
@@ -120,7 +120,7 @@ export default function AssignTaskPage() {
                     ))}
                   </select>
                   {previewType && (
-                    <div className="mt-1.5 flex items-center gap-1.5 text-xs text-navy-500">
+                    <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500">
                       Assignment type: <AssignmentBadge type={previewType} />
                     </div>
                   )}
@@ -153,7 +153,7 @@ export default function AssignTaskPage() {
                     ))}
                   </select>
                   {overrideAssignerId && (
-                    <p className="text-xs text-orange-500 mt-1">
+                    <p className="text-xs text-brand-500 mt-1">
                       Task will be recorded as assigned by {profiles.find(p => p.id === overrideAssignerId)?.full_name}
                     </p>
                   )}
@@ -219,7 +219,7 @@ export default function AssignTaskPage() {
                 }>
                   Clear
                 </button>
-                <p className="text-xs text-navy-400 ml-2">
+                <p className="text-xs text-slate-400 ml-2">
                   Assigned by field is auto-filled from your login
                 </p>
               </div>
@@ -228,8 +228,8 @@ export default function AssignTaskPage() {
           </div>
 
           {/* Type legend */}
-          <div className="mt-4 p-4 bg-white/40 backdrop-blur-sm rounded-2xl border border-white/20 text-sm">
-            <p className="font-semibold text-navy-600 mb-2 text-xs uppercase tracking-wider">Assignment Type Guide</p>
+          <div className="mt-4 p-4 bg-white rounded-2xl border border-slate-200 text-sm">
+            <p className="font-semibold text-slate-600 mb-2 text-xs uppercase tracking-wider">Assignment Type Guide</p>
             <div className="flex flex-wrap gap-3">
               {[
                 ['Superior',  'Your manager/admin assigned this to you'],
@@ -239,7 +239,7 @@ export default function AssignTaskPage() {
               ].map(([type, desc]) => (
                 <div key={type} className="flex items-center gap-2">
                   <AssignmentBadge type={type} />
-                  <span className="text-xs text-navy-500">{desc}</span>
+                  <span className="text-xs text-slate-500">{desc}</span>
                 </div>
               ))}
             </div>

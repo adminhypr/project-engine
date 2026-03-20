@@ -48,7 +48,7 @@ export default function TeamTasksReport({ tasks }) {
               const total = r.Open + r.Done + r.Overdue + r.Blocked
               const pct   = total ? Math.round((r.Done / total) * 100) : 0
               return (
-                <tr key={r.name} className="border-b border-navy-100/20">
+                <tr key={r.name} className="border-b border-slate-100">
                   <td className="table-td font-medium">{r.name}</td>
                   <td className="table-td text-center">{r.Open}</td>
                   <td className="table-td text-center text-emerald-600">{r.Done}</td>

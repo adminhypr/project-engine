@@ -8,12 +8,12 @@ import TaskTable from '../components/tasks/TaskTable'
 import TaskDetailPanel from '../components/tasks/TaskDetailPanel'
 
 const TEAM_COLORS = [
-  'border-l-4 border-l-orange-500 bg-orange-500/8 backdrop-blur-sm',
-  'border-l-4 border-l-sky-500 bg-sky-500/8 backdrop-blur-sm',
-  'border-l-4 border-l-emerald-500 bg-emerald-500/8 backdrop-blur-sm',
-  'border-l-4 border-l-purple-500 bg-purple-500/8 backdrop-blur-sm',
-  'border-l-4 border-l-pink-500 bg-pink-500/8 backdrop-blur-sm',
-  'border-l-4 border-l-navy-500 bg-navy-500/8 backdrop-blur-sm',
+  'border-l-4 border-l-orange-500 bg-orange-50',
+  'border-l-4 border-l-sky-500 bg-sky-50',
+  'border-l-4 border-l-emerald-500 bg-emerald-50',
+  'border-l-4 border-l-purple-500 bg-purple-50',
+  'border-l-4 border-l-pink-500 bg-pink-50',
+  'border-l-4 border-l-slate-500 bg-slate-50',
 ]
 
 export default function TeamViewPage() {
@@ -38,7 +38,7 @@ export default function TeamViewPage() {
     { label: 'Red',        value: viewTasks.filter(t => t.priority === 'red').length,    color: 'text-red-500' },
     { label: 'In Progress',value: viewTasks.filter(t => t.status === 'In Progress').length, color: 'text-sky-600' },
     { label: 'Blocked',    value: viewTasks.filter(t => t.status === 'Blocked').length,  color: 'text-red-600' },
-    { label: 'Total',      value: viewTasks.length,                                       color: 'text-navy-900' },
+    { label: 'Total',      value: viewTasks.length,                                       color: 'text-slate-900' },
   ]
 
   if (loading) return <LoadingScreen />
@@ -85,9 +85,9 @@ export default function TeamViewPage() {
                       {hasManagers
                         ? managerGroups.map(group => (
                             <div key={group.name || '_unassigned'} className="mb-3">
-                              <p className="text-xs font-semibold text-navy-400 uppercase tracking-wider px-4 py-1.5">
+                              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-4 py-1.5">
                                 {group.name ? `Reports to ${group.name}` : 'No reporting manager'}
-                                <span className="ml-1.5 text-navy-300">({group.tasks.length})</span>
+                                <span className="ml-1.5 text-slate-300">({group.tasks.length})</span>
                               </p>
                               <TaskTable
                                 tasks={group.tasks}

@@ -3,19 +3,16 @@ import { signInWithGoogle } from '../lib/auth'
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-navy-900 via-navy-800 to-navy-950 flex items-center justify-center p-4 sm:p-6">
-      {/* Ambient glow */}
-      <div className="fixed top-1/4 left-1/3 w-64 sm:w-96 h-64 sm:h-96 bg-orange-500/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="fixed bottom-1/4 right-1/3 w-64 sm:w-96 h-64 sm:h-96 bg-sky-500/8 rounded-full blur-[120px] pointer-events-none" />
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6">
 
       <motion.div
-        className="bg-white/80 backdrop-blur-2xl rounded-3xl shadow-glass-xl border border-white/30 p-6 sm:p-10 w-full max-w-sm text-center"
+        className="bg-white rounded-3xl shadow-panel border border-slate-200 p-6 sm:p-10 w-full max-w-sm text-center"
         initial={{ opacity: 0, scale: 0.95, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.4, ease: 'easeOut' }}
       >
         <motion.div
-          className="w-14 h-14 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-orange-500/30"
+          className="w-14 h-14 bg-gradient-to-br from-brand-500 to-brand-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-brand-500/30"
           initial={{ rotate: -8 }}
           animate={{ rotate: 0 }}
           transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
@@ -25,14 +22,14 @@ export default function LoginPage() {
           </svg>
         </motion.div>
 
-        <h1 className="text-2xl font-bold text-navy-900 mb-2">Project Engine</h1>
-        <p className="text-navy-500 text-sm mb-8 leading-relaxed">
+        <h1 className="text-2xl font-bold text-slate-900 mb-2">Project Engine</h1>
+        <p className="text-slate-500 text-sm mb-8 leading-relaxed">
           Task management for your team.<br />Sign in with your company Google account.
         </p>
 
         <motion.button
           onClick={signInWithGoogle}
-          className="w-full flex items-center justify-center gap-3 px-5 py-3 bg-white/70 backdrop-blur-sm border border-navy-200/30 rounded-xl text-sm font-semibold text-navy-700 hover:bg-white hover:border-navy-200/50 transition-all duration-200 shadow-glass"
+          className="w-full flex items-center justify-center gap-3 px-5 py-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:bg-white hover:border-slate-300 transition-all duration-200 shadow-card"
           whileHover={{ y: -1, boxShadow: '0 8px 30px rgba(26, 39, 68, 0.1)' }}
           whileTap={{ scale: 0.98 }}
         >
@@ -45,7 +42,7 @@ export default function LoginPage() {
           Continue with Google
         </motion.button>
 
-        <p className="mt-6 text-xs text-navy-400">
+        <p className="mt-6 text-xs text-slate-400">
           By signing in you agree to your organization's terms of use.
         </p>
       </motion.div>

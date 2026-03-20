@@ -24,7 +24,7 @@ export default function MyTasksPage() {
     { label: 'Overdue / Inactive', value: myTasks.filter(t => t.priority === 'red').length,    color: 'text-red-500' },
     { label: 'Urgent',             value: myTasks.filter(t => t.priority === 'orange').length,  color: 'text-orange-500' },
     { label: 'Completed',          value: myTasks.filter(t => t.status === 'Done').length,      color: 'text-emerald-600' },
-    { label: 'Total Tasks',        value: myTasks.length,                                        color: 'text-navy-900' },
+    { label: 'Total Tasks',        value: myTasks.length,                                        color: 'text-slate-900' },
   ]
 
   async function handleAccept(task) {

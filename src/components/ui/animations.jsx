@@ -67,7 +67,7 @@ export function SlidePanel({ isOpen, onClose, children, width = 520 }) {
       {isOpen && (
         <>
           <motion.div
-            className="fixed inset-0 bg-navy-950/20 backdrop-blur-sm z-40"
+            className="fixed inset-0 bg-slate-900/20 z-40"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -75,7 +75,7 @@ export function SlidePanel({ isOpen, onClose, children, width = 520 }) {
             onClick={onClose}
           />
           <motion.div
-            className="fixed top-0 right-0 h-full w-full sm:w-auto bg-white/85 backdrop-blur-2xl shadow-glass-xl z-50 flex flex-col border-l border-white/20"
+            className="fixed top-0 right-0 h-full w-full sm:w-auto bg-white shadow-panel z-50 flex flex-col border-l border-slate-200"
             style={{ maxWidth: width }}
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
@@ -149,7 +149,7 @@ export function ModalWrapper({ isOpen, onClose, children }) {
       {isOpen && (
         <>
           <motion.div
-            className="fixed inset-0 bg-navy-950/25 backdrop-blur-sm z-50"
+            className="fixed inset-0 bg-slate-900/25 z-50"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -159,7 +159,7 @@ export function ModalWrapper({ isOpen, onClose, children }) {
             className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 pointer-events-none"
           >
             <motion.div
-              className="bg-white/85 backdrop-blur-2xl rounded-2xl shadow-glass-xl border border-white/30 pointer-events-auto w-full max-w-md"
+              className="bg-white rounded-2xl shadow-panel border border-slate-200 pointer-events-auto w-full max-w-md"
               initial={{ opacity: 0, scale: 0.95, y: 8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 8 }}
@@ -178,7 +178,7 @@ export function ModalWrapper({ isOpen, onClose, children }) {
 export const MotionRow = motion.tr
 
 export const rowHoverProps = {
-  whileHover: { y: -1, boxShadow: '0 4px 20px rgba(26, 39, 68, 0.08)' },
+  whileHover: { y: -1, boxShadow: '0 2px 12px rgba(0, 0, 0, 0.06)' },
   transition: { duration: 0.15 }
 }
 
