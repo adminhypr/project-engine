@@ -138,7 +138,7 @@ export default function NotificationBell({ onTaskClick }) {
     <div className="relative" ref={panelRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 rounded-xl text-navy-400 hover:text-white hover:bg-white/10 transition-all duration-200"
+        className="relative p-2.5 rounded-xl bg-white/70 backdrop-blur-xl border border-white/30 shadow-glass text-navy-600 hover:text-navy-900 hover:bg-white/90 transition-all duration-200"
       >
         <Bell size={18} />
         {count > 0 && (
@@ -156,10 +156,10 @@ export default function NotificationBell({ onTaskClick }) {
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            className="absolute left-full ml-2 top-0 w-80 bg-white/90 backdrop-blur-2xl rounded-2xl shadow-glass-xl border border-white/30 z-50 overflow-hidden"
-            initial={{ opacity: 0, x: -8, scale: 0.95 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: -8, scale: 0.95 }}
+            className="absolute right-0 top-full mt-2 w-80 bg-white/90 backdrop-blur-2xl rounded-2xl shadow-glass-xl border border-white/30 z-50 overflow-hidden"
+            initial={{ opacity: 0, y: -8, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.95 }}
             transition={{ duration: 0.15 }}
           >
             {/* Header */}

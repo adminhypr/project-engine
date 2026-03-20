@@ -88,11 +88,6 @@ export default function Layout({ children }) {
           ))}
         </nav>
 
-        {/* Notifications */}
-        <div className="px-3 py-2 border-t border-white/8">
-          <NotificationBell onTaskClick={(taskId) => navigate('/my-tasks')} />
-        </div>
-
         {/* Sign out */}
         <div className="p-3 border-t border-white/8">
           <button
@@ -106,7 +101,11 @@ export default function Layout({ children }) {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto relative">
+        {/* Notification bell — top right */}
+        <div className="fixed top-4 right-5 z-30">
+          <NotificationBell onTaskClick={() => navigate('/my-tasks')} />
+        </div>
         {children}
       </main>
 
