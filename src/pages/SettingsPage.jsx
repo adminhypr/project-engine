@@ -61,7 +61,7 @@ export default function SettingsPage() {
       <div>
         <PageHeader title="Settings" subtitle="Manage users, teams, and roles" />
 
-        <div className="p-6 space-y-6 max-w-4xl">
+        <div className="p-6 space-y-6 max-w-7xl">
 
           {/* Teams */}
           <motion.div
@@ -181,7 +181,7 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave }) {
         <select
           value={teamId}
           onChange={e => setTeamId(e.target.value)}
-          className="form-input py-1 text-xs"
+          className="form-input py-1 text-xs min-w-[8rem]"
           disabled={isSelf}
         >
           <option value="">— No team —</option>
@@ -192,7 +192,7 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave }) {
         <select
           value={role}
           onChange={e => setRole(e.target.value)}
-          className="form-input py-1 text-xs"
+          className="form-input py-1 text-xs min-w-[6.5rem]"
           disabled={isSelf}
         >
           <option>Staff</option>
@@ -204,7 +204,7 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave }) {
         <select
           value={reportsTo}
           onChange={e => setReportsTo(e.target.value)}
-          className="form-input py-1 text-xs"
+          className="form-input py-1 text-xs min-w-[10rem]"
           disabled={isSelf}
         >
           <option value="">— None —</option>
