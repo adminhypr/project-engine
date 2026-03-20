@@ -65,19 +65,48 @@ export default function TeamViewPage() {
 
             {Object.keys(grouped).length === 0
               ? <EmptyState icon="◈" title="No tasks" description="No tasks match your filters." />
-              : Object.entries(grouped).map(([teamName, teamTasks], idx) => (
-                  <div key={teamName} className="mb-6">
-                    <div className={`px-4 py-2 rounded-xl mb-2 font-semibold text-sm ${TEAM_COLORS[idx % TEAM_COLORS.length]}`}>
-                      {teamName} — {teamTasks.length} task{teamTasks.length !== 1 ? 's' : ''}
+              : Object.entries(grouped).map(([teamName, teamTasks], idx) => {
+                  // Sub-group by reporting manager within each team
+                  const byManager = teamTasks.reduce((acc, t) => {
+                    const mgr = t.assignee?.manager?.full_name || null
+                    const key = mgr || '_unassigned'
+                    if (!acc[key]) acc[key] = { name: mgr, tasks: [] }
+                    acc[key].tasks.push(t)
+                    return acc
+                  }, {})
+                  const managerGroups = Object.values(byManager)
+                  const hasManagers = managerGroups.some(g => g.name)
+
+                  return (
+                    <div key={teamName} className="mb-6">
+                      <div className={`px-4 py-2 rounded-xl mb-2 font-semibold text-sm ${TEAM_COLORS[idx % TEAM_COLORS.length]}`}>
+                        {teamName} — {teamTasks.length} task{teamTasks.length !== 1 ? 's' : ''}
+                      </div>
+                      {hasManagers
+                        ? managerGroups.map(group => (
+                            <div key={group.name || '_unassigned'} className="mb-3">
+                              <p className="text-xs font-semibold text-navy-400 uppercase tracking-wider px-4 py-1.5">
+                                {group.name ? `Reports to ${group.name}` : 'No reporting manager'}
+                                <span className="ml-1.5 text-navy-300">({group.tasks.length})</span>
+                              </p>
+                              <TaskTable
+                                tasks={group.tasks}
+                                onRowClick={setActiveTask}
+                                showAssignedTo
+                                showAssignedBy
+                              />
+                            </div>
+                          ))
+                        : <TaskTable
+                            tasks={teamTasks}
+                            onRowClick={setActiveTask}
+                            showAssignedTo
+                            showAssignedBy
+                          />
+                      }
                     </div>
-                    <TaskTable
-                      tasks={teamTasks}
-                      onRowClick={setActiveTask}
-                      showAssignedTo
-                      showAssignedBy
-                    />
-                  </div>
-                ))
+                  )
+                })
             }
           </div>
         </div>

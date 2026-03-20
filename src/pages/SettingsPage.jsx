@@ -17,7 +17,7 @@ export default function SettingsPage() {
 
   async function fetchAll() {
     const [{ data: p }, { data: t }] = await Promise.all([
-      supabase.from('profiles').select('*, teams(id, name)').order('full_name'),
+      supabase.from('profiles').select('*, teams(id, name), manager:profiles!profiles_reports_to_fkey(id, full_name)').order('full_name'),
       supabase.from('teams').select('*').order('name')
     ])
     setProfiles(p || [])
@@ -112,6 +112,7 @@ export default function SettingsPage() {
                   <th className="table-th">Email</th>
                   <th className="table-th">Team</th>
                   <th className="table-th">Role</th>
+                  <th className="table-th">Reports To</th>
                   <th className="table-th">Save</th>
                 </tr>
               </thead>
@@ -121,6 +122,7 @@ export default function SettingsPage() {
                     key={p.id}
                     user={p}
                     teams={teams}
+                    allProfiles={profiles}
                     isSelf={p.id === profile?.id}
                     saving={saving[p.id]}
                     onSave={(updates) => updateProfile(p.id, updates)}
@@ -136,10 +138,21 @@ export default function SettingsPage() {
   )
 }
 
-function UserRow({ user, teams, isSelf, saving, onSave }) {
-  const [teamId, setTeamId] = useState(user.team_id || '')
-  const [role,   setRole]   = useState(user.role || 'Staff')
-  const dirty = teamId !== (user.team_id || '') || role !== user.role
+function UserRow({ user, teams, allProfiles, isSelf, saving, onSave }) {
+  const [teamId,    setTeamId]    = useState(user.team_id || '')
+  const [role,      setRole]      = useState(user.role || 'Staff')
+  const [reportsTo, setReportsTo] = useState(user.reports_to || '')
+
+  const dirty = teamId !== (user.team_id || '')
+    || role !== user.role
+    || reportsTo !== (user.reports_to || '')
+
+  // Eligible managers: Managers and Admins, excluding self and anyone who reports to this user (circular)
+  const managerOptions = allProfiles.filter(p =>
+    (p.role === 'Manager' || p.role === 'Admin')
+    && p.id !== user.id
+    && p.reports_to !== user.id // prevent direct circular
+  )
 
   return (
     <tr className={`border-b border-navy-100/20 ${!user.team_id ? 'bg-yellow-500/5' : ''}`}>
@@ -181,9 +194,22 @@ function UserRow({ user, teams, isSelf, saving, onSave }) {
         </select>
       </td>
       <td className="table-td">
+        <select
+          value={reportsTo}
+          onChange={e => setReportsTo(e.target.value)}
+          className="form-input py-1 text-xs"
+          disabled={isSelf}
+        >
+          <option value="">— None —</option>
+          {managerOptions.map(p => (
+            <option key={p.id} value={p.id}>{p.full_name} ({p.role})</option>
+          ))}
+        </select>
+      </td>
+      <td className="table-td">
         {!isSelf && dirty && (
           <motion.button
-            onClick={() => onSave({ team_id: teamId || null, role })}
+            onClick={() => onSave({ team_id: teamId || null, role, reports_to: reportsTo || null })}
             disabled={saving}
             className="btn-primary py-1 px-3 text-xs"
             whileTap={{ scale: 0.95 }}

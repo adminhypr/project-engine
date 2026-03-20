@@ -188,6 +188,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
             { label: 'Date Assigned', value: formatDate(task.date_assigned) },
             { label: 'Due Date',      value: task.due_date ? formatDate(task.due_date) : '—' },
             { label: 'Team',          value: task.team?.name },
+            { label: 'Reports To',   value: task.assignee?.manager?.full_name || '—' },
             { label: 'For',           value: task.who_due_to || '—' },
             { label: 'Last Updated',  value: formatDate(task.last_updated) },
             { label: 'Priority',      value: <PriorityBadge priority={task.priority} /> },

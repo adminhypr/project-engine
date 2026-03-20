@@ -13,7 +13,7 @@ async function fetchProfileDirect(userId, accessToken) {
 
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=*,teams(id,name)`,
+      `${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=*,teams(id,name),manager:profiles!profiles_reports_to_fkey(id,full_name)`,
       {
         headers: {
           'apikey': SUPABASE_KEY,

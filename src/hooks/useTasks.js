@@ -7,7 +7,7 @@ import { useAuth } from './useAuth'
 
 const TASK_SELECT = `
   *,
-  assignee:profiles!tasks_assigned_to_fkey(id, full_name, email, role, team_id, teams(name)),
+  assignee:profiles!tasks_assigned_to_fkey(id, full_name, email, role, team_id, reports_to, teams(name), manager:profiles!profiles_reports_to_fkey(id, full_name)),
   assigner:profiles!tasks_assigned_by_fkey(id, full_name, email, role, team_id, teams(name)),
   team:teams(id, name),
   comments(count)
@@ -192,7 +192,7 @@ export function useProfiles() {
   useEffect(() => {
     async function fetch() {
       const [{ data: pData }, { data: tData }] = await Promise.all([
-        supabase.from('profiles').select('*, teams(id, name)').order('full_name'),
+        supabase.from('profiles').select('*, teams(id, name), manager:profiles!profiles_reports_to_fkey(id, full_name)').order('full_name'),
         supabase.from('teams').select('*').order('name')
       ])
       setProfiles(pData || [])

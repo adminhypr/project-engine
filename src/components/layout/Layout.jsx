@@ -55,6 +55,11 @@ export default function Layout({ children }) {
           <span className="mt-2 inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-orange-500/20 text-orange-300">
             {profile?.role}
           </span>
+          {profile?.manager?.full_name && (
+            <p className="text-navy-500 text-xs mt-1.5 truncate">
+              Reports to: <span className="text-navy-300">{profile.manager.full_name}</span>
+            </p>
+          )}
         </div>
 
         {/* Nav */}
