@@ -17,10 +17,17 @@ export default function SettingsPage() {
 
   async function fetchAll() {
     const [{ data: p }, { data: t }] = await Promise.all([
-      supabase.from('profiles').select('*, teams(id, name), manager:profiles!profiles_reports_to_fkey(id, full_name)').order('full_name'),
+      supabase.from('profiles').select('*, teams(id, name)').order('full_name'),
       supabase.from('teams').select('*').order('name')
     ])
-    setProfiles(p || [])
+    // Resolve manager names client-side
+    const profileList = p || []
+    const profileMap = Object.fromEntries(profileList.map(pr => [pr.id, pr]))
+    const enriched = profileList.map(pr => ({
+      ...pr,
+      manager: pr.reports_to ? { id: pr.reports_to, full_name: profileMap[pr.reports_to]?.full_name } : null
+    }))
+    setProfiles(enriched)
     setTeams(t || [])
     setLoading(false)
   }

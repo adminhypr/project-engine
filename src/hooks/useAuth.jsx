@@ -13,7 +13,7 @@ async function fetchProfileDirect(userId, accessToken) {
 
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=*,teams(id,name),manager:profiles!profiles_reports_to_fkey(id,full_name)`,
+      `${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=*,teams(id,name)`,
       {
         headers: {
           'apikey': SUPABASE_KEY,
@@ -32,7 +32,32 @@ async function fetchProfileDirect(userId, accessToken) {
     }
 
     const rows = await res.json()
-    return rows?.[0] || null
+    const profile = rows?.[0] || null
+
+    // Resolve reporting manager name if reports_to is set
+    if (profile?.reports_to) {
+      try {
+        const mgrRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/profiles?id=eq.${profile.reports_to}&select=id,full_name`,
+          {
+            headers: {
+              'apikey': SUPABASE_KEY,
+              'Authorization': `Bearer ${accessToken}`,
+              'Accept': 'application/json',
+              'Accept-Profile': 'public',
+            },
+          }
+        )
+        if (mgrRes.ok) {
+          const mgrRows = await mgrRes.json()
+          profile.manager = mgrRows?.[0] || null
+        }
+      } catch {
+        // Non-critical — sidebar just won't show manager name
+      }
+    }
+
+    return profile
   } catch (err) {
     clearTimeout(timeout)
     console.error('Profile fetch failed:', err.name, err.message)

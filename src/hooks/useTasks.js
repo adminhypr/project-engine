@@ -7,7 +7,7 @@ import { useAuth } from './useAuth'
 
 const TASK_SELECT = `
   *,
-  assignee:profiles!tasks_assigned_to_fkey(id, full_name, email, role, team_id, reports_to, teams(name), manager:profiles!profiles_reports_to_fkey(id, full_name)),
+  assignee:profiles!tasks_assigned_to_fkey(id, full_name, email, role, team_id, reports_to, teams(name)),
   assigner:profiles!tasks_assigned_by_fkey(id, full_name, email, role, team_id, teams(name)),
   team:teams(id, name),
   comments(count)
@@ -33,10 +33,24 @@ export function useTasks() {
     const { data, error } = await query
     if (error) { setError(error.message); setLoading(false); return }
 
+    // Resolve reporting manager names for assignees
+    const managerIds = [...new Set((data || []).map(t => t.assignee?.reports_to).filter(Boolean))]
+    let managerMap = {}
+    if (managerIds.length > 0) {
+      const { data: managers } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', managerIds)
+      if (managers) {
+        managerMap = Object.fromEntries(managers.map(m => [m.id, m]))
+      }
+    }
+
     const enriched = (data || []).map(t => ({
       ...t,
       priority:     getPriority(t),
-      comment_count: t.comments?.[0]?.count || 0
+      comment_count: t.comments?.[0]?.count || 0,
+      assignee: t.assignee ? { ...t.assignee, manager: managerMap[t.assignee.reports_to] || null } : t.assignee,
     }))
 
     setTasks(enriched)
@@ -190,16 +204,23 @@ export function useProfiles() {
   const [loading,  setLoading]  = useState(true)
 
   useEffect(() => {
-    async function fetch() {
+    async function load() {
       const [{ data: pData }, { data: tData }] = await Promise.all([
-        supabase.from('profiles').select('*, teams(id, name), manager:profiles!profiles_reports_to_fkey(id, full_name)').order('full_name'),
+        supabase.from('profiles').select('*, teams(id, name)').order('full_name'),
         supabase.from('teams').select('*').order('name')
       ])
-      setProfiles(pData || [])
+      // Resolve manager names client-side from the same profiles list
+      const profileList = pData || []
+      const profileMap = Object.fromEntries(profileList.map(p => [p.id, p]))
+      const enriched = profileList.map(p => ({
+        ...p,
+        manager: p.reports_to ? { id: p.reports_to, full_name: profileMap[p.reports_to]?.full_name } : null
+      }))
+      setProfiles(enriched)
       setTeams(tData || [])
       setLoading(false)
     }
-    fetch()
+    load()
   }, [])
 
   return { profiles, teams, loading }
