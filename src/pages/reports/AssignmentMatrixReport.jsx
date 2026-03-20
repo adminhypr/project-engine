@@ -41,12 +41,12 @@ export default function AssignmentMatrixReport({ tasks, profiles }) {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-3">
+      <div className="flex flex-wrap items-center gap-3 mb-3">
         <ExportBtn data={csvData} filename="assignment-matrix.csv" />
         <select
           value={topN}
           onChange={e => setTopN(Number(e.target.value))}
-          className="form-input w-36 py-1.5 text-xs"
+          className="form-input w-full sm:w-36 py-1.5 text-xs"
         >
           <option value={0}>All people</option>
           <option value={5}>Top 5</option>
@@ -57,7 +57,7 @@ export default function AssignmentMatrixReport({ tasks, profiles }) {
         <select
           value={teamFilter}
           onChange={e => setTeamFilter(e.target.value)}
-          className="form-input w-40 py-1.5 text-xs"
+          className="form-input w-full sm:w-40 py-1.5 text-xs"
         >
           <option value="">All teams</option>
           {teams.map(t => <option key={t} value={t}>{t}</option>)}

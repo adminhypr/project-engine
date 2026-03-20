@@ -33,6 +33,7 @@ export default function TeamTasksReport({ tasks }) {
         </ResponsiveContainer>
       </div>
       <div className="card">
+        <div className="overflow-x-auto -mx-4 sm:mx-0">
         <table className="w-full text-sm">
           <thead><tr>
             <th className="table-th">Team</th>
@@ -63,6 +64,7 @@ export default function TeamTasksReport({ tasks }) {
             })}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

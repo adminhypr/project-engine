@@ -29,6 +29,7 @@ export default function CommentActivityReport({ tasks, comments, profiles }) {
 
       <div className="card">
         <p className="text-xs font-semibold text-navy-500 uppercase tracking-wider mb-3">Comment Activity by Person</p>
+        <div className="overflow-x-auto -mx-4 sm:mx-0">
         <table className="w-full text-sm">
           <thead><tr>
             <th className="table-th">Person</th>
@@ -49,10 +50,12 @@ export default function CommentActivityReport({ tasks, comments, profiles }) {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <div className="card">
         <p className="text-xs font-semibold text-navy-500 uppercase tracking-wider mb-3">Most Discussed Tasks (Top 10)</p>
+        <div className="overflow-x-auto -mx-4 sm:mx-0">
         <table className="w-full text-sm">
           <thead><tr>
             <th className="table-th">Task</th>
@@ -69,6 +72,7 @@ export default function CommentActivityReport({ tasks, comments, profiles }) {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <div className="card">
@@ -77,7 +81,8 @@ export default function CommentActivityReport({ tasks, comments, profiles }) {
         </p>
         {zeroCommentTasks.length === 0
           ? <p className="text-sm text-navy-400">All active tasks have at least one comment.</p>
-          : <table className="w-full text-sm">
+          : <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <table className="w-full text-sm">
               <thead><tr>
                 <th className="table-th">Task</th>
                 <th className="table-th">Assigned To</th>
@@ -95,6 +100,7 @@ export default function CommentActivityReport({ tasks, comments, profiles }) {
                 ))}
               </tbody>
             </table>
+            </div>
         }
       </div>
     </div>

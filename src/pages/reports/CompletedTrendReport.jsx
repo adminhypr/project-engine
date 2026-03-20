@@ -29,6 +29,7 @@ export default function CompletedTrendReport({ tasks }) {
         </ResponsiveContainer>
       </div>
       <div className="card">
+        <div className="overflow-x-auto -mx-4 sm:mx-0">
         <table className="w-full text-sm">
           <thead><tr>
             <th className="table-th">Week</th>
@@ -43,6 +44,7 @@ export default function CompletedTrendReport({ tasks }) {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

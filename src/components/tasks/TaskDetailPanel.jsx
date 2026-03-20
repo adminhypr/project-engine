@@ -181,7 +181,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
         )}
 
         {/* Meta grid */}
-        <div className="px-5 py-4 grid grid-cols-2 gap-3 border-b border-navy-100/20">
+        <div className="px-4 sm:px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-3 border-b border-navy-100/20">
           {[
             { label: 'Assigned To',   value: task.assignee?.full_name },
             { label: 'Assigned By',   value: task.assigner?.full_name },
@@ -277,7 +277,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
             <button
               onClick={handlePostComment}
               disabled={posting || !newComment.trim()}
-              className="btn-primary h-[60px] px-3"
+              className="btn-primary h-[60px] px-4"
             >
               <Send size={16} />
             </button>

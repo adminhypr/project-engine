@@ -15,7 +15,7 @@ function AppRoutes() {
   const { session, loading, profile, refreshProfile } = useAuth()
 
   if (loading) return (
-    <div className="h-screen flex items-center justify-center bg-navy-50">
+    <div className="min-h-screen flex items-center justify-center bg-navy-50">
       <div className="text-center">
         <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
         <p className="text-navy-500 text-sm">Loading...</p>
@@ -26,8 +26,8 @@ function AppRoutes() {
   if (!session) return <LoginPage />
 
   if (!profile || (!profile.team_id && profile.role !== 'Admin')) return (
-    <div className="h-screen flex items-center justify-center bg-navy-50">
-      <div className="bg-white/70 backdrop-blur-2xl rounded-3xl border border-white/30 shadow-glass-xl max-w-md text-center p-8">
+    <div className="min-h-screen flex items-center justify-center bg-navy-50 px-4">
+      <div className="bg-white/70 backdrop-blur-2xl rounded-3xl border border-white/30 shadow-glass-xl max-w-md w-full text-center p-6 sm:p-8">
         <div className="text-4xl mb-4">👋</div>
         <h2 className="text-xl font-bold text-navy-900 mb-2">Welcome to Project Engine</h2>
         <p className="text-navy-500">

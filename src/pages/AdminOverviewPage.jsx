@@ -43,7 +43,7 @@ export default function AdminOverviewPage() {
 
         <StatsStrip stats={stats} />
 
-        <div className="p-6 grid grid-cols-[280px_1fr] gap-5">
+        <div className="p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5">
 
           {/* Team breakdown */}
           <motion.div

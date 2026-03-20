@@ -156,7 +156,7 @@ export default function NotificationBell({ onTaskClick }) {
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            className="absolute right-0 top-full mt-2 w-80 bg-white/90 backdrop-blur-2xl rounded-2xl shadow-glass-xl border border-white/30 z-50 overflow-hidden"
+            className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 max-w-80 bg-white/90 backdrop-blur-2xl rounded-2xl shadow-glass-xl border border-white/30 z-50 overflow-hidden"
             initial={{ opacity: 0, y: -8, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.95 }}

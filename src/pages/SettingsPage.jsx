@@ -61,7 +61,7 @@ export default function SettingsPage() {
       <div>
         <PageHeader title="Settings" subtitle="Manage users, teams, and roles" />
 
-        <div className="p-6 space-y-6 max-w-7xl">
+        <div className="p-4 sm:p-6 space-y-6 max-w-7xl">
 
           {/* Teams */}
           <motion.div
@@ -112,6 +112,7 @@ export default function SettingsPage() {
             <p className="text-xs text-navy-400 mb-4">
               New users appear here after they sign in for the first time. Assign them a team and role.
             </p>
+            <div className="overflow-x-auto -mx-4 sm:mx-0">
             <table className="w-full text-sm">
               <thead>
                 <tr>
@@ -137,6 +138,7 @@ export default function SettingsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </motion.div>
 
         </div>

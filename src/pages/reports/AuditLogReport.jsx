@@ -73,11 +73,11 @@ export default function AuditLogReport({ dateFrom, dateTo }) {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-2 items-center">
+      <div className="flex flex-wrap gap-2 items-center">
         <select
           value={filterType}
           onChange={e => setFilterType(e.target.value)}
-          className="form-input w-48"
+          className="form-input w-full sm:w-48"
         >
           <option value="">All event types</option>
           {EVENT_TYPES.map(t => (
@@ -89,7 +89,7 @@ export default function AuditLogReport({ dateFrom, dateTo }) {
           placeholder="Filter by person..."
           value={filterPerson}
           onChange={e => setFilterPerson(e.target.value)}
-          className="form-input w-48"
+          className="form-input w-full sm:w-48"
         />
         {(filterType || filterPerson) && (
           <button

@@ -6,7 +6,7 @@ import { AnimatedNumber } from './animations'
 // ── Page header ──────────────────────────────
 export function PageHeader({ title, subtitle, actions }) {
   return (
-    <div className="bg-white/50 backdrop-blur-xl border-b border-white/30 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+    <div className="bg-white/50 backdrop-blur-xl border-b border-white/30 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between sticky top-0 z-10">
       <div>
         <h2 className="text-lg font-semibold text-navy-900">{title}</h2>
         {subtitle && <p className="text-sm text-navy-500 mt-0.5">{subtitle}</p>}
@@ -19,7 +19,7 @@ export function PageHeader({ title, subtitle, actions }) {
 // ── Stats strip ──────────────────────────────
 export function StatsStrip({ stats }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-6 pb-0">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 p-4 sm:p-6 pb-0">
       {stats.map(({ label, value, color }, i) => (
         <motion.div
           key={label}
@@ -129,12 +129,12 @@ export function FilterRow({ filters, onChange, onClear, showTeamFilter, teams })
         placeholder="Search tasks..."
         value={filters.search || ''}
         onChange={e => onChange('search', e.target.value)}
-        className="form-input w-44"
+        className="form-input w-full sm:w-44"
       />
       <select
         value={filters.status || ''}
         onChange={e => onChange('status', e.target.value)}
-        className="form-input w-36"
+        className="form-input w-[calc(50%-0.25rem)] sm:w-36"
       >
         <option value="">All statuses</option>
         <option>Not Started</option>
@@ -145,7 +145,7 @@ export function FilterRow({ filters, onChange, onClear, showTeamFilter, teams })
       <select
         value={filters.urgency || ''}
         onChange={e => onChange('urgency', e.target.value)}
-        className="form-input w-36"
+        className="form-input w-[calc(50%-0.25rem)] sm:w-36"
       >
         <option value="">All urgencies</option>
         <option>High</option>
@@ -155,7 +155,7 @@ export function FilterRow({ filters, onChange, onClear, showTeamFilter, teams })
       <select
         value={filters.priority || ''}
         onChange={e => onChange('priority', e.target.value)}
-        className="form-input w-36"
+        className="form-input w-[calc(50%-0.25rem)] sm:w-36"
       >
         <option value="">All priorities</option>
         <option value="red">Red</option>
@@ -167,7 +167,7 @@ export function FilterRow({ filters, onChange, onClear, showTeamFilter, teams })
         <select
           value={filters.team || ''}
           onChange={e => onChange('team', e.target.value)}
-          className="form-input w-36"
+          className="form-input w-[calc(50%-0.25rem)] sm:w-36"
         >
           <option value="">All teams</option>
           {(teams || []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}

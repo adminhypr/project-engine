@@ -23,6 +23,7 @@ export default function UpcomingReport({ tasks }) {
       {upcoming.length === 0
         ? <div className="card text-center py-12 text-navy-400">No upcoming tasks with due dates.</div>
         : <div className="card">
+            <div className="overflow-x-auto -mx-4 sm:mx-0">
             <table className="w-full text-sm">
               <thead><tr>
                 <th className="table-th">Task</th>
@@ -47,6 +48,7 @@ export default function UpcomingReport({ tasks }) {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
       }
     </div>

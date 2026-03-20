@@ -75,8 +75,8 @@ export function SlidePanel({ isOpen, onClose, children, width = 520 }) {
             onClick={onClose}
           />
           <motion.div
-            className="fixed top-0 right-0 h-full bg-white/85 backdrop-blur-2xl shadow-glass-xl z-50 flex flex-col border-l border-white/20"
-            style={{ width }}
+            className="fixed top-0 right-0 h-full w-full sm:w-auto bg-white/85 backdrop-blur-2xl shadow-glass-xl z-50 flex flex-col border-l border-white/20"
+            style={{ maxWidth: width }}
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
@@ -156,7 +156,7 @@ export function ModalWrapper({ isOpen, onClose, children }) {
             onClick={onClose}
           />
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-6 pointer-events-none"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 pointer-events-none"
           >
             <motion.div
               className="bg-white/85 backdrop-blur-2xl rounded-2xl shadow-glass-xl border border-white/30 pointer-events-auto w-full max-w-md"

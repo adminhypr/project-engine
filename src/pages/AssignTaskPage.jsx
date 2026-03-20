@@ -64,7 +64,7 @@ export default function AssignTaskPage() {
     <PageTransition>
       <div>
         <PageHeader title="Assign a Task" />
-        <div className="p-6 max-w-lg">
+        <div className="p-4 sm:p-6 max-w-lg">
           <SuccessBurst trigger={result.taskId}>
             <div className="card text-center py-10">
               <motion.div
@@ -99,11 +99,11 @@ export default function AssignTaskPage() {
       <div>
         <PageHeader title="Assign a Task" subtitle="Assign a task to anyone in your organization" />
 
-        <div className="p-6 max-w-2xl">
+        <div className="p-4 sm:p-6 max-w-2xl">
           <div className="card">
             <form onSubmit={handleSubmit} className="space-y-5">
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="form-label">Assign To *</label>
                   <select
@@ -172,7 +172,7 @@ export default function AssignTaskPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="form-label">Due Date (optional)</label>
                   <input

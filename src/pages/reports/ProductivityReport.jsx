@@ -104,6 +104,7 @@ export default function ProductivityReport({ tasks, profiles }) {
           <p className="text-xs font-semibold text-navy-500 uppercase tracking-wider mb-3">
             Declined Tasks Log ({allDeclined.length})
           </p>
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
           <table className="w-full text-sm">
             <thead><tr>
               <th className="table-th">Task</th>
@@ -131,6 +132,7 @@ export default function ProductivityReport({ tasks, profiles }) {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

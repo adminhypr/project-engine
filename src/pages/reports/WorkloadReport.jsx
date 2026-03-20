@@ -17,6 +17,7 @@ export default function WorkloadReport({ tasks, profiles }) {
     <div>
       <ExportBtn data={data} filename="workload-by-person.csv" />
       <div className="card">
+        <div className="overflow-x-auto -mx-4 sm:mx-0">
         <table className="w-full text-sm">
           <thead><tr>
             <th className="table-th">Person</th>
@@ -39,6 +40,7 @@ export default function WorkloadReport({ tasks, profiles }) {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

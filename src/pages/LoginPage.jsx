@@ -3,13 +3,13 @@ import { signInWithGoogle } from '../lib/auth'
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-navy-900 via-navy-800 to-navy-950 flex items-center justify-center p-6">
+    <div className="min-h-screen bg-gradient-to-br from-navy-900 via-navy-800 to-navy-950 flex items-center justify-center p-4 sm:p-6">
       {/* Ambient glow */}
-      <div className="fixed top-1/4 left-1/3 w-96 h-96 bg-orange-500/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="fixed bottom-1/4 right-1/3 w-96 h-96 bg-sky-500/8 rounded-full blur-[120px] pointer-events-none" />
+      <div className="fixed top-1/4 left-1/3 w-64 sm:w-96 h-64 sm:h-96 bg-orange-500/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="fixed bottom-1/4 right-1/3 w-64 sm:w-96 h-64 sm:h-96 bg-sky-500/8 rounded-full blur-[120px] pointer-events-none" />
 
       <motion.div
-        className="bg-white/80 backdrop-blur-2xl rounded-3xl shadow-glass-xl border border-white/30 p-10 w-full max-w-sm text-center"
+        className="bg-white/80 backdrop-blur-2xl rounded-3xl shadow-glass-xl border border-white/30 p-6 sm:p-10 w-full max-w-sm text-center"
         initial={{ opacity: 0, scale: 0.95, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.4, ease: 'easeOut' }}

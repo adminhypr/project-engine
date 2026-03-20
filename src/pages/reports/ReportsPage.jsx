@@ -74,32 +74,36 @@ export default function ReportsPage() {
     fetchAll()
   }, [dateFrom, dateTo, isAdmin, profile?.team_id])
 
+  const visibleReports = REPORTS.filter(r => !r.adminOnly || isAdmin)
+
   return (
     <PageTransition>
-      <div className="flex h-full">
+      <div className="flex flex-col md:flex-row h-full">
 
-        {/* Report list sidebar */}
-        <aside className="w-52 min-w-[13rem] border-r border-navy-100/30 bg-white/40 backdrop-blur-sm py-4">
-          <p className="px-4 text-xs font-semibold text-navy-400 uppercase tracking-wider mb-2">Reports</p>
-          {REPORTS.filter(r => !r.adminOnly || isAdmin).map(r => (
-            <button
-              key={r.id}
-              onClick={() => setActiveReport(r.id)}
-              className={`relative w-full text-left px-4 py-2.5 text-sm transition-all duration-200
-                ${activeReport === r.id
-                  ? 'text-orange-600 font-semibold'
-                  : 'text-navy-600 hover:bg-navy-50/50'}`}
-            >
-              {activeReport === r.id && (
-                <motion.div
-                  layoutId="report-active"
-                  className="absolute inset-0 bg-orange-500/8 border-r-2 border-orange-500"
-                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                />
-              )}
-              <span className="relative z-10">{r.label}</span>
-            </button>
-          ))}
+        {/* Report list — horizontal scroll on mobile, sidebar on desktop */}
+        <aside className="md:w-52 md:min-w-[13rem] border-b md:border-b-0 md:border-r border-navy-100/30 bg-white/40 backdrop-blur-sm py-2 md:py-4">
+          <p className="px-4 text-xs font-semibold text-navy-400 uppercase tracking-wider mb-2 hidden md:block">Reports</p>
+          <div className="flex md:flex-col overflow-x-auto md:overflow-x-visible px-2 md:px-0 gap-1 md:gap-0">
+            {visibleReports.map(r => (
+              <button
+                key={r.id}
+                onClick={() => setActiveReport(r.id)}
+                className={`relative whitespace-nowrap text-left px-3 md:px-4 py-2 md:py-2.5 text-sm rounded-lg md:rounded-none transition-all duration-200
+                  ${activeReport === r.id
+                    ? 'text-orange-600 font-semibold bg-orange-500/10 md:bg-transparent'
+                    : 'text-navy-600 hover:bg-navy-50/50'}`}
+              >
+                {activeReport === r.id && (
+                  <motion.div
+                    layoutId="report-active"
+                    className="absolute inset-0 hidden md:block bg-orange-500/8 border-r-2 border-orange-500"
+                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                  />
+                )}
+                <span className="relative z-10">{r.label}</span>
+              </button>
+            ))}
+          </div>
         </aside>
 
         {/* Report content */}
@@ -107,18 +111,18 @@ export default function ReportsPage() {
           <PageHeader
             title={REPORTS.find(r => r.id === activeReport)?.label || 'Reports'}
             actions={
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 text-sm">
-                  <label className="text-navy-500 font-medium">From</label>
-                  <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="form-input w-36 py-1.5" />
-                  <label className="text-navy-500 font-medium">To</label>
-                  <input type="date" value={dateTo}   onChange={e => setDateTo(e.target.value)}   className="form-input w-36 py-1.5" />
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="flex items-center gap-1.5 sm:gap-2 text-sm">
+                  <label className="text-navy-500 font-medium hidden sm:inline">From</label>
+                  <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="form-input w-28 sm:w-36 py-1.5 text-xs sm:text-sm" />
+                  <label className="text-navy-500 font-medium hidden sm:inline">To</label>
+                  <input type="date" value={dateTo}   onChange={e => setDateTo(e.target.value)}   className="form-input w-28 sm:w-36 py-1.5 text-xs sm:text-sm" />
                 </div>
               </div>
             }
           />
 
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             {loading ? <LoadingScreen /> : (
               <motion.div
                 key={activeReport}

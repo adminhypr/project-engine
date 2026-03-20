@@ -13,20 +13,20 @@ export default function TaskTable({
   )
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto -mx-4 sm:mx-0">
       <table className="w-full">
         <thead>
           <tr>
             <th className="table-th">Task</th>
-            {showAssignedTo && <th className="table-th">Assigned To</th>}
-            {showAssignedBy && <th className="table-th">Assigned By</th>}
-            <th className="table-th">Type</th>
+            {showAssignedTo && <th className="table-th hidden sm:table-cell">Assigned To</th>}
+            {showAssignedBy && <th className="table-th hidden lg:table-cell">Assigned By</th>}
+            <th className="table-th hidden xl:table-cell">Type</th>
             <th className="table-th">Priority</th>
-            <th className="table-th">Urgency</th>
+            <th className="table-th hidden md:table-cell">Urgency</th>
             <th className="table-th">Status</th>
-            <th className="table-th">Date Assigned</th>
-            <th className="table-th">Due Date</th>
-            <th className="table-th w-10">💬</th>
+            <th className="table-th hidden lg:table-cell">Date Assigned</th>
+            <th className="table-th hidden md:table-cell">Due Date</th>
+            <th className="table-th w-10 hidden sm:table-cell">💬</th>
             {showAcceptanceActions && <th className="table-th w-24"></th>}
           </tr>
         </thead>
@@ -51,7 +51,7 @@ export default function TaskTable({
                 transition={{ duration: 0.2, delay: i * 0.02 }}
                 whileHover={{ y: -1, boxShadow: '0 4px 20px rgba(26, 39, 68, 0.08)' }}
               >
-                <td className="table-td min-w-[200px]">
+                <td className="table-td min-w-[140px] sm:min-w-[200px]">
                   <div className="flex items-center gap-2">
                     <div className="font-medium text-navy-900 leading-snug">{task.title}</div>
                     {isPending && (
@@ -65,38 +65,44 @@ export default function TaskTable({
                     {task.task_id}
                     {task.who_due_to && <span> · For: {task.who_due_to}</span>}
                   </div>
+                  {/* Show assignee inline on mobile when column is hidden */}
+                  {showAssignedTo && (
+                    <div className="text-xs text-navy-500 mt-0.5 sm:hidden">
+                      → {task.assignee?.full_name}
+                    </div>
+                  )}
                 </td>
                 {showAssignedTo && (
-                  <td className="table-td">
+                  <td className="table-td hidden sm:table-cell">
                     <div className="text-sm">{task.assignee?.full_name}</div>
                     <div className="text-xs text-navy-400">{task.team?.name}</div>
                   </td>
                 )}
                 {showAssignedBy && (
-                  <td className="table-td">
+                  <td className="table-td hidden lg:table-cell">
                     <div className="text-sm">{task.assigner?.full_name}</div>
                     <div className="text-xs text-navy-400">{task.assigner?.teams?.name}</div>
                   </td>
                 )}
-                <td className="table-td">
+                <td className="table-td hidden xl:table-cell">
                   <AssignmentBadge type={task.assignment_type} />
                 </td>
                 <td className="table-td">
                   <PriorityBadge priority={task.priority} />
                 </td>
-                <td className="table-td">
+                <td className="table-td hidden md:table-cell">
                   <UrgencyBadge urgency={task.urgency} />
                 </td>
                 <td className="table-td">
                   <StatusBadge status={task.status} />
                 </td>
-                <td className="table-td text-xs text-navy-500 whitespace-nowrap">
+                <td className="table-td text-xs text-navy-500 whitespace-nowrap hidden lg:table-cell">
                   {formatDateShort(task.date_assigned)}
                 </td>
-                <td className="table-td text-xs text-navy-500 whitespace-nowrap">
+                <td className="table-td text-xs text-navy-500 whitespace-nowrap hidden md:table-cell">
                   {task.due_date ? formatDateShort(task.due_date) : '—'}
                 </td>
-                <td className="table-td text-center">
+                <td className="table-td text-center hidden sm:table-cell">
                   {task.comment_count > 0 && (
                     <span className="inline-flex items-center gap-1 text-xs text-navy-400">
                       <MessageSquare size={12} />
@@ -110,7 +116,7 @@ export default function TaskTable({
                       <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                         <motion.button
                           onClick={() => onAccept?.(task)}
-                          className="p-1.5 rounded-lg bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 transition-colors"
+                          className="p-2 sm:p-1.5 rounded-lg bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 transition-colors"
                           whileTap={{ scale: 0.9 }}
                           title="Accept"
                         >
@@ -118,7 +124,7 @@ export default function TaskTable({
                         </motion.button>
                         <motion.button
                           onClick={() => onDecline?.(task)}
-                          className="p-1.5 rounded-lg bg-red-500/15 text-red-700 hover:bg-red-500/25 transition-colors"
+                          className="p-2 sm:p-1.5 rounded-lg bg-red-500/15 text-red-700 hover:bg-red-500/25 transition-colors"
                           whileTap={{ scale: 0.9 }}
                           title="Decline"
                         >

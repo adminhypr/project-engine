@@ -31,6 +31,7 @@ export default function OverdueReport({ tasks }) {
       {overdue.length === 0
         ? <div className="card text-center py-12 text-emerald-600 font-semibold">✓ No overdue tasks in this period!</div>
         : <div className="card">
+            <div className="overflow-x-auto -mx-4 sm:mx-0">
             <table className="w-full text-sm">
               <thead><tr>
                 <th className="table-th">Task</th>
@@ -58,6 +59,7 @@ export default function OverdueReport({ tasks }) {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
       }
     </div>

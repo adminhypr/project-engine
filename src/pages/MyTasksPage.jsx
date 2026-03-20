@@ -54,7 +54,7 @@ export default function MyTasksPage() {
 
         <StatsStrip stats={stats} />
 
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           <div className="card">
             <FilterRow
               filters={filters}
