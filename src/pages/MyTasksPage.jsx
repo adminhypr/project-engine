@@ -13,7 +13,7 @@ export default function MyTasksPage() {
   const { profile } = useAuth()
   const { myTasks, loading, refetch } = useTasks()
   const { acceptTask, declineTask } = useTaskActions()
-  const [filters,    setFilters]    = useState({})
+  const [filters,    setFilters]    = useState({ statuses: ['Not Started', 'In Progress', 'Blocked'] })
   const [activeTask, setActiveTask] = useState(null)
   const [declineTarget, setDeclineTarget] = useState(null)
 
@@ -59,7 +59,7 @@ export default function MyTasksPage() {
             <FilterRow
               filters={filters}
               onChange={(k, v) => setFilters(f => ({ ...f, [k]: v }))}
-              onClear={() => setFilters({})}
+              onClear={() => setFilters({ statuses: ['Not Started', 'In Progress', 'Blocked'] })}
             />
             {filtered.length === 0
               ? <EmptyState

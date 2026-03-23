@@ -131,17 +131,23 @@ export function FilterRow({ filters, onChange, onClear, showTeamFilter, teams })
         onChange={e => onChange('search', e.target.value)}
         className="form-input w-full sm:w-44"
       />
-      <select
-        value={filters.status || ''}
-        onChange={e => onChange('status', e.target.value)}
-        className="form-input w-[calc(50%-0.25rem)] sm:w-36"
-      >
-        <option value="">All statuses</option>
-        <option>Not Started</option>
-        <option>In Progress</option>
-        <option>Blocked</option>
-        <option>Done</option>
-      </select>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 items-center">
+        {['Not Started', 'In Progress', 'Blocked', 'Done'].map(s => (
+          <label key={s} className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={!filters.statuses || filters.statuses.includes(s)}
+              onChange={e => {
+                const current = filters.statuses || ['Not Started', 'In Progress', 'Blocked', 'Done']
+                const next = e.target.checked ? [...current, s] : current.filter(x => x !== s)
+                onChange('statuses', next.length === 4 ? undefined : next)
+              }}
+              className="rounded border-slate-300 dark:border-dark-border text-brand-500 focus:ring-brand-500 w-3.5 h-3.5"
+            />
+            {s}
+          </label>
+        ))}
+      </div>
       <select
         value={filters.urgency || ''}
         onChange={e => onChange('urgency', e.target.value)}

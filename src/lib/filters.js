@@ -1,6 +1,7 @@
 export function applyFilters(tasks, filters) {
   return tasks.filter(t => {
-    if (filters.status   && t.status   !== filters.status)   return false
+    if (filters.statuses?.length && !filters.statuses.includes(t.status)) return false
+    if (filters.status && t.status !== filters.status) return false
     if (filters.urgency  && t.urgency  !== filters.urgency)  return false
     if (filters.priority && t.priority !== filters.priority) return false
     if (filters.team     && t.team_id  !== filters.team)     return false
