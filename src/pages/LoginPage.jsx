@@ -22,7 +22,7 @@ export default function LoginPage() {
           </svg>
         </motion.div>
 
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Project Engine</h1>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Hypr Task</h1>
         <p className="text-slate-500 dark:text-slate-400 text-sm mb-8 leading-relaxed">
           Task management for your team.<br />Sign in with your company Google account.
         </p>

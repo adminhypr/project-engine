@@ -34,7 +34,7 @@ export default function Layout({ children }) {
     <>
       {/* Logo */}
       <div className="px-5 py-5 border-b border-slate-100 dark:border-dark-border">
-        <h1 className="text-slate-900 dark:text-white font-bold text-base tracking-tight">Project Engine</h1>
+        <h1 className="text-slate-900 dark:text-white font-bold text-base tracking-tight">Hypr Task</h1>
         <p className="text-slate-400 dark:text-slate-500 text-xs mt-0.5">Task Management</p>
       </div>
 
@@ -151,7 +151,7 @@ export default function Layout({ children }) {
           >
             <Menu size={20} />
           </button>
-          <h1 className="text-sm font-bold text-slate-900 dark:text-white">Project Engine</h1>
+          <h1 className="text-sm font-bold text-slate-900 dark:text-white">Hypr Task</h1>
           <NotificationBell onTaskClick={() => { navigate('/my-tasks'); setSidebarOpen(false) }} />
         </div>
 

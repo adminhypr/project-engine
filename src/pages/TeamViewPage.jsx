@@ -8,12 +8,12 @@ import TaskTable from '../components/tasks/TaskTable'
 import TaskDetailPanel from '../components/tasks/TaskDetailPanel'
 
 const TEAM_COLORS = [
-  'border-l-4 border-l-orange-500 bg-orange-50',
-  'border-l-4 border-l-sky-500 bg-sky-50',
-  'border-l-4 border-l-emerald-500 bg-emerald-50',
-  'border-l-4 border-l-purple-500 bg-purple-50',
-  'border-l-4 border-l-pink-500 bg-pink-50',
-  'border-l-4 border-l-slate-500 bg-slate-50',
+  'border-l-4 border-l-orange-500 bg-orange-50 dark:bg-orange-500/10 dark:text-orange-300',
+  'border-l-4 border-l-sky-500 bg-sky-50 dark:bg-sky-500/10 dark:text-sky-300',
+  'border-l-4 border-l-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-300',
+  'border-l-4 border-l-purple-500 bg-purple-50 dark:bg-purple-500/10 dark:text-purple-300',
+  'border-l-4 border-l-pink-500 bg-pink-50 dark:bg-pink-500/10 dark:text-pink-300',
+  'border-l-4 border-l-slate-500 bg-slate-50 dark:bg-slate-500/10 dark:text-slate-300',
 ]
 
 export default function TeamViewPage() {

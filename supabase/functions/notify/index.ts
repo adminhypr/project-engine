@@ -16,7 +16,7 @@ const supabase = createClient(
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 const FROM_EMAIL = Deno.env.get('ALERT_FROM_EMAIL') || 'alerts@hyprassistants.com'
-const APP_URL = Deno.env.get('APP_URL') || 'https://project-engine.vercel.app'
+const APP_URL = Deno.env.get('APP_URL') || 'https://tasks.hyprstaffing.com'
 
 // ── Email sender ──────────────────────────────
 async function sendEmail(to: string[], subject: string, html: string) {
@@ -29,7 +29,7 @@ async function sendEmail(to: string[], subject: string, html: string) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: `Project Engine <${FROM_EMAIL}>`,
+      from: `Hypr Task <${FROM_EMAIL}>`,
       to,
       subject,
       html,
@@ -56,7 +56,7 @@ function emailWrap(title: string, color: string, body: string): string {
         </div>
       </div>
       <p style="text-align: center; margin-top: 16px; font-size: 12px; color: #9aa1b3;">
-        <a href="${APP_URL}" style="color: #6366f1; text-decoration: none;">Open Project Engine</a>
+        <a href="${APP_URL}" style="color: #6366f1; text-decoration: none;">Open Hypr Task</a>
       </p>
     </div>`
 }

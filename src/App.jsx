@@ -30,7 +30,7 @@ function AppRoutes() {
     <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg px-4">
       <div className="bg-white dark:bg-dark-card rounded-3xl border border-slate-200 dark:border-dark-border shadow-elevated max-w-md w-full text-center p-6 sm:p-8">
         <div className="text-4xl mb-4">👋</div>
-        <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Welcome to Project Engine</h2>
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Welcome to Hypr Task</h2>
         <p className="text-slate-500 dark:text-slate-400">
           {!profile
             ? 'Loading your profile... If this persists, try refreshing.'
