@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useTasks, useTaskActions } from '../hooks/useTasks'
 import { useAuth } from '../hooks/useAuth'
 import { applyFilters } from '../lib/filters'
@@ -13,9 +14,22 @@ export default function MyTasksPage() {
   const { profile } = useAuth()
   const { myTasks, loading, refetch } = useTasks()
   const { acceptTask, declineTask } = useTaskActions()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [filters,    setFilters]    = useState({ statuses: ['Not Started', 'In Progress', 'Blocked'] })
   const [activeTask, setActiveTask] = useState(null)
   const [declineTarget, setDeclineTarget] = useState(null)
+
+  // Open task panel from notification click
+  useEffect(() => {
+    const openTaskId = location.state?.openTaskId
+    if (openTaskId && myTasks.length > 0) {
+      const task = myTasks.find(t => t.id === openTaskId)
+      if (task) setActiveTask(task)
+      // Clear the state so it doesn't reopen on re-render
+      navigate(location.pathname, { replace: true, state: {} })
+    }
+  }, [location.state?.openTaskId, myTasks])
 
   const pendingTasks = myTasks.filter(t => t.acceptance_status === 'Pending')
   const filtered = applyFilters(myTasks, filters)

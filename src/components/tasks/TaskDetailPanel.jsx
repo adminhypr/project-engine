@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { X, Send, Check, RefreshCw } from 'lucide-react'
+import { X, Send, Check, RefreshCw, Pencil } from 'lucide-react'
 import { useTaskActions } from '../../hooks/useTasks'
 import { useAuth } from '../../hooks/useAuth'
 import { formatDate } from '../../lib/helpers'
@@ -25,10 +25,17 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   const [showReassignModal, setShowReassignModal] = useState(false)
   const [acceptAnim, setAcceptAnim] = useState(0)
   const [declineAnim, setDeclineAnim] = useState(0)
+  const [editing, setEditing] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editUrgency, setEditUrgency] = useState('')
+  const [editDueDate, setEditDueDate] = useState('')
+  const [editWhoTo, setEditWhoTo] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
 
   const canEdit = isAdmin || isManager ||
     task?.assigned_to === profile?.id ||
     task?.assigned_by === profile?.id
+  const isOwner = task?.assigned_by === profile?.id || isAdmin
 
   const isPending = task?.acceptance_status === 'Pending'
   const isDeclined = task?.acceptance_status === 'Declined'
@@ -40,12 +47,44 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
     if (!task) return
     setStatus(task.status || 'Not Started')
     setNotes(task.notes || '')
+    setEditing(false)
+    setEditTitle(task.title || '')
+    setEditUrgency(task.urgency || 'Med')
+    setEditDueDate(task.due_date ? new Date(task.due_date).toISOString().slice(0, 16) : '')
+    setEditWhoTo(task.who_due_to || '')
     setLoadingComments(true)
     getTaskComments(task.id).then(data => {
       setComments(data)
       setLoadingComments(false)
     })
   }, [task?.id])
+
+  function startEditing() {
+    setEditTitle(task.title || '')
+    setEditUrgency(task.urgency || 'Med')
+    setEditDueDate(task.due_date ? new Date(task.due_date).toISOString().slice(0, 16) : '')
+    setEditWhoTo(task.who_due_to || '')
+    setEditing(true)
+  }
+
+  async function handleSaveEdit() {
+    setSavingEdit(true)
+    const updates = {
+      title: editTitle.trim(),
+      urgency: editUrgency,
+      due_date: editDueDate || null,
+      who_due_to: editWhoTo.trim() || null,
+    }
+    const result = await updateTask(task.id, updates)
+    setSavingEdit(false)
+    if (result.ok) {
+      showToast('Task details updated')
+      setEditing(false)
+      onUpdated?.()
+    } else {
+      showToast(result.msg, 'error')
+    }
+  }
 
   async function handleSave() {
     if (!task) return
@@ -113,11 +152,30 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
       <div className="px-5 py-4 border-b border-slate-100 dark:border-dark-border flex items-start gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <p className="text-xs text-slate-400 dark:text-slate-500 font-mono">{task.task_id}</p>
             {isPending && <span className="badge bg-yellow-500/15 text-yellow-700 text-[10px]">Pending</span>}
             {isDeclined && <span className="badge bg-red-500/15 text-red-700 text-[10px]">Declined</span>}
           </div>
-          <h3 className="font-semibold text-slate-900 dark:text-white leading-snug">{task.title}</h3>
+          {editing ? (
+            <input
+              value={editTitle}
+              onChange={e => setEditTitle(e.target.value)}
+              className="form-input font-semibold text-slate-900 dark:text-white w-full"
+              autoFocus
+            />
+          ) : (
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-slate-900 dark:text-white leading-snug">{task.title}</h3>
+              {isOwner && !editing && (
+                <button
+                  onClick={startEditing}
+                  className="text-slate-300 hover:text-brand-500 dark:text-slate-600 dark:hover:text-brand-400 transition-colors"
+                  title="Edit task"
+                >
+                  <Pencil size={14} />
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <button
           onClick={onClose}
@@ -180,16 +238,32 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
           </div>
         )}
 
+        {/* Edit save/cancel bar */}
+        {editing && (
+          <div className="px-5 py-3 border-b border-slate-100 dark:border-dark-border bg-brand-50 dark:bg-brand-500/5 flex items-center gap-2">
+            <button onClick={handleSaveEdit} disabled={savingEdit} className="btn-primary text-xs px-4 py-1.5">
+              {savingEdit ? 'Saving...' : 'Save Changes'}
+            </button>
+            <button onClick={() => setEditing(false)} className="btn-ghost text-xs px-3 py-1.5">Cancel</button>
+          </div>
+        )}
+
         {/* Meta grid */}
         <div className="px-4 sm:px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-3 border-b border-slate-100 dark:border-dark-border">
           {[
             { label: 'Assigned To',   value: task.assignee?.full_name },
             { label: 'Assigned By',   value: task.assigner?.full_name },
             { label: 'Date Assigned', value: formatDate(task.date_assigned) },
-            { label: 'Due Date',      value: task.due_date ? formatDate(task.due_date) : '—' },
+            { label: 'Due Date',      value: editing
+              ? <input type="datetime-local" value={editDueDate} onChange={e => setEditDueDate(e.target.value)} className="form-input text-sm py-1" />
+              : task.due_date ? formatDate(task.due_date) : '—'
+            },
             { label: 'Team',          value: task.team?.name },
             { label: 'Reports To',   value: task.assignee?.manager?.full_name || '—' },
-            { label: 'For',           value: task.who_due_to || '—' },
+            { label: 'For',           value: editing
+              ? <input value={editWhoTo} onChange={e => setEditWhoTo(e.target.value)} className="form-input text-sm py-1" placeholder="Who it's for..." />
+              : task.who_due_to || '—'
+            },
             { label: 'Last Updated',  value: formatDate(task.last_updated) },
             { label: 'Priority',      value: <PriorityBadge priority={task.priority} /> },
           ].map(({ label, value }) => (
@@ -200,7 +274,14 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
           ))}
           <div>
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Urgency</p>
-            <UrgencyBadge urgency={task.urgency} />
+            {editing
+              ? <select value={editUrgency} onChange={e => setEditUrgency(e.target.value)} className="form-input text-sm py-1">
+                  <option>High</option>
+                  <option>Med</option>
+                  <option>Low</option>
+                </select>
+              : <UrgencyBadge urgency={task.urgency} />
+            }
           </div>
           <div>
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Assignment Type</p>

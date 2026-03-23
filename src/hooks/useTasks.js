@@ -85,7 +85,7 @@ export function useTaskActions() {
   const { profile } = useAuth()
 
   async function assignTask(payload) {
-    const { assigneeId, title, urgency, dueDate, whoTo, notes, allProfiles, overrideAssignerId } = payload
+    const { assigneeId, title, urgency, dueDate, whoTo, notes, icon, allProfiles, overrideAssignerId } = payload
 
     const assignee = allProfiles.find(p => p.id === assigneeId)
     const statedAssigner = overrideAssignerId
@@ -107,6 +107,7 @@ export function useTaskActions() {
       due_date:        dueDate || null,
       who_due_to:      whoTo || null,
       notes:           notes || null,
+      icon:            icon || null,
       date_assigned:   new Date().toISOString(),
       status:          'Not Started'
     }).select().single()

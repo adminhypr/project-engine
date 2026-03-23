@@ -191,6 +191,7 @@ export default function NotificationBell({ onTaskClick }) {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.03 }}
                     onClick={() => {
+                      dismiss(n.id)
                       onTaskClick?.(n.taskId)
                       setIsOpen(false)
                     }}

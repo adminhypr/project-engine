@@ -8,6 +8,7 @@ import { getAssignmentType } from '../lib/assignmentType'
 import { useAuth } from '../hooks/useAuth'
 import { PageTransition, SuccessBurst } from '../components/ui/animations'
 import { CheckCircle } from 'lucide-react'
+import TaskIconPicker from '../components/ui/TaskIconPicker'
 
 export default function AssignTaskPage() {
   const { profile, isAdmin } = useAuth()
@@ -21,7 +22,8 @@ export default function AssignTaskPage() {
     urgency:    'Med',
     dueDate:    '',
     whoTo:      '',
-    notes:      ''
+    notes:      '',
+    icon:       ''
   })
   const [overrideAssignerId, setOverrideAssignerId] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -54,7 +56,7 @@ export default function AssignTaskPage() {
 
     if (res.ok) {
       setResult(res)
-      setForm({ assigneeId: '', title: '', urgency: 'Med', dueDate: '', whoTo: '', notes: '' })
+      setForm({ assigneeId: '', title: '', urgency: 'Med', dueDate: '', whoTo: '', notes: '', icon: '' })
     } else {
       showToast(res.msg, 'error')
     }
@@ -205,6 +207,11 @@ export default function AssignTaskPage() {
                 />
               </div>
 
+              <div>
+                <label className="form-label">Task Icon (optional)</label>
+                <TaskIconPicker value={form.icon} onChange={v => set('icon', v)} />
+              </div>
+
               <div className="flex items-center gap-3 pt-2">
                 <motion.button
                   type="submit"
@@ -215,7 +222,7 @@ export default function AssignTaskPage() {
                   {submitting ? 'Assigning...' : 'Assign Task →'}
                 </motion.button>
                 <button type="button" className="btn-secondary" onClick={() =>
-                  setForm({ assigneeId: '', title: '', urgency: 'Med', dueDate: '', whoTo: '', notes: '' })
+                  setForm({ assigneeId: '', title: '', urgency: 'Med', dueDate: '', whoTo: '', notes: '', icon: '' })
                 }>
                   Clear
                 </button>

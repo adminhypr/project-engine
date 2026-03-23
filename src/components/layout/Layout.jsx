@@ -152,12 +152,12 @@ export default function Layout({ children }) {
             <Menu size={20} />
           </button>
           <h1 className="text-sm font-bold text-slate-900 dark:text-white">Hypr Task</h1>
-          <NotificationBell onTaskClick={() => { navigate('/my-tasks'); setSidebarOpen(false) }} />
+          <NotificationBell onTaskClick={(taskId) => { navigate('/my-tasks', { state: { openTaskId: taskId } }); setSidebarOpen(false) }} />
         </div>
 
         {/* Desktop notification bell */}
         <div className="fixed top-4 right-5 z-30 hidden md:block">
-          <NotificationBell onTaskClick={() => navigate('/my-tasks')} />
+          <NotificationBell onTaskClick={(taskId) => navigate('/my-tasks', { state: { openTaskId: taskId } })} />
         </div>
         {children}
       </main>
