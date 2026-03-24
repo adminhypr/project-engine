@@ -7,8 +7,8 @@ import { useAuth } from './useAuth'
 
 const TASK_SELECT = `
   *,
-  assignee:profiles!tasks_assigned_to_fkey(id, full_name, email, role, team_id, reports_to, teams(name)),
-  assigner:profiles!tasks_assigned_by_fkey(id, full_name, email, role, team_id, teams(name)),
+  assignee:profiles!tasks_assigned_to_fkey(id, full_name, email, role, team_id, reports_to, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, team:teams!profile_teams_team_id_fkey(id, name))),
+  assigner:profiles!tasks_assigned_by_fkey(id, full_name, email, role, team_id, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, team:teams!profile_teams_team_id_fkey(id, name))),
   team:teams(id, name),
   comments(count)
 `
@@ -26,9 +26,8 @@ export function useTasks() {
 
     let query = supabase.from('tasks').select(TASK_SELECT).order('date_assigned', { ascending: false })
 
-    if (!isAdmin && isManager) {
-      query = query.eq('team_id', profile.team_id)
-    }
+    // RLS handles team filtering for managers (supports multi-team).
+    // No client-side filter needed — managers see tasks for all their teams.
 
     const { data, error } = await query
     if (error) { setError(error.message); setLoading(false); return }
@@ -46,12 +45,21 @@ export function useTasks() {
       }
     }
 
-    const enriched = (data || []).map(t => ({
-      ...t,
-      priority:     getPriority(t),
-      comment_count: t.comments?.[0]?.count || 0,
-      assignee: t.assignee ? { ...t.assignee, manager: managerMap[t.assignee.reports_to] || null } : t.assignee,
-    }))
+    const enriched = (data || []).map(t => {
+      // Enrich assignee/assigner with team_ids from profile_teams
+      const enrichProfile = (p) => {
+        if (!p) return p
+        const pt = p.profile_teams || []
+        return { ...p, team_ids: pt.map(r => r.team_id), all_teams: pt.map(r => ({ ...r.team, is_primary: r.is_primary })) }
+      }
+      return {
+        ...t,
+        priority:      getPriority(t),
+        comment_count: t.comments?.[0]?.count || 0,
+        assignee:      t.assignee ? { ...enrichProfile(t.assignee), manager: managerMap[t.assignee.reports_to] || null } : t.assignee,
+        assigner:      enrichProfile(t.assigner),
+      }
+    })
 
     setTasks(enriched)
     setLoading(false)
@@ -73,9 +81,12 @@ export function useTasks() {
   // My tasks only
   const myTasks = tasks.filter(t => t.assigned_to === profile?.id)
 
-  // Team tasks (for manager view)
+  // Team tasks (for manager view) — includes all teams the manager belongs to
   const teamTasks = isManager
-    ? tasks.filter(t => t.team_id === profile?.team_id)
+    ? tasks.filter(t => {
+        const myTeamIds = profile?.team_ids || (profile?.team_id ? [profile.team_id] : [])
+        return myTeamIds.includes(t.team_id)
+      })
     : []
 
   return { tasks, myTasks, teamTasks, loading, error, refetch: fetchTasks }
@@ -85,7 +96,7 @@ export function useTaskActions() {
   const { profile } = useAuth()
 
   async function assignTask(payload) {
-    const { assigneeId, title, urgency, dueDate, whoTo, notes, icon, allProfiles, overrideAssignerId } = payload
+    const { assigneeId, title, urgency, dueDate, whoTo, notes, icon, allProfiles, overrideAssignerId, teamId } = payload
 
     const assignee = allProfiles.find(p => p.id === assigneeId)
     const statedAssigner = overrideAssignerId
@@ -96,12 +107,15 @@ export function useTaskActions() {
     const assignmentType = getAssignmentType(statedAssigner, assignee)
     const taskId = generateTaskId()
 
+    // Use explicit teamId if provided (multi-team picker), else assignee's primary team
+    const resolvedTeamId = teamId || assignee?.team_id
+
     const { data, error } = await supabase.from('tasks').insert({
       task_id:         taskId,
       assigned_to:     assigneeId,
       assigned_by:     statedAssigner?.id || profile.id,
       assignment_type: assignmentType,
-      team_id:         assignee?.team_id,
+      team_id:         resolvedTeamId,
       title,
       urgency:         urgency || 'Med',
       due_date:        dueDate || null,
@@ -234,16 +248,21 @@ export function useProfiles() {
   useEffect(() => {
     async function load() {
       const [{ data: pData }, { data: tData }] = await Promise.all([
-        supabase.from('profiles').select('*, teams(id, name)').order('full_name'),
+        supabase.from('profiles').select('*, teams!profiles_team_id_fkey(id, name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, team:teams!profile_teams_team_id_fkey(id, name))').order('full_name'),
         supabase.from('teams').select('*').order('name')
       ])
-      // Resolve manager names client-side from the same profiles list
+      // Resolve manager names + enrich with multi-team data
       const profileList = pData || []
       const profileMap = Object.fromEntries(profileList.map(p => [p.id, p]))
-      const enriched = profileList.map(p => ({
-        ...p,
-        manager: p.reports_to ? { id: p.reports_to, full_name: profileMap[p.reports_to]?.full_name } : null
-      }))
+      const enriched = profileList.map(p => {
+        const pt = p.profile_teams || []
+        return {
+          ...p,
+          team_ids: pt.map(r => r.team_id),
+          all_teams: pt.map(r => ({ ...r.team, is_primary: r.is_primary })),
+          manager: p.reports_to ? { id: p.reports_to, full_name: profileMap[p.reports_to]?.full_name } : null
+        }
+      })
       setProfiles(enriched)
       setTeams(tData || [])
       setLoading(false)

@@ -49,7 +49,19 @@ export default function Layout({ children }) {
           }
           <div className="min-w-0 flex-1">
             <p className="text-slate-900 dark:text-white text-sm font-semibold truncate">{profile?.full_name}</p>
-            <p className="text-slate-400 dark:text-slate-500 text-xs truncate">{profile?.teams?.name || 'No team'}</p>
+            <p className="text-slate-400 dark:text-slate-500 text-xs truncate">
+              {profile?.all_teams?.length > 0
+                ? <>
+                    {profile.teams?.name || profile.all_teams[0]?.name}
+                    {profile.all_teams.length > 1 && (
+                      <span className="ml-1 text-slate-300 dark:text-slate-600" title={profile.all_teams.map(t => t.name).join(', ')}>
+                        +{profile.all_teams.length - 1}
+                      </span>
+                    )}
+                  </>
+                : profile?.teams?.name || 'No team'
+              }
+            </p>
           </div>
         </div>
         <div className="mt-2.5 flex items-center gap-2">

@@ -28,7 +28,7 @@ export default function ProductivityReport({ tasks, profiles }) {
 
     return {
       name:            p.full_name,
-      team:            p.teams?.name || '—',
+      team:            p.profile_teams?.length > 0 ? p.profile_teams.map(pt => pt.team?.name || '').filter(Boolean).join(', ') : p.teams?.name || '—',
       received:        mine.length,
       given:           given.length,
       completed:       done.length,

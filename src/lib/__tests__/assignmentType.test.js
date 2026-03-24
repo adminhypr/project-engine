@@ -60,6 +60,37 @@ describe('getAssignmentType', () => {
   it('returns Unknown when assignee is null', () => {
     expect(getAssignmentType(makeUser(), null)).toBe('Unknown')
   })
+
+  // Multi-team tests
+  it('returns Peer when users share a team via team_ids', () => {
+    const s1 = makeUser({ id: 's1', role: 'Staff', team_ids: ['team-a', 'team-b'] })
+    const s2 = makeUser({ id: 's2', role: 'Staff', team_ids: ['team-b', 'team-c'] })
+    expect(getAssignmentType(s1, s2)).toBe('Peer')
+  })
+
+  it('returns CrossTeam when users share no teams via team_ids', () => {
+    const s1 = makeUser({ id: 's1', role: 'Staff', team_ids: ['team-a'] })
+    const s2 = makeUser({ id: 's2', role: 'Staff', team_ids: ['team-b'] })
+    expect(getAssignmentType(s1, s2)).toBe('CrossTeam')
+  })
+
+  it('returns Superior when manager shares a team with staff via team_ids', () => {
+    const mgr = makeUser({ id: 'm1', role: 'Manager', team_ids: ['team-a', 'team-c'] })
+    const staff = makeUser({ id: 's1', role: 'Staff', team_ids: ['team-b', 'team-c'] })
+    expect(getAssignmentType(mgr, staff)).toBe('Superior')
+  })
+
+  it('returns CrossTeam when manager shares no teams with staff via team_ids', () => {
+    const mgr = makeUser({ id: 'm1', role: 'Manager', team_ids: ['team-a'] })
+    const staff = makeUser({ id: 's1', role: 'Staff', team_ids: ['team-b'] })
+    expect(getAssignmentType(mgr, staff)).toBe('CrossTeam')
+  })
+
+  it('falls back to team_id when team_ids is empty', () => {
+    const s1 = makeUser({ id: 's1', role: 'Staff', team_id: 'team-a', team_ids: [] })
+    const s2 = makeUser({ id: 's2', role: 'Staff', team_id: 'team-a', team_ids: [] })
+    expect(getAssignmentType(s1, s2)).toBe('Peer')
+  })
 })
 
 describe('ROLE_RANK', () => {

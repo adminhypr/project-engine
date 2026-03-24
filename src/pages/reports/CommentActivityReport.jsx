@@ -7,7 +7,7 @@ export default function CommentActivityReport({ tasks, comments, profiles }) {
     const taskIds = [...new Set(mine.map(c => c.task_id))]
     return {
       name:          p.full_name,
-      team:          p.teams?.name || '—',
+      team:          p.profile_teams?.length > 0 ? p.profile_teams.map(pt => pt.team?.name || '').filter(Boolean).join(', ') : p.teams?.name || '—',
       comments:      mine.length,
       tasksCommented: taskIds.length,
       avgPerTask:    taskIds.length ? (mine.length / taskIds.length).toFixed(1) : 0

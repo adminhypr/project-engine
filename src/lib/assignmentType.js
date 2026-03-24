@@ -1,15 +1,29 @@
 export const ROLE_RANK = { Admin: 3, Manager: 2, Staff: 1 }
 
+/**
+ * Check if two users share any team.
+ * Supports both legacy (single team_id) and multi-team (team_ids array).
+ */
+function shareTeam(a, b) {
+  // Multi-team: check if any team_ids overlap
+  if (a.team_ids?.length && b.team_ids?.length) {
+    return a.team_ids.some(id => b.team_ids.includes(id))
+  }
+  // Fallback to legacy single team_id
+  return a.team_id != null && a.team_id === b.team_id
+}
+
 export function getAssignmentType(assigner, assignee) {
   if (!assigner || !assignee) return 'Unknown'
   const ar = ROLE_RANK[assigner.role] || 1
   const er = ROLE_RANK[assignee.role] || 1
   if (assigner.id === assignee.id)              return 'Self'
   if (assigner.role === 'Admin')                return 'Superior'
-  if (ar > er && assigner.team_id === assignee.team_id) return 'Superior'
-  if (ar > er && assigner.team_id !== assignee.team_id) return 'CrossTeam'
-  if (ar === er && assigner.team_id === assignee.team_id) return 'Peer'
-  if (ar === er && assigner.team_id !== assignee.team_id) return 'CrossTeam'
+  const sameTeam = shareTeam(assigner, assignee)
+  if (ar > er && sameTeam)  return 'Superior'
+  if (ar > er && !sameTeam) return 'CrossTeam'
+  if (ar === er && sameTeam)  return 'Peer'
+  if (ar === er && !sameTeam) return 'CrossTeam'
   if (ar < er) return 'Upward'
   return 'Peer'
 }

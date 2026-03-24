@@ -12,17 +12,16 @@ async function fetchProfileDirect(userId, accessToken) {
   const timeout = setTimeout(() => controller.abort(), 6000)
 
   try {
+    const headers = {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${accessToken}`,
+      'Accept': 'application/json',
+      'Accept-Profile': 'public',
+    }
+
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=*,teams(id,name)`,
-      {
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${accessToken}`,
-          'Accept': 'application/json',
-          'Accept-Profile': 'public',
-        },
-        signal: controller.signal,
-      }
+      `${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=*,teams!profiles_team_id_fkey(id,name)`,
+      { headers, signal: controller.signal }
     )
     clearTimeout(timeout)
 
@@ -33,6 +32,28 @@ async function fetchProfileDirect(userId, accessToken) {
 
     const rows = await res.json()
     const profile = rows?.[0] || null
+
+    // Fetch multi-team memberships separately (avoids PostgREST ambiguity)
+    if (profile) {
+      try {
+        const ptRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/profile_teams?profile_id=eq.${userId}&select=team_id,is_primary,team:teams(id,name)`,
+          { headers }
+        )
+        if (ptRes.ok) {
+          const pt = await ptRes.json()
+          profile.team_ids = pt.map(r => r.team_id)
+          profile.all_teams = pt.map(r => ({ ...r.team, is_primary: r.is_primary }))
+          const primary = pt.find(r => r.is_primary)
+          if (primary?.team) {
+            profile.teams = primary.team
+            profile.team_id = primary.team_id
+          }
+        }
+      } catch {
+        // Non-critical — falls back to legacy teams relation
+      }
+    }
 
     // Resolve reporting manager name if reports_to is set
     if (profile?.reports_to) {

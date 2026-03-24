@@ -37,7 +37,7 @@ export default function ReassignModal({ isOpen, onClose, onConfirm, task }) {
               .filter(p => p.id !== task?.assigned_to)
               .map(p => (
                 <option key={p.id} value={p.id}>
-                  {p.full_name} ({p.teams?.name || 'No team'})
+                  {p.full_name} ({p.all_teams?.length > 0 ? p.all_teams.map(t => t.name).join(', ') : p.teams?.name || 'No team'})
                 </option>
               ))}
           </select>

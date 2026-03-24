@@ -1,13 +1,13 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useTaskActions, useProfiles } from '../hooks/useTasks'
 import { PageHeader, showToast } from '../components/ui'
 import { AssignmentBadge } from '../components/ui'
 import { getAssignmentType } from '../lib/assignmentType'
 import { useAuth } from '../hooks/useAuth'
 import { PageTransition, SuccessBurst } from '../components/ui/animations'
-import { CheckCircle } from 'lucide-react'
+import { CheckCircle, Users } from 'lucide-react'
 import TaskIconPicker from '../components/ui/TaskIconPicker'
 
 export default function AssignTaskPage() {
@@ -26,6 +26,7 @@ export default function AssignTaskPage() {
     icon:       ''
   })
   const [overrideAssignerId, setOverrideAssignerId] = useState('')
+  const [selectedTeamId, setSelectedTeamId] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [result,     setResult]     = useState(null)
 
@@ -40,6 +41,34 @@ export default function AssignTaskPage() {
     ? getAssignmentType(effectiveAssigner, selectedAssignee)
     : null
 
+  // Multi-team: does the assignee have multiple teams?
+  const assigneeTeams = useMemo(() => {
+    if (!selectedAssignee) return []
+    return selectedAssignee.all_teams || (selectedAssignee.teams ? [{ id: selectedAssignee.team_id, name: selectedAssignee.teams.name, is_primary: true }] : [])
+  }, [selectedAssignee])
+
+  const showTeamPicker = assigneeTeams.length > 1
+
+  // Auto-select primary team when assignee changes
+  function handleAssigneeChange(assigneeId) {
+    set('assigneeId', assigneeId)
+    const assignee = profiles.find(p => p.id === assigneeId)
+    if (assignee) {
+      const primary = assignee.all_teams?.find(t => t.is_primary)
+      setSelectedTeamId(primary?.id || assignee.team_id || '')
+    } else {
+      setSelectedTeamId('')
+    }
+  }
+
+  // Format team display in dropdowns
+  function formatTeamNames(p) {
+    if (p.all_teams?.length > 1) {
+      return p.all_teams.map(t => t.name).join(', ')
+    }
+    return p.teams?.name || p.all_teams?.[0]?.name || 'No team'
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     if (!form.assigneeId || !form.title.trim()) {
@@ -50,13 +79,15 @@ export default function AssignTaskPage() {
     const res = await assignTask({
       ...form,
       allProfiles: profiles,
-      overrideAssignerId: overrideAssignerId || undefined
+      overrideAssignerId: overrideAssignerId || undefined,
+      teamId: showTeamPicker ? selectedTeamId : undefined
     })
     setSubmitting(false)
 
     if (res.ok) {
       setResult(res)
       setForm({ assigneeId: '', title: '', urgency: 'Med', dueDate: '', whoTo: '', notes: '', icon: '' })
+      setSelectedTeamId('')
     } else {
       showToast(res.msg, 'error')
     }
@@ -110,14 +141,14 @@ export default function AssignTaskPage() {
                   <label className="form-label">Assign To *</label>
                   <select
                     value={form.assigneeId}
-                    onChange={e => set('assigneeId', e.target.value)}
+                    onChange={e => handleAssigneeChange(e.target.value)}
                     className="form-input"
                     required
                   >
                     <option value="">— Select person —</option>
                     {profiles.map(p => (
                       <option key={p.id} value={p.id}>
-                        {p.full_name} ({p.teams?.name || 'No team'})
+                        {p.full_name} ({formatTeamNames(p)})
                       </option>
                     ))}
                   </select>
@@ -138,7 +169,43 @@ export default function AssignTaskPage() {
                 </div>
               </div>
 
-              {/* Admin-only: Assigned By override — conditionally rendered, not just hidden */}
+              {/* Team picker — shown only when assignee has multiple teams */}
+              <AnimatePresence>
+                {showTeamPicker && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <label className="form-label flex items-center gap-1.5">
+                      <Users size={14} className="text-brand-500" />
+                      Which team is this task for?
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {assigneeTeams.map(t => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setSelectedTeamId(t.id)}
+                          className={`px-3 py-1.5 rounded-xl text-sm font-medium border transition-all duration-150
+                            ${selectedTeamId === t.id
+                              ? 'bg-brand-50 text-brand-700 border-brand-200 ring-1 ring-brand-300 dark:bg-brand-500/15 dark:text-brand-300 dark:border-brand-500/30 dark:ring-brand-500/40'
+                              : 'bg-white text-slate-600 border-slate-200 hover:border-brand-200 hover:text-brand-600 dark:bg-dark-surface dark:text-slate-300 dark:border-dark-border dark:hover:border-brand-500/30'
+                            }`}
+                        >
+                          {t.name}
+                          {t.is_primary && (
+                            <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500">primary</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Admin-only: Assigned By override */}
               {isAdmin && (
                 <div>
                   <label className="form-label">Assigned By (override)</label>
@@ -150,7 +217,7 @@ export default function AssignTaskPage() {
                     <option value="">— {profile?.full_name} (you) —</option>
                     {profiles.filter(p => p.id !== profile?.id).map(p => (
                       <option key={p.id} value={p.id}>
-                        {p.full_name} ({p.teams?.name || 'No team'})
+                        {p.full_name} ({formatTeamNames(p)})
                       </option>
                     ))}
                   </select>
@@ -221,9 +288,10 @@ export default function AssignTaskPage() {
                 >
                   {submitting ? 'Assigning...' : 'Assign Task →'}
                 </motion.button>
-                <button type="button" className="btn-secondary" onClick={() =>
+                <button type="button" className="btn-secondary" onClick={() => {
                   setForm({ assigneeId: '', title: '', urgency: 'Med', dueDate: '', whoTo: '', notes: '', icon: '' })
-                }>
+                  setSelectedTeamId('')
+                }}>
                   Clear
                 </button>
                 <p className="text-xs text-slate-400 dark:text-slate-500 ml-2">

@@ -26,7 +26,8 @@ function AppRoutes() {
 
   if (!session) return <LoginPage />
 
-  if (!profile || (!profile.team_id && profile.role !== 'Admin')) return (
+  const hasTeam = profile?.team_id || profile?.team_ids?.length > 0
+  if (!profile || (!hasTeam && profile.role !== 'Admin')) return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg px-4">
       <div className="bg-white dark:bg-dark-card rounded-3xl border border-slate-200 dark:border-dark-border shadow-elevated max-w-md w-full text-center p-6 sm:p-8">
         <div className="text-4xl mb-4">👋</div>

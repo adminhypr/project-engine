@@ -27,7 +27,8 @@ Project Engine is an internal task management web app. Users authenticate via Go
 - **Auth flow:** `useAuth` hook (React Context) wraps the app. Provides `session`, `profile`, `isAdmin`, `isManager`, `isStaff`. Uses a custom REST fetch (`fetchProfileDirect`) to bypass the Supabase JS client's auth queue, with token expiration checks and auto-refresh retry logic.
 - **Data layer:** `useTasks` hook handles fetching, real-time subscriptions, and task enrichment (priority calculation). `useTaskActions` provides `assignTask`, `updateTask`, `addComment`, `getTaskComments`, `acceptTask`, `declineTask`, `reassignTask`. `useProfiles` fetches all users and teams.
 - **Priority engine:** `getPriority()` in `src/lib/priority.js` computes red/orange/yellow/green from due dates or last-updated timestamps. Always computed at read time, never persisted. Thresholds: red = overdue or 36h+ inactive, orange = due in 4-12h, yellow = due in 12-24h, green = on track.
-- **Assignment type:** `getAssignmentType()` in `src/lib/assignmentType.js` compares role ranks (Admin=3, Manager=2, Staff=1) and team membership. Stored on the task record at creation; reassignments don't change the original type.
+- **Multi-team membership:** Users can belong to multiple teams via `profile_teams` junction table. One team is marked `is_primary`. `profiles.team_id` is kept in sync as a denormalized primary. Profiles are enriched with `team_ids` (array) and `all_teams` (with names). Settings page uses chip UI for team management. Assign page shows team picker when assignee has 2+ teams.
+- **Assignment type:** `getAssignmentType()` in `src/lib/assignmentType.js` compares role ranks (Admin=3, Manager=2, Staff=1) and team membership (shares any team = same team). Stored on the task record at creation; reassignments don't change the original type.
 - **Acceptance flow:** Superior and Self assignments auto-accept via DB trigger (before insert). Peer/CrossTeam/Upward default to Pending. Reassignment resets acceptance to Pending.
 - **Row Level Security:** Supabase RLS policies enforce data access — managers see own team + users who report to them, staff see own + assigned tasks.
 - **Real-time:** Single `postgres_changes` subscription on `tasks` table triggers full refetch (simpler than fine-grained updates). Comments use the same pattern.
@@ -47,6 +48,8 @@ Schema across 5 migrations in `supabase/migrations/`:
 - **003_acceptance.sql** — Adds `acceptance_status`, `decline_reason`, `accepted_at`, `declined_at` to tasks. Auto-accept logic enforced by DB trigger.
 - **004_reports_to.sql** — Adds `reports_to` FK on profiles. RLS updated so managers see tasks of users who report to them.
 - **005_task_icon.sql** — Adds optional `icon` text column to tasks for visual categorization.
+- **006_task_delete.sql** — Adds delete RLS policy for tasks (admins, managers for own team, assignee/assigner).
+- **007_multi_team.sql** — `profile_teams` junction table for multi-team membership. Backfills from `profiles.team_id`. Updates all RLS policies to use `profile_teams` for manager team checks. `profiles.team_id` kept as denormalized primary team.
 
 ## Supabase Edge Functions
 
@@ -64,7 +67,7 @@ Required in `.env.local`:
 ## Role Hierarchy and Views
 
 - **Staff:** My Tasks, Assign a Task
-- **Manager:** Above + Team View (own team only), own-team Reports
+- **Manager:** Above + Team View (all assigned teams), own-teams Reports
 - **Admin:** Everything + Admin Overview, all Reports, Settings (user/team management)
 
 `isManager` in useAuth returns true for both Manager and Admin roles.

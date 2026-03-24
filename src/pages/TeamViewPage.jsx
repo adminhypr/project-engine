@@ -81,8 +81,16 @@ export default function TeamViewPage() {
     <PageTransition>
       <div>
         <PageHeader
-          title={isAdmin ? 'All Teams Overview' : `${profile?.teams?.name || 'Team'} View`}
-          subtitle={isAdmin ? 'All tasks across all teams' : 'All tasks for your team'}
+          title={isAdmin ? 'All Teams Overview' : (
+            profile?.all_teams?.length > 1
+              ? `${profile.all_teams.map(t => t.name).join(' & ')} View`
+              : `${profile?.teams?.name || 'Team'} View`
+          )}
+          subtitle={isAdmin ? 'All tasks across all teams' : (
+            profile?.all_teams?.length > 1
+              ? `Tasks across your ${profile.all_teams.length} teams`
+              : 'All tasks for your team'
+          )}
         />
 
         <StatsStrip stats={stats} />

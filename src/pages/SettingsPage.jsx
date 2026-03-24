@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { PageHeader, showToast } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
+import { Star, X, Plus, ChevronDown } from 'lucide-react'
 
 export default function SettingsPage() {
   const { profile } = useAuth()
@@ -17,10 +18,9 @@ export default function SettingsPage() {
 
   async function fetchAll() {
     const [{ data: p }, { data: t }] = await Promise.all([
-      supabase.from('profiles').select('*, teams(id, name)').order('full_name'),
+      supabase.from('profiles').select('*, teams!profiles_team_id_fkey(id, name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, team:teams!profile_teams_team_id_fkey(id, name))').order('full_name'),
       supabase.from('teams').select('*').order('name')
     ])
-    // Resolve manager names client-side
     const profileList = p || []
     const profileMap = Object.fromEntries(profileList.map(pr => [pr.id, pr]))
     const enriched = profileList.map(pr => ({
@@ -110,7 +110,7 @@ export default function SettingsPage() {
               Users ({profiles.length})
             </p>
             <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
-              New users appear here after they sign in for the first time. Assign them a team and role.
+              New users appear here after they sign in for the first time. Assign them teams and a role.
             </p>
             <div className="overflow-x-auto -mx-4 sm:mx-0">
             <table className="w-full text-sm">
@@ -118,7 +118,7 @@ export default function SettingsPage() {
                 <tr>
                   <th className="table-th">Name</th>
                   <th className="table-th">Email</th>
-                  <th className="table-th">Team</th>
+                  <th className="table-th">Teams</th>
                   <th className="table-th">Role</th>
                   <th className="table-th">Reports To</th>
                   <th className="table-th">Save</th>
@@ -134,6 +134,7 @@ export default function SettingsPage() {
                     isSelf={p.id === profile?.id}
                     saving={saving[p.id]}
                     onSave={(updates) => updateProfile(p.id, updates)}
+                    onTeamsChange={fetchAll}
                   />
                 ))}
               </tbody>
@@ -147,24 +148,95 @@ export default function SettingsPage() {
   )
 }
 
-function UserRow({ user, teams, allProfiles, isSelf, saving, onSave }) {
-  const [teamId,    setTeamId]    = useState(user.team_id || '')
+function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChange }) {
   const [role,      setRole]      = useState(user.role || 'Staff')
   const [reportsTo, setReportsTo] = useState(user.reports_to || '')
+  const [addingTeam, setAddingTeam] = useState(false)
 
-  const dirty = teamId !== (user.team_id || '')
-    || role !== user.role
-    || reportsTo !== (user.reports_to || '')
+  // Multi-team data from profile_teams junction
+  const userTeams = (user.profile_teams || []).map(pt => ({
+    team_id: pt.team_id,
+    is_primary: pt.is_primary,
+    name: pt.team?.name || teams.find(t => t.id === pt.team_id)?.name || 'Unknown'
+  }))
+  const availableTeams = teams.filter(t => !userTeams.some(ut => ut.team_id === t.id))
+
+  const dirty = role !== user.role || reportsTo !== (user.reports_to || '')
 
   // Eligible managers: Managers and Admins, excluding self and anyone who reports to this user (circular)
   const managerOptions = allProfiles.filter(p =>
     (p.role === 'Manager' || p.role === 'Admin')
     && p.id !== user.id
-    && p.reports_to !== user.id // prevent direct circular
+    && p.reports_to !== user.id
   )
 
+  async function addTeamToUser(teamId) {
+    const isPrimary = userTeams.length === 0 // First team = primary
+    const { error } = await supabase.from('profile_teams').insert({
+      profile_id: user.id,
+      team_id: teamId,
+      is_primary: isPrimary
+    })
+    if (error) { showToast(error.message, 'error'); return }
+
+    // Sync profiles.team_id to primary team
+    if (isPrimary) {
+      await supabase.from('profiles').update({ team_id: teamId }).eq('id', user.id)
+    }
+
+    showToast('Team added')
+    setAddingTeam(false)
+    onTeamsChange()
+  }
+
+  async function removeTeamFromUser(teamId) {
+    const team = userTeams.find(t => t.team_id === teamId)
+    const { error } = await supabase.from('profile_teams').delete()
+      .eq('profile_id', user.id)
+      .eq('team_id', teamId)
+    if (error) { showToast(error.message, 'error'); return }
+
+    // If we removed the primary, promote the next team (if any)
+    if (team?.is_primary) {
+      const remaining = userTeams.filter(t => t.team_id !== teamId)
+      if (remaining.length > 0) {
+        await supabase.from('profile_teams')
+          .update({ is_primary: true })
+          .eq('profile_id', user.id)
+          .eq('team_id', remaining[0].team_id)
+        await supabase.from('profiles').update({ team_id: remaining[0].team_id }).eq('id', user.id)
+      } else {
+        await supabase.from('profiles').update({ team_id: null }).eq('id', user.id)
+      }
+    }
+
+    showToast('Team removed')
+    onTeamsChange()
+  }
+
+  async function setPrimaryTeam(teamId) {
+    // Unset current primary
+    await supabase.from('profile_teams')
+      .update({ is_primary: false })
+      .eq('profile_id', user.id)
+      .eq('is_primary', true)
+
+    // Set new primary
+    const { error } = await supabase.from('profile_teams')
+      .update({ is_primary: true })
+      .eq('profile_id', user.id)
+      .eq('team_id', teamId)
+    if (error) { showToast(error.message, 'error'); return }
+
+    // Sync profiles.team_id
+    await supabase.from('profiles').update({ team_id: teamId }).eq('id', user.id)
+
+    showToast('Primary team updated')
+    onTeamsChange()
+  }
+
   return (
-    <tr className={`border-b border-slate-100 dark:border-dark-border ${!user.team_id ? 'bg-yellow-500/5' : ''}`}>
+    <tr className={`border-b border-slate-100 dark:border-dark-border ${userTeams.length === 0 ? 'bg-yellow-500/5' : ''}`}>
       <td className="table-td font-medium">
         <div className="flex items-center gap-2">
           {user.avatar_url
@@ -174,21 +246,73 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave }) {
               </div>
           }
           {user.full_name}
-          {!user.team_id && <span className="badge bg-yellow-500/15 text-yellow-700 text-xs">Needs setup</span>}
+          {userTeams.length === 0 && <span className="badge bg-yellow-500/15 text-yellow-700 text-xs">Needs setup</span>}
           {isSelf && <span className="badge bg-brand-50 text-brand-700 text-xs">You</span>}
         </div>
       </td>
       <td className="table-td text-slate-500 dark:text-slate-400 text-xs">{user.email}</td>
       <td className="table-td">
-        <select
-          value={teamId}
-          onChange={e => setTeamId(e.target.value)}
-          className="form-input py-1 text-xs min-w-[8rem]"
-          disabled={isSelf}
-        >
-          <option value="">— No team —</option>
-          {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
+        <div className="flex flex-wrap items-center gap-1.5 min-w-[10rem]">
+          <AnimatePresence mode="popLayout">
+            {userTeams.map(t => (
+              <motion.span
+                key={t.team_id}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium border transition-colors
+                  ${t.is_primary
+                    ? 'bg-brand-50 text-brand-700 border-brand-200 dark:bg-brand-500/15 dark:text-brand-300 dark:border-brand-500/30'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-dark-hover dark:text-slate-300 dark:border-dark-border'
+                  }`}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                layout
+              >
+                {!isSelf && !t.is_primary && (
+                  <button
+                    onClick={() => setPrimaryTeam(t.team_id)}
+                    className="text-slate-300 hover:text-brand-500 dark:text-slate-500 dark:hover:text-brand-400 transition-colors"
+                    title="Set as primary team"
+                  >
+                    <Star size={10} />
+                  </button>
+                )}
+                {t.is_primary && (
+                  <Star size={10} className="text-brand-500 dark:text-brand-400 fill-current" />
+                )}
+                {t.name}
+                {!isSelf && (
+                  <button
+                    onClick={() => removeTeamFromUser(t.team_id)}
+                    className="text-slate-300 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 transition-colors ml-0.5"
+                  >
+                    <X size={10} />
+                  </button>
+                )}
+              </motion.span>
+            ))}
+          </AnimatePresence>
+          {!isSelf && (
+            addingTeam ? (
+              <select
+                autoFocus
+                className="form-input py-0.5 px-1.5 text-xs min-w-[7rem]"
+                onChange={e => { if (e.target.value) addTeamToUser(e.target.value) }}
+                onBlur={() => setAddingTeam(false)}
+                defaultValue=""
+              >
+                <option value="">Select team...</option>
+                {availableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            ) : availableTeams.length > 0 && (
+              <button
+                onClick={() => setAddingTeam(true)}
+                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg text-xs text-slate-400 hover:text-brand-500 hover:bg-slate-50 dark:hover:bg-dark-hover dark:text-slate-500 dark:hover:text-brand-400 border border-dashed border-slate-200 dark:border-dark-border transition-colors"
+              >
+                <Plus size={10} />
+              </button>
+            )
+          )}
+        </div>
       </td>
       <td className="table-td">
         <select
@@ -218,7 +342,7 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave }) {
       <td className="table-td">
         {!isSelf && dirty && (
           <motion.button
-            onClick={() => onSave({ team_id: teamId || null, role, reports_to: reportsTo || null })}
+            onClick={() => onSave({ role, reports_to: reportsTo || null })}
             disabled={saving}
             className="btn-primary py-1 px-3 text-xs"
             whileTap={{ scale: 0.95 }}

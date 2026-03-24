@@ -50,19 +50,23 @@ export default function ReportsPage() {
       setLoading(true)
       let tq = supabase.from('tasks').select(`
         *,
-        assignee:profiles!tasks_assigned_to_fkey(id, full_name, team_id, teams(name)),
-        assigner:profiles!tasks_assigned_by_fkey(id, full_name, team_id, teams(name)),
+        assignee:profiles!tasks_assigned_to_fkey(id, full_name, team_id, teams!profiles_team_id_fkey(name)),
+        assigner:profiles!tasks_assigned_by_fkey(id, full_name, team_id, teams!profiles_team_id_fkey(name)),
         team:teams(id, name)
       `)
       .gte('date_assigned', dateFrom)
       .lte('date_assigned', dateTo + 'T23:59:59')
 
-      if (!isAdmin) tq = tq.eq('team_id', profile.team_id)
+      // Multi-team: filter by all teams the manager belongs to
+      if (!isAdmin) {
+        const myTeamIds = profile.team_ids?.length > 0 ? profile.team_ids : (profile.team_id ? [profile.team_id] : [])
+        if (myTeamIds.length > 0) tq = tq.in('team_id', myTeamIds)
+      }
 
       const [{ data: tData }, { data: cData }, { data: pData }] = await Promise.all([
         tq,
         supabase.from('comments').select('*, author:profiles(full_name)').gte('created_at', dateFrom),
-        supabase.from('profiles').select('*, teams(name)')
+        supabase.from('profiles').select('*, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, team:teams!profile_teams_team_id_fkey(id, name))')
       ])
 
       const enriched = (tData || []).map(t => ({ ...t, priority: getPriority(t) }))

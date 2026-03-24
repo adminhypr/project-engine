@@ -5,7 +5,7 @@ export default function WorkloadReport({ tasks, profiles }) {
     const mine = tasks.filter(t => t.assigned_to === p.id)
     return {
       name:        p.full_name,
-      team:        p.teams?.name || '—',
+      team:        p.profile_teams?.length > 0 ? p.profile_teams.map(pt => pt.team?.name || '').filter(Boolean).join(', ') : p.teams?.name || '—',
       assigned:    mine.length,
       outstanding: mine.filter(t => t.status !== 'Done').length,
       done:        mine.filter(t => t.status === 'Done').length,
