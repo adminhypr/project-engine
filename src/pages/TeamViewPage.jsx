@@ -1,11 +1,13 @@
-import { useState } from 'react'
-import { useTasks } from '../hooks/useTasks'
+import { useState, useEffect, useCallback } from 'react'
+import { useTasks, useTaskActions } from '../hooks/useTasks'
 import { useAuth } from '../hooks/useAuth'
 import { applyFilters } from '../lib/filters'
-import { PageHeader, StatsStrip, FilterRow, LoadingScreen, EmptyState } from '../components/ui'
+import { PageHeader, StatsStrip, FilterRow, LoadingScreen, EmptyState, showToast } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
 import TaskTable from '../components/tasks/TaskTable'
 import TaskDetailPanel from '../components/tasks/TaskDetailPanel'
+import MassActionBar from '../components/tasks/MassActionBar'
+import DeleteConfirmModal from '../components/tasks/DeleteConfirmModal'
 
 const TEAM_COLORS = [
   'border-l-4 border-l-orange-500 bg-orange-50 dark:bg-orange-500/10 dark:text-orange-300',
@@ -19,8 +21,11 @@ const TEAM_COLORS = [
 export default function TeamViewPage() {
   const { profile, isAdmin } = useAuth()
   const { tasks, teamTasks, loading, refetch } = useTasks()
+  const { deleteTasks, updateTasks } = useTaskActions()
   const [filters,    setFilters]    = useState({})
   const [activeTask, setActiveTask] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [showBulkDelete, setShowBulkDelete] = useState(false)
 
   const viewTasks  = isAdmin ? tasks : teamTasks
   const filtered   = applyFilters(viewTasks, filters)
@@ -33,6 +38,35 @@ export default function TeamViewPage() {
   }, {})
 
   const allTeams = [...new Map(viewTasks.map(t => [t.team_id, t.team])).values()].filter(Boolean)
+
+  // Selection handlers (admin only)
+  const handleSelectionChange = useCallback((taskId, isSelected) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      isSelected ? next.add(taskId) : next.delete(taskId)
+      return next
+    })
+  }, [])
+
+  useEffect(() => { setSelectedIds(new Set()) }, [filters])
+
+  async function handleBulkStatusChange(status) {
+    const result = await updateTasks([...selectedIds], { status })
+    if (result.ok) { showToast(`${selectedIds.size} task(s) updated`); setSelectedIds(new Set()); refetch() }
+    else showToast(result.msg, 'error')
+  }
+
+  async function handleBulkUrgencyChange(urgency) {
+    const result = await updateTasks([...selectedIds], { urgency })
+    if (result.ok) { showToast(`${selectedIds.size} task(s) updated`); setSelectedIds(new Set()); refetch() }
+    else showToast(result.msg, 'error')
+  }
+
+  async function handleBulkDelete() {
+    const result = await deleteTasks([...selectedIds])
+    if (result.ok) { showToast(`${selectedIds.size} task(s) deleted`); setSelectedIds(new Set()); refetch() }
+    else showToast(result.msg, 'error')
+  }
 
   const stats = [
     { label: 'Red',        value: viewTasks.filter(t => t.priority === 'red').length,    color: 'text-red-500' },
@@ -62,6 +96,17 @@ export default function TeamViewPage() {
               showTeamFilter={isAdmin}
               teams={allTeams}
             />
+
+            {isAdmin && (
+              <MassActionBar
+                selectedCount={filtered.filter(t => selectedIds.has(t.id)).length}
+                onSelectAll={() => setSelectedIds(new Set(filtered.map(t => t.id)))}
+                onDeselectAll={() => setSelectedIds(new Set())}
+                onBulkStatusChange={handleBulkStatusChange}
+                onBulkUrgencyChange={handleBulkUrgencyChange}
+                onBulkDelete={() => setShowBulkDelete(true)}
+              />
+            )}
 
             {Object.keys(grouped).length === 0
               ? <EmptyState icon="◈" title="No tasks" description="No tasks match your filters." />
@@ -94,6 +139,9 @@ export default function TeamViewPage() {
                                 onRowClick={setActiveTask}
                                 showAssignedTo
                                 showAssignedBy
+                                selectable={isAdmin}
+                                selectedIds={selectedIds}
+                                onSelectionChange={handleSelectionChange}
                               />
                             </div>
                           ))
@@ -102,6 +150,9 @@ export default function TeamViewPage() {
                             onRowClick={setActiveTask}
                             showAssignedTo
                             showAssignedBy
+                            selectable={isAdmin}
+                            selectedIds={selectedIds}
+                            onSelectionChange={handleSelectionChange}
                           />
                       }
                     </div>
@@ -118,6 +169,13 @@ export default function TeamViewPage() {
             onUpdated={() => { refetch(); setActiveTask(null) }}
           />
         )}
+
+        <DeleteConfirmModal
+          isOpen={showBulkDelete}
+          onClose={() => setShowBulkDelete(false)}
+          onConfirm={handleBulkDelete}
+          count={selectedIds.size}
+        />
       </div>
     </PageTransition>
   )
