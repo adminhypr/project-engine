@@ -1,13 +1,30 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Bell, CheckCircle, AlertTriangle, Clock, UserPlus, X } from 'lucide-react'
+import { Bell, CheckCircle, AlertTriangle, Clock, UserPlus, UserCog, X } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
 import { useTasks } from '../../hooks/useTasks'
 import { useAuth } from '../../hooks/useAuth'
 import { formatDate } from '../../lib/helpers'
 
-function getNotifications(myTasks, profile) {
+function getNotifications(myTasks, profile, unsetupUsers) {
   const notifications = []
   const now = new Date()
+
+  // Admin: users needing setup (no teams assigned)
+  if (profile?.role === 'Admin' && unsetupUsers.length > 0) {
+    notifications.push({
+      id: 'users-need-setup',
+      type: 'admin',
+      icon: <UserCog size={14} />,
+      color: 'text-amber-600 bg-amber-500/15',
+      title: `${unsetupUsers.length} user${unsetupUsers.length > 1 ? 's' : ''} need${unsetupUsers.length === 1 ? 's' : ''} setup`,
+      body: unsetupUsers.map(u => u.full_name || u.email).join(', '),
+      link: '/settings',
+      time: unsetupUsers[0]?.created_at,
+      priority: 0,
+    })
+  }
 
   // Pending acceptance tasks
   const pending = myTasks.filter(t => t.acceptance_status === 'Pending')
@@ -96,8 +113,10 @@ function timeAgo(dateStr) {
 
 export default function NotificationBell({ onTaskClick }) {
   const { myTasks } = useTasks()
-  const { profile } = useAuth()
+  const { profile, isAdmin } = useAuth()
+  const navigate = useNavigate()
   const [isOpen, setIsOpen] = useState(false)
+  const [unsetupUsers, setUnsetupUsers] = useState([])
   const [dismissed, setDismissed] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('pe-dismissed-notifs') || '[]')
@@ -105,7 +124,32 @@ export default function NotificationBell({ onTaskClick }) {
   })
   const panelRef = useRef(null)
 
-  const allNotifications = getNotifications(myTasks, profile)
+  // Admin: fetch users with no team assignments
+  useEffect(() => {
+    if (!isAdmin) return
+    async function fetchUnsetup() {
+      // Get all profiles, then filter to those with no profile_teams rows
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, created_at, profile_teams!profile_teams_profile_id_fkey(team_id)')
+        .order('created_at', { ascending: false })
+      if (profiles) {
+        const unsetup = profiles.filter(p => !p.profile_teams || p.profile_teams.length === 0)
+        setUnsetupUsers(unsetup)
+      }
+    }
+    fetchUnsetup()
+
+    // Re-check when profiles table changes (new signup)
+    const channel = supabase
+      .channel('profiles-admin-notif')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => fetchUnsetup())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profile_teams' }, () => fetchUnsetup())
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [isAdmin])
+
+  const allNotifications = getNotifications(myTasks, profile, unsetupUsers)
   const notifications = allNotifications.filter(n => !dismissed.includes(n.id))
   const count = notifications.length
 
@@ -131,6 +175,16 @@ export default function NotificationBell({ onTaskClick }) {
 
   function clearAll() {
     setDismissed(allNotifications.map(n => n.id))
+    setIsOpen(false)
+  }
+
+  function handleNotifClick(n) {
+    dismiss(n.id)
+    if (n.link) {
+      navigate(n.link)
+    } else if (n.taskId) {
+      onTaskClick?.(n.taskId)
+    }
     setIsOpen(false)
   }
 
@@ -190,11 +244,7 @@ export default function NotificationBell({ onTaskClick }) {
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.03 }}
-                    onClick={() => {
-                      dismiss(n.id)
-                      onTaskClick?.(n.taskId)
-                      setIsOpen(false)
-                    }}
+                    onClick={() => handleNotifClick(n)}
                   >
                     <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${n.color}`}>
                       {n.icon}

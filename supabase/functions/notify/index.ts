@@ -190,6 +190,35 @@ async function onTaskReassigned(record: any, oldRecord: any) {
   await sendEmail([task.assignee.email], `Task reassigned to you: "${task.title}"`, html)
 }
 
+// ── 5. NEW USER SIGNUP — notify all admins ───
+async function onNewUser(record: any) {
+  const name = record.full_name || record.email || 'Unknown'
+  const email = record.email || '—'
+
+  // Fetch all admins
+  const { data: admins } = await supabase
+    .from('profiles')
+    .select('email')
+    .eq('role', 'Admin')
+  if (!admins?.length) return
+
+  const adminEmails = admins.map(a => a.email).filter(Boolean)
+  if (!adminEmails.length) return
+
+  const html = emailWrap('New User Signed Up', '#6366f1',
+    `<p style="margin: 0 0 12px; color: #374151;">A new user has signed in to Hypr Task for the first time:</p>
+     <div style="background: #f8f9fc; border-radius: 10px; padding: 16px; margin: 12px 0;">
+       <p style="margin: 0 0 4px; font-size: 16px; font-weight: 700; color: #111827;">${name}</p>
+       <p style="margin: 0; font-size: 13px; color: #6b7280;">${email}</p>
+     </div>
+     <p style="margin: 16px 0 0; font-size: 14px; color: #374151;">Please assign them a team and role in Settings.</p>
+     <div style="margin-top: 20px; text-align: center;">
+       <a href="${APP_URL}/settings" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">Go to Settings</a>
+     </div>`)
+
+  await sendEmail(adminEmails, `New user: ${name} needs team assignment`, html)
+}
+
 // ── Webhook handler ───────────────────────────
 Deno.serve(async (req) => {
   if (!RESEND_API_KEY) {
@@ -198,8 +227,15 @@ Deno.serve(async (req) => {
 
   try {
     const payload = await req.json()
-    const { type, record, old_record } = payload
+    const { type, table, record, old_record } = payload
 
+    // ── PROFILES table: new user signup ──
+    if (table === 'profiles' && type === 'INSERT' && record) {
+      await onNewUser(record)
+      return new Response(JSON.stringify({ action: 'new_user', ok: true }), { status: 200 })
+    }
+
+    // ── TASKS table: task events ──
     // INSERT — new task assigned
     if (type === 'INSERT' && record) {
       await onTaskCreated(record)
