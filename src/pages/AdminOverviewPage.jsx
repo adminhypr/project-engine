@@ -1,16 +1,21 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { useTasks } from '../hooks/useTasks'
+import { useTasks, useTaskActions } from '../hooks/useTasks'
 import { applyFilters } from '../lib/filters'
-import { PageHeader, StatsStrip, FilterRow, LoadingScreen, EmptyState } from '../components/ui'
+import { PageHeader, StatsStrip, FilterRow, LoadingScreen, EmptyState, showToast } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
 import TaskTable from '../components/tasks/TaskTable'
 import TaskDetailPanel from '../components/tasks/TaskDetailPanel'
+import DeleteConfirmModal from '../components/tasks/DeleteConfirmModal'
+import MassActionBar from '../components/tasks/MassActionBar'
 
 export default function AdminOverviewPage() {
   const { tasks, loading, refetch } = useTasks()
+  const { deleteTasks, updateTasks } = useTaskActions()
   const [filters,    setFilters]    = useState({})
   const [activeTask, setActiveTask] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [showBulkDelete, setShowBulkDelete] = useState(false)
 
   const filtered = applyFilters(tasks, filters)
   const allTeams = [...new Map(tasks.map(t => [t.team_id, t.team])).values()].filter(Boolean)
@@ -33,6 +38,34 @@ export default function AdminOverviewPage() {
     { label: 'Completed',     value: tasks.filter(t => t.status === 'Done').length,      color: 'text-emerald-600' },
     { label: 'Total Tasks',   value: tasks.length,                                        color: 'text-slate-900 dark:text-white' },
   ]
+
+  const handleSelectionChange = useCallback((taskId, isSelected) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      isSelected ? next.add(taskId) : next.delete(taskId)
+      return next
+    })
+  }, [])
+
+  useEffect(() => { setSelectedIds(new Set()) }, [filters])
+
+  async function handleBulkStatusChange(status) {
+    const result = await updateTasks([...selectedIds], { status })
+    if (result.ok) { showToast(`${selectedIds.size} task(s) updated`); setSelectedIds(new Set()); refetch() }
+    else showToast(result.msg, 'error')
+  }
+
+  async function handleBulkUrgencyChange(urgency) {
+    const result = await updateTasks([...selectedIds], { urgency })
+    if (result.ok) { showToast(`${selectedIds.size} task(s) updated`); setSelectedIds(new Set()); refetch() }
+    else showToast(result.msg, 'error')
+  }
+
+  async function handleBulkDelete() {
+    const result = await deleteTasks([...selectedIds])
+    if (result.ok) { showToast(`${selectedIds.size} task(s) deleted`); setSelectedIds(new Set()); refetch() }
+    else showToast(result.msg, 'error')
+  }
 
   if (loading) return <LoadingScreen />
 
@@ -85,6 +118,14 @@ export default function AdminOverviewPage() {
               showTeamFilter
               teams={allTeams}
             />
+            <MassActionBar
+              selectedCount={filtered.filter(t => selectedIds.has(t.id)).length}
+              onSelectAll={() => setSelectedIds(new Set(filtered.map(t => t.id)))}
+              onDeselectAll={() => setSelectedIds(new Set())}
+              onBulkStatusChange={handleBulkStatusChange}
+              onBulkUrgencyChange={handleBulkUrgencyChange}
+              onBulkDelete={() => setShowBulkDelete(true)}
+            />
             {filtered.length === 0
               ? <EmptyState icon="⊞" title="No tasks" description="No tasks match your filters." />
               : <TaskTable
@@ -92,6 +133,9 @@ export default function AdminOverviewPage() {
                   onRowClick={setActiveTask}
                   showAssignedTo
                   showAssignedBy
+                  selectable
+                  selectedIds={selectedIds}
+                  onSelectionChange={handleSelectionChange}
                 />
             }
           </div>
@@ -104,6 +148,13 @@ export default function AdminOverviewPage() {
             onUpdated={() => { refetch(); setActiveTask(null) }}
           />
         )}
+
+        <DeleteConfirmModal
+          isOpen={showBulkDelete}
+          onClose={() => setShowBulkDelete(false)}
+          onConfirm={handleBulkDelete}
+          count={selectedIds.size}
+        />
       </div>
     </PageTransition>
   )

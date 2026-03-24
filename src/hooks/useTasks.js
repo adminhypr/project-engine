@@ -196,7 +196,34 @@ export function useTaskActions() {
     return { ok: true }
   }
 
-  return { assignTask, updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask }
+  async function deleteTask(taskId) {
+    const { error } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('id', taskId)
+    if (error) return { ok: false, msg: error.message }
+    return { ok: true }
+  }
+
+  async function deleteTasks(taskIds) {
+    const { error } = await supabase
+      .from('tasks')
+      .delete()
+      .in('id', taskIds)
+    if (error) return { ok: false, msg: error.message }
+    return { ok: true }
+  }
+
+  async function updateTasks(taskIds, updates) {
+    const { error } = await supabase
+      .from('tasks')
+      .update(updates)
+      .in('id', taskIds)
+    if (error) return { ok: false, msg: error.message }
+    return { ok: true }
+  }
+
+  return { assignTask, updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask, deleteTask, deleteTasks, updateTasks }
 }
 
 export function useProfiles() {

@@ -15,7 +15,8 @@ const PRIORITY_INDICATOR = {
 
 export default function TaskTable({
   tasks, onRowClick, showAssignedTo = false, showAssignedBy = true,
-  onAccept, onDecline, showAcceptanceActions = false
+  onAccept, onDecline, showAcceptanceActions = false,
+  selectable = false, selectedIds, onSelectionChange
 }) {
   if (!tasks.length) return (
     <div className="text-center py-16 text-slate-400 dark:text-slate-500 text-sm">No tasks match your filters.</div>
@@ -26,17 +27,20 @@ export default function TaskTable({
       {tasks.map((task, i) => {
         const isPending = task.acceptance_status === 'Pending'
         const isDeclined = task.acceptance_status === 'Declined'
+        const isSelected = selectable && selectedIds?.has(task.id)
 
         return (
           <motion.div
             key={task.id}
             onClick={() => onRowClick?.(task)}
             className={`group relative cursor-pointer rounded-xl border transition-all duration-150
-              ${isPending
-                ? 'border-yellow-300 bg-yellow-50/50 dark:border-yellow-500/30 dark:bg-yellow-500/5'
-                : isDeclined
-                  ? 'border-red-200 bg-red-50/30 opacity-60 dark:border-red-500/20 dark:bg-red-500/5'
-                  : 'border-slate-200/70 bg-white hover:border-slate-300 hover:shadow-md dark:border-dark-border dark:bg-dark-card dark:hover:border-slate-600 dark:hover:shadow-lg dark:hover:shadow-black/10'
+              ${isSelected
+                ? 'border-brand-300 bg-brand-50/30 dark:border-brand-500/30 dark:bg-brand-500/5'
+                : isPending
+                  ? 'border-yellow-300 bg-yellow-50/50 dark:border-yellow-500/30 dark:bg-yellow-500/5'
+                  : isDeclined
+                    ? 'border-red-200 bg-red-50/30 opacity-60 dark:border-red-500/20 dark:bg-red-500/5'
+                    : 'border-slate-200/70 bg-white hover:border-slate-300 hover:shadow-md dark:border-dark-border dark:bg-dark-card dark:hover:border-slate-600 dark:hover:shadow-lg dark:hover:shadow-black/10'
               }`}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -45,7 +49,18 @@ export default function TaskTable({
             {/* Priority indicator bar */}
             <div className={`absolute left-0 top-3 bottom-3 w-1 rounded-full ${PRIORITY_INDICATOR[task.priority] || PRIORITY_INDICATOR.none}`} />
 
-            <div className="flex items-center gap-4 px-5 pl-6 py-3.5">
+            <div className={`flex items-center gap-4 px-5 ${selectable ? 'pl-5' : 'pl-6'} py-3.5`}>
+              {/* Selection checkbox */}
+              {selectable && (
+                <div className="shrink-0 flex items-center" onClick={e => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={e => onSelectionChange?.(task.id, e.target.checked)}
+                    className="rounded border-slate-300 dark:border-dark-border text-brand-500 focus:ring-brand-500"
+                  />
+                </div>
+              )}
               {/* Task icon */}
               {task.icon && (
                 <div className="shrink-0 w-9 h-9 rounded-xl bg-brand-50 dark:bg-brand-500/10 flex items-center justify-center">

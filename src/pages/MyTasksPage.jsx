@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTasks, useTaskActions } from '../hooks/useTasks'
 import { useAuth } from '../hooks/useAuth'
@@ -9,16 +9,20 @@ import TaskTable from '../components/tasks/TaskTable'
 import TaskDetailPanel from '../components/tasks/TaskDetailPanel'
 import AcceptanceBanner from '../components/tasks/AcceptanceBanner'
 import DeclineModal from '../components/tasks/DeclineModal'
+import DeleteConfirmModal from '../components/tasks/DeleteConfirmModal'
+import MassActionBar from '../components/tasks/MassActionBar'
 
 export default function MyTasksPage() {
   const { profile } = useAuth()
   const { myTasks, loading, refetch } = useTasks()
-  const { acceptTask, declineTask } = useTaskActions()
+  const { acceptTask, declineTask, deleteTasks, updateTasks } = useTaskActions()
   const location = useLocation()
   const navigate = useNavigate()
   const [filters,    setFilters]    = useState({ statuses: ['Not Started', 'In Progress', 'Blocked'] })
   const [activeTask, setActiveTask] = useState(null)
   const [declineTarget, setDeclineTarget] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [showBulkDelete, setShowBulkDelete] = useState(false)
 
   // Open task panel from notification click
   useEffect(() => {
@@ -54,6 +58,36 @@ export default function MyTasksPage() {
     else showToast(result.msg, 'error')
   }
 
+  // Selection handlers
+  const handleSelectionChange = useCallback((taskId, isSelected) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      isSelected ? next.add(taskId) : next.delete(taskId)
+      return next
+    })
+  }, [])
+
+  // Clear selection when filters change
+  useEffect(() => { setSelectedIds(new Set()) }, [filters])
+
+  async function handleBulkStatusChange(status) {
+    const result = await updateTasks([...selectedIds], { status })
+    if (result.ok) { showToast(`${selectedIds.size} task(s) updated`); setSelectedIds(new Set()); refetch() }
+    else showToast(result.msg, 'error')
+  }
+
+  async function handleBulkUrgencyChange(urgency) {
+    const result = await updateTasks([...selectedIds], { urgency })
+    if (result.ok) { showToast(`${selectedIds.size} task(s) updated`); setSelectedIds(new Set()); refetch() }
+    else showToast(result.msg, 'error')
+  }
+
+  async function handleBulkDelete() {
+    const result = await deleteTasks([...selectedIds])
+    if (result.ok) { showToast(`${selectedIds.size} task(s) deleted`); setSelectedIds(new Set()); refetch() }
+    else showToast(result.msg, 'error')
+  }
+
   if (loading) return <LoadingScreen />
 
   return (
@@ -75,6 +109,14 @@ export default function MyTasksPage() {
               onChange={(k, v) => setFilters(f => ({ ...f, [k]: v }))}
               onClear={() => setFilters({ statuses: ['Not Started', 'In Progress', 'Blocked'] })}
             />
+            <MassActionBar
+              selectedCount={filtered.filter(t => selectedIds.has(t.id)).length}
+              onSelectAll={() => setSelectedIds(new Set(filtered.map(t => t.id)))}
+              onDeselectAll={() => setSelectedIds(new Set())}
+              onBulkStatusChange={handleBulkStatusChange}
+              onBulkUrgencyChange={handleBulkUrgencyChange}
+              onBulkDelete={() => setShowBulkDelete(true)}
+            />
             {filtered.length === 0
               ? <EmptyState
                   icon="✓"
@@ -88,6 +130,9 @@ export default function MyTasksPage() {
                   showAcceptanceActions
                   onAccept={handleAccept}
                   onDecline={task => setDeclineTarget(task)}
+                  selectable
+                  selectedIds={selectedIds}
+                  onSelectionChange={handleSelectionChange}
                 />
             }
           </div>
@@ -106,6 +151,13 @@ export default function MyTasksPage() {
           onClose={() => setDeclineTarget(null)}
           onConfirm={handleDecline}
           taskTitle={declineTarget?.title}
+        />
+
+        <DeleteConfirmModal
+          isOpen={showBulkDelete}
+          onClose={() => setShowBulkDelete(false)}
+          onConfirm={handleBulkDelete}
+          count={selectedIds.size}
         />
       </div>
     </PageTransition>

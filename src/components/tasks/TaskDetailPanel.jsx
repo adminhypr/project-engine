@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { X, Send, Check, RefreshCw, Pencil } from 'lucide-react'
+import { X, Send, Check, RefreshCw, Pencil, Trash2 } from 'lucide-react'
 import { useTaskActions } from '../../hooks/useTasks'
 import { useAuth } from '../../hooks/useAuth'
 import { formatDate } from '../../lib/helpers'
@@ -9,10 +9,11 @@ import { SlidePanel, SuccessBurst, ShakeReject } from '../ui/animations'
 import ActivityLog from './ActivityLog'
 import DeclineModal from './DeclineModal'
 import ReassignModal from './ReassignModal'
+import DeleteConfirmModal from './DeleteConfirmModal'
 
 export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   const { profile, isAdmin, isManager } = useAuth()
-  const { updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask } = useTaskActions()
+  const { updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask, deleteTask } = useTaskActions()
 
   const [status,   setStatus]   = useState(task?.status || 'Not Started')
   const [notes,    setNotes]    = useState(task?.notes || '')
@@ -23,6 +24,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   const [loadingComments, setLoadingComments] = useState(true)
   const [showDeclineModal, setShowDeclineModal] = useState(false)
   const [showReassignModal, setShowReassignModal] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [acceptAnim, setAcceptAnim] = useState(0)
   const [declineAnim, setDeclineAnim] = useState(0)
   const [editing, setEditing] = useState(false)
@@ -121,6 +123,17 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
     }
   }
 
+  async function handleDelete() {
+    const result = await deleteTask(task.id)
+    if (result.ok) {
+      showToast('Task deleted')
+      onClose()
+      onUpdated?.()
+    } else {
+      showToast(result.msg, 'error')
+    }
+  }
+
   async function handleReassign(newAssigneeId) {
     const result = await reassignTask(task.id, newAssigneeId)
     if (result.ok) {
@@ -177,6 +190,15 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
             </div>
           )}
         </div>
+        {canEdit && (
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 p-1.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-500/10 transition-all duration-200 flex-shrink-0"
+            title="Delete task"
+          >
+            <Trash2 size={18} />
+          </button>
+        )}
         <button
           onClick={onClose}
           className="text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-dark-hover transition-all duration-200 flex-shrink-0"
@@ -405,6 +427,12 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
         onClose={() => setShowReassignModal(false)}
         onConfirm={handleReassign}
         task={task}
+      />
+      <DeleteConfirmModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={handleDelete}
+        taskTitle={task.title}
       />
     </SlidePanel>
   )

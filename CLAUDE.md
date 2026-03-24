@@ -11,7 +11,9 @@ Project Engine is an internal task management web app. Users authenticate via Go
 - `npm run dev` — Start dev server (http://localhost:5173)
 - `npm run build` — Production build
 - `npm run preview` — Preview production build
-- `npm test` — Run all tests (Vitest)
+- `npm test` — Run all tests in watch mode (Vitest)
+- `npm run test:run` — Run all tests once (no watch)
+- `npm run test:coverage` — Run tests with coverage report
 - `npm test -- src/lib/__tests__/priority.test.js` — Run a single test file
 
 ## Architecture
@@ -32,15 +34,19 @@ Project Engine is an internal task management web app. Users authenticate via Go
 - **No global state:** No Redux/Zustand. Auth context + Supabase Realtime + component state.
 - **Filtering:** `applyFilters()` in `src/lib/filters.js` is shared across all pages. Filters by status, urgency, priority, team, acceptance, with full-text search across title, task_id, names.
 - **Theme:** `useTheme` hook persists dark/light in localStorage (`pe-theme`), falls back to `prefers-color-scheme`. Tailwind uses `darkMode: 'class'` strategy.
+- **UI system:** Shared CSS component classes (`.btn`, `.btn-primary`, `.card`, `.form-input`, `.badge`, `.priority-red/orange/yellow/green`, etc.) defined in `src/index.css`. Reusable Framer Motion animation components (`FadeIn`, `SlidePanel`, `PageTransition`, `ModalWrapper`, etc.) in `src/components/ui/animations.jsx`. Icons from `lucide-react`.
+- **Routing:** React Router v6. Root `/` redirects to `/my-tasks`. Routes wrapped with `AnimatePresence` for page transitions. `ErrorBoundary` wraps all routes.
+- **Notifications:** `NotificationBell` component shows real-time in-app notifications for pending acceptance, overdue tasks, and recent assignments.
 
 ## Database
 
-Schema across 4 migrations in `supabase/migrations/`:
+Schema across 5 migrations in `supabase/migrations/`:
 
 - **001_initial.sql** — `profiles`, `teams`, `tasks`, `comments` tables. Auto-creates profile on first login. `last_updated` auto-updates via trigger. `email_alert_sent` resets on status change.
 - **002_audit_log.sql** — `task_audit_log` table. Events: task_created, status_changed, urgency_changed, due_date_changed, notes_updated, reassigned, accepted, declined, assigner_override. Write-only via service role triggers.
 - **003_acceptance.sql** — Adds `acceptance_status`, `decline_reason`, `accepted_at`, `declined_at` to tasks. Auto-accept logic enforced by DB trigger.
 - **004_reports_to.sql** — Adds `reports_to` FK on profiles. RLS updated so managers see tasks of users who report to them.
+- **005_task_icon.sql** — Adds optional `icon` text column to tasks for visual categorization.
 
 ## Supabase Edge Functions
 
