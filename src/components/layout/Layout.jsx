@@ -27,7 +27,7 @@ export default function Layout({ children }) {
     { to: '/team',     icon: Users,        label: 'Team View',      show: isManager },
     { to: '/admin',    icon: LayoutDashboard, label: 'Admin Overview', show: isAdmin },
     { to: '/reports',  icon: BarChart2,    label: 'Reports',        show: isManager },
-    { to: '/settings', icon: Settings,     label: 'Settings',       show: isAdmin },
+    { to: '/settings', icon: Settings,     label: 'Settings',       show: isManager },
   ]
 
   const sidebarContent = (

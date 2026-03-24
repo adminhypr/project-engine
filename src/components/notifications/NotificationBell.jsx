@@ -11,8 +11,8 @@ function getNotifications(myTasks, profile, unsetupUsers) {
   const notifications = []
   const now = new Date()
 
-  // Admin: users needing setup (no teams assigned)
-  if (profile?.role === 'Admin' && unsetupUsers.length > 0) {
+  // Admin/Manager: users needing setup (no teams assigned)
+  if ((profile?.role === 'Admin' || profile?.role === 'Manager') && unsetupUsers.length > 0) {
     notifications.push({
       id: 'users-need-setup',
       type: 'admin',
@@ -113,7 +113,7 @@ function timeAgo(dateStr) {
 
 export default function NotificationBell({ onTaskClick }) {
   const { myTasks } = useTasks()
-  const { profile, isAdmin } = useAuth()
+  const { profile, isAdmin, isManager } = useAuth()
   const navigate = useNavigate()
   const [isOpen, setIsOpen] = useState(false)
   const [unsetupUsers, setUnsetupUsers] = useState([])
@@ -124,9 +124,9 @@ export default function NotificationBell({ onTaskClick }) {
   })
   const panelRef = useRef(null)
 
-  // Admin: fetch users with no team assignments
+  // Admin/Manager: fetch users with no team assignments
   useEffect(() => {
-    if (!isAdmin) return
+    if (!isManager) return
     async function fetchUnsetup() {
       // Get all profiles, then filter to those with no profile_teams rows
       const { data: profiles } = await supabase
@@ -147,7 +147,7 @@ export default function NotificationBell({ onTaskClick }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profile_teams' }, () => fetchUnsetup())
       .subscribe()
     return () => supabase.removeChannel(channel)
-  }, [isAdmin])
+  }, [isManager])
 
   const allNotifications = getNotifications(myTasks, profile, unsetupUsers)
   const notifications = allNotifications.filter(n => !dismissed.includes(n.id))

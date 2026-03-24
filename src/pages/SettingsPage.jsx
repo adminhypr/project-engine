@@ -4,10 +4,10 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { PageHeader, showToast } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
-import { Star, X, Plus, ChevronDown } from 'lucide-react'
+import { Star, X, Plus } from 'lucide-react'
 
 export default function SettingsPage() {
-  const { profile } = useAuth()
+  const { profile, isAdmin } = useAuth()
   const [profiles, setProfiles] = useState([])
   const [teams,    setTeams]    = useState([])
   const [loading,  setLoading]  = useState(true)
@@ -54,50 +54,69 @@ export default function SettingsPage() {
     else { showToast('Team deleted'); fetchAll() }
   }
 
+  // Manager: only teams they belong to
+  const myTeamIds = profile?.team_ids || (profile?.team_id ? [profile.team_id] : [])
+  const managerTeams = isAdmin ? teams : teams.filter(t => myTeamIds.includes(t.id))
+
+  // Manager: only show unassigned users + themselves (for context)
+  const visibleProfiles = isAdmin
+    ? profiles
+    : profiles.filter(p => {
+        const hasTeams = p.profile_teams && p.profile_teams.length > 0
+        return !hasTeams || p.id === profile?.id
+      })
+
+  const unassignedCount = profiles.filter(p => !p.profile_teams || p.profile_teams.length === 0).length
+
   if (loading) return <div className="p-8 text-slate-400 dark:text-slate-500">Loading...</div>
 
   return (
     <PageTransition>
       <div>
-        <PageHeader title="Settings" subtitle="Manage users, teams, and roles" />
+        <PageHeader
+          title="Settings"
+          subtitle={isAdmin ? 'Manage users, teams, and roles' : `${unassignedCount} user${unassignedCount !== 1 ? 's' : ''} need${unassignedCount === 1 ? 's' : ''} team assignment`}
+        />
 
         <div className="p-4 sm:p-6 space-y-6 max-w-7xl">
 
-          {/* Teams */}
-          <motion.div
-            className="card"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Teams</p>
-            <div className="flex gap-2 mb-4">
-              <input
-                type="text"
-                value={newTeam}
-                onChange={e => setNewTeam(e.target.value)}
-                placeholder="New team name..."
-                className="form-input flex-1"
-                onKeyDown={e => e.key === 'Enter' && addTeam()}
-              />
-              <button className="btn-primary" onClick={addTeam}>Add Team</button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {teams.map(t => (
-                <motion.div
-                  key={t.id}
-                  className="flex items-center gap-2 bg-white dark:bg-dark-surface rounded-xl px-3 py-1.5 border border-slate-100 dark:border-dark-border"
-                  layout
-                >
-                  <span className="text-sm font-medium">{t.name}</span>
-                  <button
-                    onClick={() => deleteTeam(t.id)}
-                    className="text-slate-400 dark:text-slate-500 hover:text-red-500 text-xs transition-colors"
-                  >✕</button>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
+          {/* Teams — admin only */}
+          {isAdmin && (
+            <motion.div
+              className="card"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Teams</p>
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  value={newTeam}
+                  onChange={e => setNewTeam(e.target.value)}
+                  placeholder="New team name..."
+                  className="form-input flex-1"
+                  onKeyDown={e => e.key === 'Enter' && addTeam()}
+                />
+                <button className="btn-primary" onClick={addTeam}>Add Team</button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {teams.map(t => (
+                  <motion.div
+                    key={t.id}
+                    className="flex items-center gap-2 bg-white dark:bg-dark-surface rounded-xl px-3 py-1.5 border border-slate-100 dark:border-dark-border"
+                    layout
+                  >
+                    <span className="text-sm font-medium">{t.name}</span>
+                    <button
+                      onClick={() => deleteTeam(t.id)}
+                      className="text-slate-400 dark:text-slate-500 hover:text-red-500 text-xs transition-colors"
+                    >✕</button>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          )}
 
           {/* Users */}
           <motion.div
@@ -107,39 +126,46 @@ export default function SettingsPage() {
             transition={{ duration: 0.3, delay: 0.05 }}
           >
             <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">
-              Users ({profiles.length})
+              {isAdmin ? `Users (${profiles.length})` : `New Users (${unassignedCount})`}
             </p>
             <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
-              New users appear here after they sign in for the first time. Assign them teams and a role.
+              {isAdmin
+                ? 'New users appear here after they sign in for the first time. Assign them teams and a role.'
+                : 'Assign new users to one of your teams so they can start using the app.'}
             </p>
-            <div className="overflow-x-auto -mx-4 sm:mx-0">
-            <table className="w-full text-sm">
-              <thead>
-                <tr>
-                  <th className="table-th">Name</th>
-                  <th className="table-th">Email</th>
-                  <th className="table-th">Teams</th>
-                  <th className="table-th">Role</th>
-                  <th className="table-th">Reports To</th>
-                  <th className="table-th">Save</th>
-                </tr>
-              </thead>
-              <tbody>
-                {profiles.map(p => (
-                  <UserRow
-                    key={p.id}
-                    user={p}
-                    teams={teams}
-                    allProfiles={profiles}
-                    isSelf={p.id === profile?.id}
-                    saving={saving[p.id]}
-                    onSave={(updates) => updateProfile(p.id, updates)}
-                    onTeamsChange={fetchAll}
-                  />
-                ))}
-              </tbody>
-            </table>
-            </div>
+            {visibleProfiles.length === 0 ? (
+              <p className="text-sm text-slate-400 dark:text-slate-500 py-4 text-center">No users need setup.</p>
+            ) : (
+              <div className="overflow-x-auto -mx-4 sm:mx-0">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th className="table-th">Name</th>
+                    <th className="table-th">Email</th>
+                    <th className="table-th">Teams</th>
+                    {isAdmin && <th className="table-th">Role</th>}
+                    {isAdmin && <th className="table-th">Reports To</th>}
+                    {isAdmin && <th className="table-th">Save</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleProfiles.map(p => (
+                    <UserRow
+                      key={p.id}
+                      user={p}
+                      teams={isAdmin ? teams : managerTeams}
+                      allProfiles={profiles}
+                      isSelf={p.id === profile?.id}
+                      saving={saving[p.id]}
+                      onSave={(updates) => updateProfile(p.id, updates)}
+                      onTeamsChange={fetchAll}
+                      isAdmin={isAdmin}
+                    />
+                  ))}
+                </tbody>
+              </table>
+              </div>
+            )}
           </motion.div>
 
         </div>
@@ -148,7 +174,7 @@ export default function SettingsPage() {
   )
 }
 
-function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChange }) {
+function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChange, isAdmin }) {
   const [role,      setRole]      = useState(user.role || 'Staff')
   const [reportsTo, setReportsTo] = useState(user.reports_to || '')
   const [addingTeam, setAddingTeam] = useState(false)
@@ -162,6 +188,10 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
   const availableTeams = teams.filter(t => !userTeams.some(ut => ut.team_id === t.id))
 
   const dirty = role !== user.role || reportsTo !== (user.reports_to || '')
+
+  // For managers: can only edit unassigned users (not themselves or already-assigned users)
+  const isUnassigned = userTeams.length === 0
+  const canEdit = isAdmin ? !isSelf : (isUnassigned && !isSelf)
 
   // Eligible managers: Managers and Admins, excluding self and anyone who reports to this user (circular)
   const managerOptions = allProfiles.filter(p =>
@@ -236,7 +266,7 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
   }
 
   return (
-    <tr className={`border-b border-slate-100 dark:border-dark-border ${userTeams.length === 0 ? 'bg-yellow-500/5' : ''}`}>
+    <tr className={`border-b border-slate-100 dark:border-dark-border ${isUnassigned ? 'bg-yellow-500/5' : ''}`}>
       <td className="table-td font-medium">
         <div className="flex items-center gap-2">
           {user.avatar_url
@@ -246,7 +276,7 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
               </div>
           }
           {user.full_name}
-          {userTeams.length === 0 && <span className="badge bg-yellow-500/15 text-yellow-700 text-xs">Needs setup</span>}
+          {isUnassigned && <span className="badge bg-yellow-500/15 text-yellow-700 text-xs">Needs setup</span>}
           {isSelf && <span className="badge bg-brand-50 text-brand-700 text-xs">You</span>}
         </div>
       </td>
@@ -267,7 +297,7 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
                 exit={{ opacity: 0, scale: 0.8 }}
                 layout
               >
-                {!isSelf && !t.is_primary && (
+                {canEdit && !t.is_primary && (
                   <button
                     onClick={() => setPrimaryTeam(t.team_id)}
                     className="text-slate-300 hover:text-brand-500 dark:text-slate-500 dark:hover:text-brand-400 transition-colors"
@@ -280,7 +310,7 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
                   <Star size={10} className="text-brand-500 dark:text-brand-400 fill-current" />
                 )}
                 {t.name}
-                {!isSelf && (
+                {canEdit && (
                   <button
                     onClick={() => removeTeamFromUser(t.team_id)}
                     className="text-slate-300 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 transition-colors ml-0.5"
@@ -291,7 +321,7 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
               </motion.span>
             ))}
           </AnimatePresence>
-          {!isSelf && (
+          {canEdit && (
             addingTeam ? (
               <select
                 autoFocus
@@ -314,43 +344,49 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
           )}
         </div>
       </td>
-      <td className="table-td">
-        <select
-          value={role}
-          onChange={e => setRole(e.target.value)}
-          className="form-input py-1 text-xs min-w-[6.5rem]"
-          disabled={isSelf}
-        >
-          <option>Staff</option>
-          <option>Manager</option>
-          <option>Admin</option>
-        </select>
-      </td>
-      <td className="table-td">
-        <select
-          value={reportsTo}
-          onChange={e => setReportsTo(e.target.value)}
-          className="form-input py-1 text-xs min-w-[10rem]"
-          disabled={isSelf}
-        >
-          <option value="">— None —</option>
-          {managerOptions.map(p => (
-            <option key={p.id} value={p.id}>{p.full_name} ({p.role})</option>
-          ))}
-        </select>
-      </td>
-      <td className="table-td">
-        {!isSelf && dirty && (
-          <motion.button
-            onClick={() => onSave({ role, reports_to: reportsTo || null })}
-            disabled={saving}
-            className="btn-primary py-1 px-3 text-xs"
-            whileTap={{ scale: 0.95 }}
+      {isAdmin && (
+        <td className="table-td">
+          <select
+            value={role}
+            onChange={e => setRole(e.target.value)}
+            className="form-input py-1 text-xs min-w-[6.5rem]"
+            disabled={isSelf}
           >
-            {saving ? '...' : 'Save'}
-          </motion.button>
-        )}
-      </td>
+            <option>Staff</option>
+            <option>Manager</option>
+            <option>Admin</option>
+          </select>
+        </td>
+      )}
+      {isAdmin && (
+        <td className="table-td">
+          <select
+            value={reportsTo}
+            onChange={e => setReportsTo(e.target.value)}
+            className="form-input py-1 text-xs min-w-[10rem]"
+            disabled={isSelf}
+          >
+            <option value="">— None —</option>
+            {managerOptions.map(p => (
+              <option key={p.id} value={p.id}>{p.full_name} ({p.role})</option>
+            ))}
+          </select>
+        </td>
+      )}
+      {isAdmin && (
+        <td className="table-td">
+          {!isSelf && dirty && (
+            <motion.button
+              onClick={() => onSave({ role, reports_to: reportsTo || null })}
+              disabled={saving}
+              className="btn-primary py-1 px-3 text-xs"
+              whileTap={{ scale: 0.95 }}
+            >
+              {saving ? '...' : 'Save'}
+            </motion.button>
+          )}
+        </td>
+      )}
     </tr>
   )
 }
