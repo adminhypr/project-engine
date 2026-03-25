@@ -42,12 +42,18 @@ async function fetchProfileDirect(userId, accessToken) {
         )
         if (ptRes.ok) {
           const pt = await ptRes.json()
-          profile.team_ids = pt.map(r => r.team_id)
-          profile.all_teams = pt.map(r => ({ ...r.team, is_primary: r.is_primary }))
-          const primary = pt.find(r => r.is_primary)
-          if (primary?.team) {
-            profile.teams = primary.team
-            profile.team_id = primary.team_id
+          if (pt.length > 0) {
+            profile.team_ids = pt.map(r => r.team_id)
+            profile.all_teams = pt.map(r => ({ ...r.team, is_primary: r.is_primary }))
+            const primary = pt.find(r => r.is_primary)
+            if (primary?.team) {
+              profile.teams = primary.team
+              profile.team_id = primary.team_id
+            }
+          } else {
+            // No profile_teams rows — fall back to legacy team_id
+            profile.team_ids = profile.team_id ? [profile.team_id] : []
+            profile.all_teams = profile.teams ? [{ ...profile.teams, is_primary: true }] : []
           }
         }
       } catch {

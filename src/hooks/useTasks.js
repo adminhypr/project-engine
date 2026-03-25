@@ -50,7 +50,11 @@ export function useTasks() {
       const enrichProfile = (p) => {
         if (!p) return p
         const pt = p.profile_teams || []
-        return { ...p, team_ids: pt.map(r => r.team_id), all_teams: pt.map(r => ({ ...r.team, is_primary: r.is_primary })) }
+        return {
+          ...p,
+          team_ids: pt.length > 0 ? pt.map(r => r.team_id) : (p.team_id ? [p.team_id] : []),
+          all_teams: pt.length > 0 ? pt.map(r => ({ ...r.team, is_primary: r.is_primary })) : (p.teams ? [{ id: p.team_id, name: p.teams.name, is_primary: true }] : [])
+        }
       }
       return {
         ...t,
@@ -84,7 +88,7 @@ export function useTasks() {
   // Team tasks (for manager view) — includes all teams the manager belongs to
   const teamTasks = isManager
     ? tasks.filter(t => {
-        const myTeamIds = profile?.team_ids || (profile?.team_id ? [profile.team_id] : [])
+        const myTeamIds = profile?.team_ids?.length > 0 ? profile.team_ids : (profile?.team_id ? [profile.team_id] : [])
         return myTeamIds.includes(t.team_id)
       })
     : []
@@ -258,8 +262,8 @@ export function useProfiles() {
         const pt = p.profile_teams || []
         return {
           ...p,
-          team_ids: pt.map(r => r.team_id),
-          all_teams: pt.map(r => ({ ...r.team, is_primary: r.is_primary })),
+          team_ids: pt.length > 0 ? pt.map(r => r.team_id) : (p.team_id ? [p.team_id] : []),
+          all_teams: pt.length > 0 ? pt.map(r => ({ ...r.team, is_primary: r.is_primary })) : (p.teams ? [{ ...p.teams, is_primary: true }] : []),
           manager: p.reports_to ? { id: p.reports_to, full_name: profileMap[p.reports_to]?.full_name } : null
         }
       })
