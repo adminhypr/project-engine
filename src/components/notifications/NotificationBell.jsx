@@ -1,15 +1,30 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Bell, CheckCircle, AlertTriangle, Clock, UserPlus, UserCog, X } from 'lucide-react'
+import { Bell, CheckCircle, AlertTriangle, Clock, UserPlus, UserCog, MessageSquare, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useTasks } from '../../hooks/useTasks'
 import { useAuth } from '../../hooks/useAuth'
 import { formatDate } from '../../lib/helpers'
 
-function getNotifications(myTasks, profile, unsetupUsers) {
+function getNotifications(myTasks, profile, unsetupUsers, recentComments) {
   const notifications = []
   const now = new Date()
+
+  // Recent comments on my tasks by other people
+  recentComments.forEach(c => {
+    notifications.push({
+      id: `comment-${c.id}`,
+      type: 'comment',
+      icon: <MessageSquare size={14} />,
+      color: 'text-brand-600 bg-brand-500/15',
+      title: `${c.author?.full_name || 'Someone'} commented`,
+      body: `${c.task_title}: ${c.content?.slice(0, 60)}${c.content?.length > 60 ? '...' : ''}`,
+      taskId: c.task_id,
+      time: c.created_at,
+      priority: 0.5,
+    })
+  })
 
   // Admin/Manager: users needing setup (no teams assigned)
   if ((profile?.role === 'Admin' || profile?.role === 'Manager') && unsetupUsers.length > 0) {
@@ -112,17 +127,55 @@ function timeAgo(dateStr) {
 }
 
 export default function NotificationBell({ onTaskClick }) {
-  const { myTasks } = useTasks()
+  const { myTasks, tasks } = useTasks()
   const { profile, isAdmin, isManager } = useAuth()
   const navigate = useNavigate()
   const [isOpen, setIsOpen] = useState(false)
   const [unsetupUsers, setUnsetupUsers] = useState([])
+  const [recentComments, setRecentComments] = useState([])
   const [dismissed, setDismissed] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('pe-dismissed-notifs') || '[]')
     } catch { return [] }
   })
   const panelRef = useRef(null)
+
+  // Fetch recent comments on tasks I'm involved with (assignee or assigner), by other people
+  useEffect(() => {
+    if (!profile?.id || !tasks.length) return
+
+    const myTaskIds = tasks
+      .filter(t => t.assigned_to === profile.id || t.assigned_by === profile.id)
+      .map(t => t.id)
+
+    if (myTaskIds.length === 0) return
+
+    async function fetchComments() {
+      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+      const { data } = await supabase
+        .from('comments')
+        .select('id, task_id, content, created_at, author_id, author:profiles(full_name, avatar_url)')
+        .in('task_id', myTaskIds)
+        .neq('author_id', profile.id)
+        .gte('created_at', dayAgo)
+        .order('created_at', { ascending: false })
+        .limit(20)
+
+      if (data) {
+        // Enrich with task title
+        const taskMap = Object.fromEntries(tasks.map(t => [t.id, t.title]))
+        setRecentComments(data.map(c => ({ ...c, task_title: taskMap[c.task_id] || 'Task' })))
+      }
+    }
+    fetchComments()
+
+    // Realtime: refetch when new comments arrive
+    const channel = supabase
+      .channel('comments-notif')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, () => fetchComments())
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [profile?.id, tasks.length])
 
   // Admin/Manager: fetch users with no team assignments
   useEffect(() => {
@@ -149,7 +202,7 @@ export default function NotificationBell({ onTaskClick }) {
     return () => supabase.removeChannel(channel)
   }, [isManager])
 
-  const allNotifications = getNotifications(myTasks, profile, unsetupUsers)
+  const allNotifications = getNotifications(myTasks, profile, unsetupUsers, recentComments)
   const notifications = allNotifications.filter(n => !dismissed.includes(n.id))
   const count = notifications.length
 

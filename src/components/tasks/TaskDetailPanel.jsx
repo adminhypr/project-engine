@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { X, Send, Check, RefreshCw, Pencil, Trash2 } from 'lucide-react'
-import { useTaskActions } from '../../hooks/useTasks'
+import { supabase } from '../../lib/supabase'
+import { useTaskActions, useProfiles } from '../../hooks/useTasks'
 import { useAuth } from '../../hooks/useAuth'
 import { formatDate } from '../../lib/helpers'
 import { AssignmentBadge, UrgencyBadge, StatusBadge, PriorityBadge, showToast } from '../ui'
@@ -14,6 +15,7 @@ import DeleteConfirmModal from './DeleteConfirmModal'
 export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   const { profile, isAdmin, isManager } = useAuth()
   const { updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask, deleteTask } = useTaskActions()
+  const { profiles: allProfiles } = useProfiles()
 
   const [status,   setStatus]   = useState(task?.status || 'Not Started')
   const [notes,    setNotes]    = useState(task?.notes || '')
@@ -22,6 +24,10 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   const [saving,   setSaving]   = useState(false)
   const [posting,  setPosting]  = useState(false)
   const [loadingComments, setLoadingComments] = useState(true)
+  const [mentionedIds, setMentionedIds] = useState([])
+  const [mentionQuery, setMentionQuery] = useState(null) // null = picker closed, '' = open no filter
+  const [mentionIndex, setMentionIndex] = useState(0)
+  const commentRef = useRef(null)
   const [showDeclineModal, setShowDeclineModal] = useState(false)
   const [showReassignModal, setShowReassignModal] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -144,14 +150,90 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
     }
   }
 
+  // Mention picker logic
+  const mentionResults = mentionQuery !== null
+    ? allProfiles
+        .filter(p => p.id !== profile?.id && p.full_name?.toLowerCase().includes(mentionQuery.toLowerCase()))
+        .slice(0, 6)
+    : []
+
+  function handleCommentChange(e) {
+    const val = e.target.value
+    setNewComment(val)
+
+    // Detect @ trigger: find the last @ before cursor
+    const cursor = e.target.selectionStart
+    const textBefore = val.slice(0, cursor)
+    const atMatch = textBefore.match(/@(\w*)$/)
+    if (atMatch) {
+      setMentionQuery(atMatch[1])
+      setMentionIndex(0)
+    } else {
+      setMentionQuery(null)
+    }
+  }
+
+  function insertMention(p) {
+    const textarea = commentRef.current
+    const cursor = textarea.selectionStart
+    const textBefore = newComment.slice(0, cursor)
+    const textAfter = newComment.slice(cursor)
+    // Replace the @query with @Name
+    const replaced = textBefore.replace(/@\w*$/, `@${p.full_name} `)
+    setNewComment(replaced + textAfter)
+    setMentionedIds(prev => prev.includes(p.id) ? prev : [...prev, p.id])
+    setMentionQuery(null)
+    // Refocus
+    setTimeout(() => {
+      textarea.focus()
+      const pos = replaced.length
+      textarea.setSelectionRange(pos, pos)
+    }, 0)
+  }
+
+  function handleCommentKeyDown(e) {
+    if (mentionQuery !== null && mentionResults.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setMentionIndex(i => Math.min(i + 1, mentionResults.length - 1))
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setMentionIndex(i => Math.max(i - 1, 0))
+        return
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        insertMention(mentionResults[mentionIndex])
+        return
+      }
+      if (e.key === 'Escape') {
+        setMentionQuery(null)
+        return
+      }
+    }
+    if (e.key === 'Enter' && e.metaKey) handlePostComment()
+  }
+
   async function handlePostComment() {
     if (!newComment.trim() || !task) return
+    const text = newComment.trim()
     setPosting(true)
-    const result = await addComment(task.id, newComment.trim())
+    const result = await addComment(task.id, text)
     setPosting(false)
     if (result.ok) {
       setComments(prev => [result.comment, ...prev])
       setNewComment('')
+      setMentionedIds([])
+      setMentionQuery(null)
+
+      // Notify assignee, assigner, and @mentioned people (non-blocking)
+      supabase.functions.invoke('user-notify', {
+        body: { type: 'comment', taskId: task.id, authorId: profile.id, commentText: text, mentionedIds }
+      }).then(({ error }) => {
+        if (error) console.warn('Comment notification email failed:', error)
+      }).catch(err => console.warn('Comment notification email failed:', err))
     } else {
       showToast(result.msg, 'error')
     }
@@ -366,17 +448,43 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
             Comments ({comments.length})
           </p>
 
-          <div className="flex gap-2 items-end mb-4">
-            <textarea
-              value={newComment}
-              onChange={e => setNewComment(e.target.value)}
-              placeholder="Write a comment..."
-              rows={2}
-              className="form-input flex-1 resize-none"
-              onKeyDown={e => {
-                if (e.key === 'Enter' && e.metaKey) handlePostComment()
-              }}
-            />
+          <div className="flex gap-2 items-end mb-4 relative">
+            <div className="flex-1 relative">
+              <textarea
+                ref={commentRef}
+                value={newComment}
+                onChange={handleCommentChange}
+                placeholder="Write a comment... Use @ to mention someone"
+                rows={2}
+                className="form-input flex-1 w-full resize-none"
+                onKeyDown={handleCommentKeyDown}
+              />
+              {/* @mention dropdown */}
+              {mentionQuery !== null && mentionResults.length > 0 && (
+                <div className="absolute bottom-full left-0 mb-1 w-full bg-white dark:bg-dark-card rounded-xl shadow-elevated border border-slate-200 dark:border-dark-border z-50 overflow-hidden max-h-48 overflow-y-auto">
+                  {mentionResults.map((p, i) => (
+                    <button
+                      key={p.id}
+                      className={`w-full text-left px-3 py-2 flex items-center gap-2 text-sm transition-colors ${
+                        i === mentionIndex
+                          ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300'
+                          : 'hover:bg-slate-50 dark:hover:bg-dark-hover text-slate-700 dark:text-slate-200'
+                      }`}
+                      onMouseDown={e => { e.preventDefault(); insertMention(p) }}
+                    >
+                      {p.avatar_url
+                        ? <img src={p.avatar_url} className="w-5 h-5 rounded-full" alt="" />
+                        : <div className="w-5 h-5 rounded-full bg-brand-500 flex items-center justify-center text-white text-[10px] font-bold">
+                            {p.full_name?.[0] || '?'}
+                          </div>
+                      }
+                      <span className="font-medium">{p.full_name}</span>
+                      <span className="text-xs text-slate-400 dark:text-slate-500">{p.role}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
               onClick={handlePostComment}
               disabled={posting || !newComment.trim()}
@@ -404,7 +512,13 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
                     <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{c.author?.full_name}</span>
                     <span className="text-xs text-slate-400 dark:text-slate-500">{formatDate(c.created_at)}</span>
                   </div>
-                  <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">{c.content}</p>
+                  <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">
+                    {c.content.split(/(@\w[\w\s]*?\w)(?=\s|$|[.,!?])/).map((part, i) =>
+                      part.startsWith('@')
+                        ? <span key={i} className="text-brand-600 dark:text-brand-400 font-semibold">{part}</span>
+                        : part
+                    )}
+                  </p>
                 </div>
               ))}
             </div>

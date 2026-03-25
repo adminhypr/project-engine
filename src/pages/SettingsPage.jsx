@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { PageHeader, showToast } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
-import { Star, X, Plus } from 'lucide-react'
+import { Star, X, Plus, Send, Mail } from 'lucide-react'
 
 export default function SettingsPage() {
   const { profile, isAdmin } = useAuth()
@@ -13,6 +13,8 @@ export default function SettingsPage() {
   const [loading,  setLoading]  = useState(true)
   const [newTeam,  setNewTeam]  = useState('')
   const [saving,   setSaving]   = useState({})
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviting,    setInviting]    = useState(false)
 
   useEffect(() => { fetchAll() }, [])
 
@@ -52,6 +54,18 @@ export default function SettingsPage() {
     const { error } = await supabase.from('teams').delete().eq('id', id)
     if (error) showToast(error.message, 'error')
     else { showToast('Team deleted'); fetchAll() }
+  }
+
+  async function sendInvite() {
+    const email = inviteEmail.trim().toLowerCase()
+    if (!email) return
+    setInviting(true)
+    const { error } = await supabase.functions.invoke('user-notify', {
+      body: { type: 'invite', email, inviterName: profile?.full_name || 'A team member' }
+    })
+    setInviting(false)
+    if (error) showToast('Failed to send invite', 'error')
+    else { showToast('Invite sent to ' + email); setInviteEmail('') }
   }
 
   // Manager: only teams they belong to
@@ -118,6 +132,40 @@ export default function SettingsPage() {
             </motion.div>
           )}
 
+          {/* Invite User */}
+          <motion.div
+            className="card"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.025 }}
+          >
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Invite User</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
+              Send an email invitation to a new user. They'll sign in with their Google account.
+            </p>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={e => setInviteEmail(e.target.value)}
+                  placeholder="email@example.com"
+                  className="form-input pl-9 flex-1 w-full"
+                  onKeyDown={e => e.key === 'Enter' && sendInvite()}
+                />
+              </div>
+              <button
+                className="btn-primary inline-flex items-center gap-2"
+                onClick={sendInvite}
+                disabled={inviting || !inviteEmail.trim()}
+              >
+                <Send size={14} />
+                {inviting ? 'Sending...' : 'Send Invite'}
+              </button>
+            </div>
+          </motion.div>
+
           {/* Users */}
           <motion.div
             className="card"
@@ -160,6 +208,7 @@ export default function SettingsPage() {
                       onSave={(updates) => updateProfile(p.id, updates)}
                       onTeamsChange={fetchAll}
                       isAdmin={isAdmin}
+                      approverName={profile?.full_name}
                     />
                   ))}
                 </tbody>
@@ -174,7 +223,7 @@ export default function SettingsPage() {
   )
 }
 
-function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChange, isAdmin }) {
+function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChange, isAdmin, approverName }) {
   const [role,      setRole]      = useState(user.role || 'Staff')
   const [reportsTo, setReportsTo] = useState(user.reports_to || '')
   const [addingTeam, setAddingTeam] = useState(false)
@@ -212,9 +261,14 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
     // Sync profiles.team_id to primary team
     if (isPrimary) {
       await supabase.from('profiles').update({ team_id: teamId }).eq('id', user.id)
+
+      // First team = user approved — send approval notification email
+      supabase.functions.invoke('user-notify', {
+        body: { type: 'approved', userId: user.id, approverName: approverName || 'An administrator' }
+      }).catch(() => {}) // Non-blocking — don't fail the team assignment if email fails
     }
 
-    showToast('Team added')
+    showToast(isPrimary ? 'Team added — approval email sent' : 'Team added')
     setAddingTeam(false)
     onTeamsChange()
   }

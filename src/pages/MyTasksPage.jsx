@@ -13,37 +13,51 @@ import DeleteConfirmModal from '../components/tasks/DeleteConfirmModal'
 import MassActionBar from '../components/tasks/MassActionBar'
 
 export default function MyTasksPage() {
-  const { profile } = useAuth()
-  const { myTasks, loading, refetch } = useTasks()
+  const { profile, isManager } = useAuth()
+  const { myTasks, tasks, loading, refetch } = useTasks()
   const { acceptTask, declineTask, deleteTasks, updateTasks } = useTaskActions()
   const location = useLocation()
   const navigate = useNavigate()
+  const [tab, setTab] = useState('mine') // 'mine' | 'assigned'
   const [filters,    setFilters]    = useState({ statuses: ['Not Started', 'In Progress', 'Blocked'] })
   const [activeTask, setActiveTask] = useState(null)
   const [declineTarget, setDeclineTarget] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [showBulkDelete, setShowBulkDelete] = useState(false)
 
+  // Tasks I assigned to others (exclude self-assignments)
+  const assignedByMe = tasks.filter(t => t.assigned_by === profile?.id && t.assigned_to !== profile?.id)
+  const activeTasks = tab === 'mine' ? myTasks : assignedByMe
+
   // Open task panel from notification click
   useEffect(() => {
     const openTaskId = location.state?.openTaskId
-    if (openTaskId && myTasks.length > 0) {
-      const task = myTasks.find(t => t.id === openTaskId)
+    if (openTaskId && tasks.length > 0) {
+      const task = tasks.find(t => t.id === openTaskId)
       if (task) setActiveTask(task)
-      // Clear the state so it doesn't reopen on re-render
       navigate(location.pathname, { replace: true, state: {} })
     }
-  }, [location.state?.openTaskId, myTasks])
+  }, [location.state?.openTaskId, tasks])
+
+  // Clear selection on tab change
+  useEffect(() => { setSelectedIds(new Set()) }, [tab])
 
   const pendingTasks = myTasks.filter(t => t.acceptance_status === 'Pending')
-  const filtered = applyFilters(myTasks, filters)
+  const filtered = applyFilters(activeTasks, filters)
 
-  const stats = [
-    { label: 'Overdue / Inactive', value: myTasks.filter(t => t.priority === 'red').length,    color: 'text-red-500' },
-    { label: 'Urgent',             value: myTasks.filter(t => t.priority === 'orange').length,  color: 'text-orange-500' },
-    { label: 'Completed',          value: myTasks.filter(t => t.status === 'Done').length,      color: 'text-emerald-600' },
-    { label: 'Total Tasks',        value: myTasks.length,                                        color: 'text-slate-900 dark:text-white' },
-  ]
+  const stats = tab === 'mine'
+    ? [
+        { label: 'Overdue / Inactive', value: myTasks.filter(t => t.priority === 'red').length,    color: 'text-red-500' },
+        { label: 'Urgent',             value: myTasks.filter(t => t.priority === 'orange').length,  color: 'text-orange-500' },
+        { label: 'Completed',          value: myTasks.filter(t => t.status === 'Done').length,      color: 'text-emerald-600' },
+        { label: 'Total Tasks',        value: myTasks.length,                                        color: 'text-slate-900 dark:text-white' },
+      ]
+    : [
+        { label: 'Pending',            value: assignedByMe.filter(t => t.acceptance_status === 'Pending').length,  color: 'text-yellow-500' },
+        { label: 'In Progress',        value: assignedByMe.filter(t => t.status === 'In Progress').length,         color: 'text-blue-500' },
+        { label: 'Completed',          value: assignedByMe.filter(t => t.status === 'Done').length,                color: 'text-emerald-600' },
+        { label: 'Total Assigned',     value: assignedByMe.length,                                                 color: 'text-slate-900 dark:text-white' },
+      ]
 
   async function handleAccept(task) {
     const result = await acceptTask(task.id)
@@ -95,10 +109,53 @@ export default function MyTasksPage() {
       <div>
         <PageHeader
           title="My Tasks"
-          subtitle={`Tasks assigned to ${profile?.full_name}`}
+          subtitle={tab === 'mine'
+            ? `Tasks assigned to ${profile?.full_name}`
+            : `Tasks you've assigned to others`
+          }
         />
 
-        <AcceptanceBanner count={pendingTasks.length} />
+        {/* Tab toggle */}
+        <div className="px-4 sm:px-6 pt-4 sm:pt-5">
+          <div className="inline-flex rounded-xl bg-slate-100 dark:bg-dark-hover p-1 gap-1">
+            <button
+              onClick={() => setTab('mine')}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                tab === 'mine'
+                  ? 'bg-white dark:bg-dark-card text-slate-900 dark:text-white shadow-soft'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+              }`}
+            >
+              Assigned to Me
+              <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-md ${
+                tab === 'mine'
+                  ? 'bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-300'
+                  : 'bg-slate-200/60 text-slate-500 dark:bg-dark-border dark:text-slate-400'
+              }`}>
+                {myTasks.length}
+              </span>
+            </button>
+            <button
+              onClick={() => setTab('assigned')}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                tab === 'assigned'
+                  ? 'bg-white dark:bg-dark-card text-slate-900 dark:text-white shadow-soft'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+              }`}
+            >
+              Assigned by Me
+              <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-md ${
+                tab === 'assigned'
+                  ? 'bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-300'
+                  : 'bg-slate-200/60 text-slate-500 dark:bg-dark-border dark:text-slate-400'
+              }`}>
+                {assignedByMe.length}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {tab === 'mine' && <AcceptanceBanner count={pendingTasks.length} />}
 
         <StatsStrip stats={stats} />
 
@@ -119,15 +176,18 @@ export default function MyTasksPage() {
             />
             {filtered.length === 0
               ? <EmptyState
-                  icon="✓"
+                  icon={tab === 'mine' ? '✓' : '📋'}
                   title="No tasks"
-                  description={Object.keys(filters).length ? "No tasks match your filters." : "You have no tasks assigned to you yet."}
+                  description={tab === 'mine'
+                    ? (Object.keys(filters).length > 1 ? "No tasks match your filters." : "You have no tasks assigned to you yet.")
+                    : (Object.keys(filters).length > 1 ? "No tasks match your filters." : "You haven't assigned any tasks to others yet.")}
                 />
               : <TaskTable
                   tasks={filtered}
                   onRowClick={setActiveTask}
-                  showAssignedBy
-                  showAcceptanceActions
+                  showAssignedBy={tab === 'mine'}
+                  showAssignedTo={tab === 'assigned'}
+                  showAcceptanceActions={tab === 'mine'}
                   onAccept={handleAccept}
                   onDecline={task => setDeclineTarget(task)}
                   selectable

@@ -35,9 +35,16 @@ Project Engine is an internal task management web app. Users authenticate via Go
 - **No global state:** No Redux/Zustand. Auth context + Supabase Realtime + component state.
 - **Filtering:** `applyFilters()` in `src/lib/filters.js` is shared across all pages. Filters by status, urgency, priority, team, acceptance, with full-text search across title, task_id, names.
 - **Theme:** `useTheme` hook persists dark/light in localStorage (`pe-theme`), falls back to `prefers-color-scheme`. Tailwind uses `darkMode: 'class'` strategy.
-- **UI system:** Shared CSS component classes (`.btn`, `.btn-primary`, `.card`, `.form-input`, `.badge`, `.priority-red/orange/yellow/green`, etc.) defined in `src/index.css`. Reusable Framer Motion animation components (`FadeIn`, `SlidePanel`, `PageTransition`, `ModalWrapper`, etc.) in `src/components/ui/animations.jsx`. Icons from `lucide-react`.
+- **UI system:** Shared CSS component classes (`.btn`, `.btn-primary`, `.card`, `.form-input`, `.badge`, `.priority-red/orange/yellow/green`, etc.) defined in `src/index.css`. Custom Tailwind shadows (`shadow-soft`, `shadow-card`, `shadow-elevated`, `shadow-panel`) in `tailwind.config.js`. Reusable Framer Motion animation components (`FadeIn`, `SlidePanel`, `PageTransition`, `ModalWrapper`, etc.) in `src/components/ui/animations.jsx`. Shared components (`PageHeader`, `StatsStrip`, `PriorityBadge`, `FilterRow`, `showToast`, etc.) in `src/components/ui/index.jsx`. Icons from `lucide-react`.
+- **Toast system:** `showToast(message, type)` is imperative — creates DOM elements directly, no React state. Auto-removes after 2.7s.
 - **Routing:** React Router v6. Root `/` redirects to `/my-tasks`. Routes wrapped with `AnimatePresence` for page transitions. `ErrorBoundary` wraps all routes.
 - **Notifications:** `NotificationBell` component shows real-time in-app notifications for pending acceptance, overdue tasks, and recent assignments.
+
+## Critical Gotchas
+
+- **PostgREST FK hints are required.** The `profile_teams` junction table creates ambiguity for PostgREST when joining `profiles` to `teams`. Always use explicit FK hints: `teams!profiles_team_id_fkey(id,name)` for legacy single-team, `teams!profile_teams_team_id_fkey(id,name)` for multi-team. Similarly, tasks use `profiles!tasks_assigned_to_fkey(...)` and `profiles!tasks_assigned_by_fkey(...)`. Omitting hints causes 300-level ambiguity errors.
+- **Profile enrichment must fall back to legacy `team_id`.** Both `useAuth`, `useTasks`, and `useProfiles` fetch `profile_teams` separately then fall back: `team_ids: pt.length > 0 ? pt.map(...) : (p.team_id ? [p.team_id] : [])`. This handles users who haven't been backfilled into the junction table. Skipping the fallback causes managers to see zero team tasks.
+- **Empty `profile_teams` array breaks manager RLS.** If a manager's `profile_teams` rows are missing, the `= ANY(...)` RLS check returns no rows. The app works around this with a fallback query using `profiles.team_id` when the array is empty.
 
 ## Database
 
