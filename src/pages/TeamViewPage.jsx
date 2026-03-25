@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { motion } from 'framer-motion'
 import { useTasks, useTaskActions } from '../hooks/useTasks'
 import { useAuth } from '../hooks/useAuth'
 import { applyFilters } from '../lib/filters'
@@ -8,6 +9,16 @@ import TaskTable from '../components/tasks/TaskTable'
 import TaskDetailPanel from '../components/tasks/TaskDetailPanel'
 import MassActionBar from '../components/tasks/MassActionBar'
 import DeleteConfirmModal from '../components/tasks/DeleteConfirmModal'
+import { Bookmark, X } from 'lucide-react'
+
+const SAVED_VIEW_KEY = 'pe-team-view-filters'
+
+function loadSavedFilters() {
+  try {
+    const saved = localStorage.getItem(SAVED_VIEW_KEY)
+    return saved ? JSON.parse(saved) : null
+  } catch { return null }
+}
 
 const TEAM_COLORS = [
   'border-l-4 border-l-orange-500 bg-orange-50 dark:bg-orange-500/10 dark:text-orange-300',
@@ -22,10 +33,28 @@ export default function TeamViewPage() {
   const { profile, isAdmin } = useAuth()
   const { tasks, teamTasks, loading, refetch } = useTasks()
   const { deleteTasks, updateTasks } = useTaskActions()
-  const [filters,    setFilters]    = useState({})
+  const [filters,    setFilters]    = useState(() => loadSavedFilters() || {})
   const [activeTask, setActiveTask] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [showBulkDelete, setShowBulkDelete] = useState(false)
+
+  const savedFilters = loadSavedFilters()
+  const hasFilters = Object.keys(filters).some(k => {
+    const v = filters[k]
+    return v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0)
+  })
+  const isSaved = savedFilters && JSON.stringify(savedFilters) === JSON.stringify(filters)
+
+  function saveView() {
+    localStorage.setItem(SAVED_VIEW_KEY, JSON.stringify(filters))
+    showToast('Default view saved')
+  }
+
+  function clearSavedView() {
+    localStorage.removeItem(SAVED_VIEW_KEY)
+    setFilters({})
+    showToast('Default view cleared')
+  }
 
   const viewTasks  = isAdmin ? tasks : teamTasks
   const filtered   = applyFilters(viewTasks, filters)
@@ -97,13 +126,53 @@ export default function TeamViewPage() {
 
         <div className="p-4 sm:p-6">
           <div className="card">
-            <FilterRow
-              filters={filters}
-              onChange={(k, v) => setFilters(f => ({ ...f, [k]: v }))}
-              onClear={() => setFilters({})}
-              showTeamFilter={isAdmin}
-              teams={allTeams}
-            />
+            <div className="flex items-start gap-2">
+              <div className="flex-1">
+                <FilterRow
+                  filters={filters}
+                  onChange={(k, v) => setFilters(f => ({ ...f, [k]: v }))}
+                  onClear={() => setFilters({})}
+                  showTeamFilter={isAdmin}
+                  teams={allTeams}
+                />
+              </div>
+              {hasFilters && (
+                <div className="flex items-center gap-1.5 flex-shrink-0 pt-0.5">
+                  <motion.button
+                    onClick={saveView}
+                    className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all
+                      ${isSaved
+                        ? 'bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-300'
+                        : 'bg-slate-100 text-slate-600 hover:bg-brand-50 hover:text-brand-600 dark:bg-dark-hover dark:text-slate-300 dark:hover:bg-brand-500/15 dark:hover:text-brand-300'
+                      }`}
+                    whileTap={{ scale: 0.95 }}
+                    title={isSaved ? 'This is your saved default view' : 'Save current filters as default view'}
+                  >
+                    <Bookmark size={12} className={isSaved ? 'fill-current' : ''} />
+                    {isSaved ? 'Saved' : 'Save view'}
+                  </motion.button>
+                  {savedFilters && (
+                    <button
+                      onClick={clearSavedView}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                      title="Clear saved default view"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              )}
+              {!hasFilters && savedFilters && (
+                <button
+                  onClick={clearSavedView}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-red-500 transition-colors flex-shrink-0"
+                  title="Clear saved default view"
+                >
+                  <Bookmark size={12} className="fill-current" />
+                  Clear default
+                </button>
+              )}
+            </div>
 
             {isAdmin && (
               <MassActionBar
