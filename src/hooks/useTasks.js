@@ -19,9 +19,9 @@ export function useTasks() {
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(null)
 
-  const fetchTasks = useCallback(async () => {
+  const fetchTasks = useCallback(async (silent = false) => {
     if (!profile) return
-    setLoading(true)
+    if (!silent) setLoading(true)
     setError(null)
 
     let query = supabase.from('tasks').select(TASK_SELECT).order('date_assigned', { ascending: false })
@@ -77,7 +77,7 @@ export function useTasks() {
     const channel = supabase
       .channel('tasks-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' },
-        () => fetchTasks())
+        () => fetchTasks(true))
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [profile, fetchTasks])

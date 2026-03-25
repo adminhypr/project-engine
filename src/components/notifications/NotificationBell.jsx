@@ -141,41 +141,47 @@ export default function NotificationBell({ onTaskClick }) {
   const panelRef = useRef(null)
 
   // Fetch recent comments on tasks I'm involved with (assignee or assigner), by other people
+  // Use a ref to track task IDs so the effect only depends on profile, not the tasks array
+  const taskIdsRef = useRef([])
+  const tasksRef = useRef([])
+  taskIdsRef.current = tasks
+    .filter(t => t.assigned_to === profile?.id || t.assigned_by === profile?.id)
+    .map(t => t.id)
+  tasksRef.current = tasks
+
   useEffect(() => {
-    if (!profile?.id || !tasks.length) return
-
-    const myTaskIds = tasks
-      .filter(t => t.assigned_to === profile.id || t.assigned_by === profile.id)
-      .map(t => t.id)
-
-    if (myTaskIds.length === 0) return
+    if (!profile?.id) return
 
     async function fetchComments() {
+      const ids = taskIdsRef.current
+      if (ids.length === 0) return
+
       const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
       const { data } = await supabase
         .from('comments')
         .select('id, task_id, content, created_at, author_id, author:profiles(full_name, avatar_url)')
-        .in('task_id', myTaskIds)
+        .in('task_id', ids)
         .neq('author_id', profile.id)
         .gte('created_at', dayAgo)
         .order('created_at', { ascending: false })
         .limit(20)
 
       if (data) {
-        // Enrich with task title
-        const taskMap = Object.fromEntries(tasks.map(t => [t.id, t.title]))
+        const taskMap = Object.fromEntries(tasksRef.current.map(t => [t.id, t.title]))
         setRecentComments(data.map(c => ({ ...c, task_title: taskMap[c.task_id] || 'Task' })))
       }
     }
-    fetchComments()
+
+    // Initial fetch after a short delay to let tasks load
+    const timer = setTimeout(fetchComments, 1000)
 
     // Realtime: refetch when new comments arrive
     const channel = supabase
       .channel('comments-notif')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, () => fetchComments())
       .subscribe()
-    return () => supabase.removeChannel(channel)
-  }, [profile?.id, tasks.length])
+    return () => { clearTimeout(timer); supabase.removeChannel(channel) }
+  }, [profile?.id])
 
   // Admin/Manager: fetch users with no team assignments
   useEffect(() => {
