@@ -4,7 +4,8 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { PageHeader, showToast } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
-import { Star, X, Plus, Send, Mail } from 'lucide-react'
+import { Star, X, Plus, Send, Mail, Pencil, Trash2, Check, AlertTriangle } from 'lucide-react'
+import { ModalWrapper } from '../components/ui/animations'
 
 export default function SettingsPage() {
   const { profile, isAdmin } = useAuth()
@@ -15,6 +16,8 @@ export default function SettingsPage() {
   const [saving,   setSaving]   = useState({})
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviting,    setInviting]    = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting,     setDeleting]     = useState(false)
 
   useEffect(() => { fetchAll() }, [])
 
@@ -66,6 +69,17 @@ export default function SettingsPage() {
     setInviting(false)
     if (error) showToast('Failed to send invite', 'error')
     else { showToast('Invite sent to ' + email); setInviteEmail('') }
+  }
+
+  async function deleteProfile() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    const { error } = await supabase.functions.invoke('admin-delete-user', {
+      body: { userId: deleteTarget.id }
+    })
+    setDeleting(false)
+    if (error) showToast(error.message || 'Failed to delete user', 'error')
+    else { showToast(`${deleteTarget.full_name} has been deleted`); setDeleteTarget(null); fetchAll() }
   }
 
   // Manager: only teams they belong to
@@ -193,7 +207,7 @@ export default function SettingsPage() {
                     <th className="table-th">Teams</th>
                     {isAdmin && <th className="table-th">Role</th>}
                     {isAdmin && <th className="table-th">Reports To</th>}
-                    {isAdmin && <th className="table-th">Save</th>}
+                    {isAdmin && <th className="table-th">Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -209,6 +223,7 @@ export default function SettingsPage() {
                       onTeamsChange={fetchAll}
                       isAdmin={isAdmin}
                       approverName={profile?.full_name}
+                      onDelete={() => setDeleteTarget(p)}
                     />
                   ))}
                 </tbody>
@@ -218,15 +233,55 @@ export default function SettingsPage() {
           </motion.div>
 
         </div>
+
+        {/* Delete user confirmation modal */}
+        <ModalWrapper isOpen={!!deleteTarget} onClose={() => !deleting && setDeleteTarget(null)}>
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-500/15 flex items-center justify-center">
+                <AlertTriangle size={20} className="text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-900 dark:text-white">Delete User</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">This action cannot be undone</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-700 dark:text-slate-200 mb-1">
+              Are you sure you want to delete <strong>{deleteTarget?.full_name}</strong>?
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
+              This will permanently remove their account and all associated tasks, comments, and team memberships.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                className="btn-ghost px-4 py-2 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={deleteProfile}
+                disabled={deleting}
+                className="btn-danger px-4 py-2 text-sm inline-flex items-center gap-2"
+              >
+                <Trash2 size={14} />
+                {deleting ? 'Deleting...' : 'Delete User'}
+              </button>
+            </div>
+          </div>
+        </ModalWrapper>
       </div>
     </PageTransition>
   )
 }
 
-function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChange, isAdmin, approverName }) {
+function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChange, isAdmin, approverName, onDelete }) {
   const [role,      setRole]      = useState(user.role || 'Staff')
   const [reportsTo, setReportsTo] = useState(user.reports_to || '')
   const [addingTeam, setAddingTeam] = useState(false)
+  const [editingName, setEditingName] = useState(false)
+  const [nameValue,   setNameValue]   = useState(user.full_name || '')
 
   // Multi-team data from profile_teams junction
   const userTeams = (user.profile_teams || []).map(pt => ({
@@ -236,7 +291,7 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
   }))
   const availableTeams = teams.filter(t => !userTeams.some(ut => ut.team_id === t.id))
 
-  const dirty = role !== user.role || reportsTo !== (user.reports_to || '')
+  const dirty = role !== user.role || reportsTo !== (user.reports_to || '') || nameValue.trim() !== (user.full_name || '')
 
   // For managers: can only edit unassigned users (not themselves or already-assigned users)
   const isUnassigned = userTeams.length === 0
@@ -329,7 +384,29 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
                 {user.full_name?.[0] || '?'}
               </div>
           }
-          {user.full_name}
+          {isAdmin && !isSelf && editingName ? (
+            <input
+              autoFocus
+              value={nameValue}
+              onChange={e => setNameValue(e.target.value)}
+              onBlur={() => setEditingName(false)}
+              onKeyDown={e => { if (e.key === 'Enter') setEditingName(false); if (e.key === 'Escape') { setNameValue(user.full_name || ''); setEditingName(false) } }}
+              className="form-input py-0.5 px-1.5 text-sm min-w-[8rem]"
+            />
+          ) : (
+            <span className="flex items-center gap-1 group/name">
+              {nameValue.trim() !== (user.full_name || '') ? nameValue : user.full_name}
+              {isAdmin && !isSelf && (
+                <button
+                  onClick={() => setEditingName(true)}
+                  className="text-slate-300 hover:text-brand-500 dark:text-slate-600 dark:hover:text-brand-400 opacity-0 group-hover/name:opacity-100 transition-all"
+                  title="Edit name"
+                >
+                  <Pencil size={11} />
+                </button>
+              )}
+            </span>
+          )}
           {isUnassigned && <span className="badge bg-yellow-500/15 text-yellow-700 text-xs">Needs setup</span>}
           {isSelf && <span className="badge bg-brand-50 text-brand-700 text-xs">You</span>}
         </div>
@@ -429,16 +506,27 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
       )}
       {isAdmin && (
         <td className="table-td">
-          {!isSelf && dirty && (
-            <motion.button
-              onClick={() => onSave({ role, reports_to: reportsTo || null })}
-              disabled={saving}
-              className="btn-primary py-1 px-3 text-xs"
-              whileTap={{ scale: 0.95 }}
-            >
-              {saving ? '...' : 'Save'}
-            </motion.button>
-          )}
+          <div className="flex items-center gap-1.5">
+            {!isSelf && dirty && (
+              <motion.button
+                onClick={() => onSave({ role, reports_to: reportsTo || null, full_name: nameValue.trim() || user.full_name })}
+                disabled={saving}
+                className="btn-primary py-1 px-3 text-xs"
+                whileTap={{ scale: 0.95 }}
+              >
+                {saving ? '...' : 'Save'}
+              </motion.button>
+            )}
+            {!isSelf && (
+              <button
+                onClick={onDelete}
+                className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 dark:text-slate-600 dark:hover:text-red-400 dark:hover:bg-red-500/10 transition-all"
+                title="Delete user"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
         </td>
       )}
     </tr>
