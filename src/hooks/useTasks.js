@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { getPriority } from '../lib/priority'
 import { getAssignmentType } from '../lib/assignmentType'
@@ -28,8 +28,18 @@ export function useTasks() {
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(null)
 
+  // Refs keep fetchTasks stable so the realtime subscription doesn't tear down/re-subscribe
+  const profileRef = useRef(profile)
+  const isAdminRef = useRef(isAdmin)
+  const isManagerRef = useRef(isManager)
+  useEffect(() => {
+    profileRef.current = profile
+    isAdminRef.current = isAdmin
+    isManagerRef.current = isManager
+  }, [profile, isAdmin, isManager])
+
   const fetchTasks = useCallback(async (silent = false) => {
-    if (!profile) return
+    if (!profileRef.current) return
     if (!silent) setLoading(true)
     setError(null)
 
@@ -105,20 +115,22 @@ export function useTasks() {
 
     setTasks(enriched)
     setLoading(false)
-  }, [profile, isAdmin, isManager])
+  }, []) // profile/isAdmin/isManager accessed via refs to keep identity stable
 
-  useEffect(() => { fetchTasks() }, [fetchTasks])
+  // Initial fetch — re-run only when profile arrives (not on every reference change)
+  const profileId = profile?.id
+  useEffect(() => { fetchTasks() }, [profileId, fetchTasks])
 
-  // Real-time subscription
+  // Real-time subscription — stable deps so the channel isn't torn down/re-created
   useEffect(() => {
-    if (!profile) return
+    if (!profileId) return
     const channel = supabase
       .channel('tasks-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' },
         () => fetchTasks(true))
       .subscribe()
     return () => supabase.removeChannel(channel)
-  }, [profile, fetchTasks])
+  }, [profileId, fetchTasks])
 
   // My tasks only (primary + secondary assignee)
   const myTasks = tasks.filter(t =>

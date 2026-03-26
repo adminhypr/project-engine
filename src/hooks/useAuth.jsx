@@ -182,9 +182,14 @@ export function AuthProvider({ children }) {
 
     // Backup listener for auth state changes (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, newSession) => {
+      async (event, newSession) => {
         if (!mounted) return
         setSession(newSession)
+        if (event === 'TOKEN_REFRESHED') {
+          // Token rotated — session is updated above, but skip profile reload
+          // (profile data hasn't changed, and reloading cascades to useTasks)
+          return
+        }
         if (newSession) {
           await loadProfile(newSession)
         } else {
