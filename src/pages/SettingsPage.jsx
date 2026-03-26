@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { PageHeader, showToast } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
-import { Star, X, Plus, Send, Mail, Pencil, Trash2, Check, AlertTriangle } from 'lucide-react'
+import { Star, X, Plus, Send, Mail, Pencil, Trash2, Check, AlertTriangle, Shield } from 'lucide-react'
 import { ModalWrapper } from '../components/ui/animations'
 
 export default function SettingsPage() {
@@ -23,7 +23,7 @@ export default function SettingsPage() {
 
   async function fetchAll() {
     const [{ data: p }, { data: t }] = await Promise.all([
-      supabase.from('profiles').select('*, teams!profiles_team_id_fkey(id, name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, team:teams!profile_teams_team_id_fkey(id, name))').order('full_name'),
+      supabase.from('profiles').select('*, teams!profiles_team_id_fkey(id, name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))').order('full_name'),
       supabase.from('teams').select('*').order('name')
     ])
     const profileList = p || []
@@ -82,8 +82,14 @@ export default function SettingsPage() {
     else { showToast(`${deleteTarget.full_name} has been deleted`); setDeleteTarget(null); fetchAll() }
   }
 
-  // Manager: only teams they belong to
-  const myTeamIds = profile?.team_ids || (profile?.team_id ? [profile.team_id] : [])
+  // Manager: only teams where they have Manager role (per-team roles)
+  const mgrTeamIds = (profile?.all_teams || [])
+    .filter(t => t.role === 'Manager')
+    .map(t => t.id)
+  // Fallback to all team_ids if no per-team role data yet
+  const myTeamIds = mgrTeamIds.length > 0
+    ? mgrTeamIds
+    : (profile?.team_ids || (profile?.team_id ? [profile.team_id] : []))
   const managerTeams = isAdmin ? teams : teams.filter(t => myTeamIds.includes(t.id))
 
   // Manager: only show unassigned users + themselves (for context)
@@ -205,7 +211,7 @@ export default function SettingsPage() {
                     <th className="table-th">Name</th>
                     <th className="table-th">Email</th>
                     <th className="table-th">Teams</th>
-                    {isAdmin && <th className="table-th">Role</th>}
+                    {isAdmin && <th className="table-th">Admin</th>}
                     {isAdmin && <th className="table-th">Reports To</th>}
                     {isAdmin && <th className="table-th">Actions</th>}
                   </tr>
@@ -277,7 +283,6 @@ export default function SettingsPage() {
 }
 
 function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChange, isAdmin, approverName, onDelete }) {
-  const [role,      setRole]      = useState(user.role || 'Staff')
   const [reportsTo, setReportsTo] = useState(user.reports_to || '')
   const [addingTeam, setAddingTeam] = useState(false)
   const [editingName, setEditingName] = useState(false)
@@ -287,11 +292,12 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
   const userTeams = (user.profile_teams || []).map(pt => ({
     team_id: pt.team_id,
     is_primary: pt.is_primary,
+    role: pt.role || 'Staff',
     name: pt.team?.name || teams.find(t => t.id === pt.team_id)?.name || 'Unknown'
   }))
   const availableTeams = teams.filter(t => !userTeams.some(ut => ut.team_id === t.id))
 
-  const dirty = role !== user.role || reportsTo !== (user.reports_to || '') || nameValue.trim() !== (user.full_name || '')
+  const dirty = reportsTo !== (user.reports_to || '') || nameValue.trim() !== (user.full_name || '')
 
   // For managers: can only edit unassigned users (not themselves or already-assigned users)
   const isUnassigned = userTeams.length === 0
@@ -374,6 +380,21 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
     onTeamsChange()
   }
 
+  async function updateTeamRole(teamId, newRole) {
+    const { error } = await supabase.from('profile_teams')
+      .update({ role: newRole })
+      .eq('profile_id', user.id)
+      .eq('team_id', teamId)
+    if (error) { showToast(error.message, 'error'); return }
+    showToast(`Role updated to ${newRole}`)
+    onTeamsChange()
+  }
+
+  async function toggleAdmin() {
+    const newRole = user.role === 'Admin' ? (userTeams.some(t => t.role === 'Manager') ? 'Manager' : 'Staff') : 'Admin'
+    onSave({ role: newRole })
+  }
+
   return (
     <tr className={`border-b border-slate-100 dark:border-dark-border ${isUnassigned ? 'bg-yellow-500/5' : ''}`}>
       <td className="table-td font-medium">
@@ -441,6 +462,22 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
                   <Star size={10} className="text-brand-500 dark:text-brand-400 fill-current" />
                 )}
                 {t.name}
+                {isAdmin && !isSelf && (
+                  <button
+                    onClick={() => updateTeamRole(t.team_id, t.role === 'Manager' ? 'Staff' : 'Manager')}
+                    className={`text-[10px] font-semibold px-1 py-px rounded transition-colors ml-0.5
+                      ${t.role === 'Manager'
+                        ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:hover:bg-amber-500/30'
+                        : 'bg-slate-100 text-slate-400 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-500 dark:hover:bg-slate-600'
+                      }`}
+                    title={`Click to change to ${t.role === 'Manager' ? 'Staff' : 'Manager'}`}
+                  >
+                    {t.role === 'Manager' ? 'Mgr' : 'Staff'}
+                  </button>
+                )}
+                {!(isAdmin && !isSelf) && t.role === 'Manager' && (
+                  <span className="text-[10px] font-semibold px-1 py-px rounded bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 ml-0.5">Mgr</span>
+                )}
                 {canEdit && (
                   <button
                     onClick={() => removeTeamFromUser(t.team_id)}
@@ -477,16 +514,24 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
       </td>
       {isAdmin && (
         <td className="table-td">
-          <select
-            value={role}
-            onChange={e => setRole(e.target.value)}
-            className="form-input py-1 text-xs min-w-[6.5rem]"
-            disabled={isSelf}
-          >
-            <option>Staff</option>
-            <option>Manager</option>
-            <option>Admin</option>
-          </select>
+          {isSelf ? (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-purple-700 dark:text-purple-300">
+              <Shield size={12} /> Admin
+            </span>
+          ) : (
+            <button
+              onClick={toggleAdmin}
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all
+                ${user.role === 'Admin'
+                  ? 'bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-500/20 dark:text-purple-300 dark:hover:bg-purple-500/30'
+                  : 'bg-slate-100 text-slate-400 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-500 dark:hover:bg-slate-600'
+                }`}
+              title={user.role === 'Admin' ? 'Remove Admin access' : 'Grant Admin access'}
+            >
+              <Shield size={12} />
+              {user.role === 'Admin' ? 'Admin' : '—'}
+            </button>
+          )}
         </td>
       )}
       {isAdmin && (
@@ -509,7 +554,7 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
           <div className="flex items-center gap-1.5">
             {!isSelf && dirty && (
               <motion.button
-                onClick={() => onSave({ role, reports_to: reportsTo || null, full_name: nameValue.trim() || user.full_name })}
+                onClick={() => onSave({ reports_to: reportsTo || null, full_name: nameValue.trim() || user.full_name })}
                 disabled={saving}
                 className="btn-primary py-1 px-3 text-xs"
                 whileTap={{ scale: 0.95 }}

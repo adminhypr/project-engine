@@ -40,7 +40,8 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   const [editWhoTo, setEditWhoTo] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
 
-  const canEdit = isAdmin || isManager ||
+  const canEdit = isAdmin ||
+    (task?.team_id && profile?.team_roles?.[task.team_id] === 'Manager') ||
     task?.assigned_to === profile?.id ||
     task?.assigned_by === profile?.id
   const isOwner = task?.assigned_by === profile?.id || isAdmin

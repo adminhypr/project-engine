@@ -91,6 +91,37 @@ describe('getAssignmentType', () => {
     const s2 = makeUser({ id: 's2', role: 'Staff', team_id: 'team-a', team_ids: [] })
     expect(getAssignmentType(s1, s2)).toBe('Peer')
   })
+
+  // Per-team role tests
+  it('returns Superior when assigner is Manager in target team via team_roles', () => {
+    const mgr = makeUser({ id: 'm1', role: 'Manager', team_ids: ['team-a', 'team-b'], team_roles: { 'team-a': 'Manager', 'team-b': 'Staff' } })
+    const staff = makeUser({ id: 's1', role: 'Staff', team_ids: ['team-a'], team_roles: { 'team-a': 'Staff' } })
+    expect(getAssignmentType(mgr, staff, 'team-a')).toBe('Superior')
+  })
+
+  it('returns Peer when assigner is Staff in target team despite being Manager elsewhere', () => {
+    const mgr = makeUser({ id: 'm1', role: 'Manager', team_ids: ['team-a', 'team-b'], team_roles: { 'team-a': 'Manager', 'team-b': 'Staff' } })
+    const staff = makeUser({ id: 's1', role: 'Staff', team_ids: ['team-b'], team_roles: { 'team-b': 'Staff' } })
+    expect(getAssignmentType(mgr, staff, 'team-b')).toBe('Peer')
+  })
+
+  it('returns Superior when Admin assigns regardless of team_roles', () => {
+    const admin = makeUser({ id: 'a1', role: 'Admin', team_ids: ['team-a'], team_roles: { 'team-a': 'Manager' } })
+    const staff = makeUser({ id: 's1', role: 'Staff', team_ids: ['team-a'], team_roles: { 'team-a': 'Staff' } })
+    expect(getAssignmentType(admin, staff, 'team-a')).toBe('Superior')
+  })
+
+  it('falls back to global role when teamId not provided with team_roles', () => {
+    const mgr = makeUser({ id: 'm1', role: 'Manager', team_ids: ['team-a'], team_roles: { 'team-a': 'Manager' } })
+    const staff = makeUser({ id: 's1', role: 'Staff', team_ids: ['team-a'], team_roles: { 'team-a': 'Staff' } })
+    expect(getAssignmentType(mgr, staff)).toBe('Superior')
+  })
+
+  it('returns Upward when Staff in target team assigns to Manager in that team', () => {
+    const staff = makeUser({ id: 's1', role: 'Staff', team_ids: ['team-a'], team_roles: { 'team-a': 'Staff' } })
+    const mgr = makeUser({ id: 'm1', role: 'Manager', team_ids: ['team-a'], team_roles: { 'team-a': 'Manager' } })
+    expect(getAssignmentType(staff, mgr, 'team-a')).toBe('Upward')
+  })
 })
 
 describe('ROLE_RANK', () => {

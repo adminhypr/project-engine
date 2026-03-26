@@ -38,7 +38,7 @@ export default function AssignTaskPage() {
     : profile
   const selectedAssignee = profiles.find(p => p.id === form.assigneeId)
   const previewType = selectedAssignee && effectiveAssigner
-    ? getAssignmentType(effectiveAssigner, selectedAssignee)
+    ? getAssignmentType(effectiveAssigner, selectedAssignee, selectedTeamId || undefined)
     : null
 
   // Multi-team: does the assignee have multiple teams?

@@ -28,6 +28,7 @@ Project Engine is an internal task management web app. Users authenticate via Go
 - **Data layer:** `useTasks` hook handles fetching, real-time subscriptions, and task enrichment (priority calculation). `useTaskActions` provides `assignTask`, `updateTask`, `addComment`, `getTaskComments`, `acceptTask`, `declineTask`, `reassignTask`. `useProfiles` fetches all users and teams.
 - **Priority engine:** `getPriority()` in `src/lib/priority.js` computes red/orange/yellow/green from due dates or last-updated timestamps. Always computed at read time, never persisted. Thresholds: red = overdue or 36h+ inactive, orange = due in 4-12h, yellow = due in 12-24h, green = on track.
 - **Multi-team membership:** Users can belong to multiple teams via `profile_teams` junction table. One team is marked `is_primary`. `profiles.team_id` is kept in sync as a denormalized primary. Profiles are enriched with `team_ids` (array) and `all_teams` (with names). Settings page uses chip UI for team management. Assign page shows team picker when assignee has 2+ teams.
+- **Per-team roles:** Users can have different roles (Staff/Manager) per team via `profile_teams.role`. Admin remains a global role on `profiles.role`. The profile's effective role is auto-synced as the max across all team roles (but never downgrades an Admin). `profile.team_roles` is a `{team_id: role}` map enriched at fetch time. Assignment type uses the assigner's role in the target team context.
 - **Assignment type:** `getAssignmentType()` in `src/lib/assignmentType.js` compares role ranks (Admin=3, Manager=2, Staff=1) and team membership (shares any team = same team). Stored on the task record at creation; reassignments don't change the original type.
 - **Acceptance flow:** Superior and Self assignments auto-accept via DB trigger (before insert). Peer/CrossTeam/Upward default to Pending. Reassignment resets acceptance to Pending.
 - **Row Level Security:** Supabase RLS policies enforce data access — managers see own team + users who report to them, staff see own + assigned tasks.
@@ -48,7 +49,7 @@ Project Engine is an internal task management web app. Users authenticate via Go
 
 ## Database
 
-Schema across 5 migrations in `supabase/migrations/`:
+Schema across 10 migrations in `supabase/migrations/`:
 
 - **001_initial.sql** — `profiles`, `teams`, `tasks`, `comments` tables. Auto-creates profile on first login. `last_updated` auto-updates via trigger. `email_alert_sent` resets on status change.
 - **002_audit_log.sql** — `task_audit_log` table. Events: task_created, status_changed, urgency_changed, due_date_changed, notes_updated, reassigned, accepted, declined, assigner_override. Write-only via service role triggers.
@@ -57,13 +58,18 @@ Schema across 5 migrations in `supabase/migrations/`:
 - **005_task_icon.sql** — Adds optional `icon` text column to tasks for visual categorization.
 - **006_task_delete.sql** — Adds delete RLS policy for tasks (admins, managers for own team, assignee/assigner).
 - **007_multi_team.sql** — `profile_teams` junction table for multi-team membership. Backfills from `profiles.team_id`. Updates all RLS policies to use `profile_teams` for manager team checks. `profiles.team_id` kept as denormalized primary team.
+- **008_manager_setup_users.sql** — Allows managers to add `profile_teams` rows and update `profiles.team_id` for unassigned users (users with no team).
+- **009_admin_edit_delete_users.sql** — Admin-only RLS policies for editing and deleting user profiles.
+- **010_per_team_role.sql** — Adds `role` column to `profile_teams`. Users can have different roles per team (Staff/Manager). `profiles.role` auto-syncs as the effective (max) role but never downgrades Admin.
 
 ## Supabase Edge Functions
 
-Both are Deno-based and use Resend for email delivery:
+All are Deno-based and use Resend for email delivery:
 
 - **`supabase/functions/notify/`** — Triggered by database webhooks on task INSERT/UPDATE. Sends transactional emails for: task assigned (skips self-assignments), task declined (with reason), task completed, task reassigned.
 - **`supabase/functions/send-alerts/`** — Scheduled cron (every 2h). Sends red alerts (overdue/inactive) to assignee + manager CC, and due reminders at 4h/24h milestones. `email_alert_sent` flag prevents duplicate red alerts.
+- **`supabase/functions/user-notify/`** — Called from the frontend via `supabase.functions.invoke()`. Sends user lifecycle emails: approval notifications and invite emails.
+- **`supabase/functions/admin-delete-user/`** — Admin-only. Deletes a user from `auth.users` (cascades to profiles, tasks, comments). Requires service role.
 
 ## Environment Variables
 
@@ -74,8 +80,8 @@ Required in `.env.local`:
 ## Role Hierarchy and Views
 
 - **Staff:** My Tasks, Assign a Task
-- **Manager:** Above + Team View (all assigned teams), own-teams Reports
-- **Admin:** Everything + Admin Overview, all Reports, Settings (user/team management)
+- **Manager:** Above + Team View (all assigned teams), own-teams Reports, limited Settings (set up unassigned users on their teams)
+- **Admin:** Everything + Admin Overview, all Reports, Settings (full user/team management, edit/delete users)
 
 `isManager` in useAuth returns true for both Manager and Admin roles.
 

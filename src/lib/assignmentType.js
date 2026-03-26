@@ -13,12 +13,19 @@ function shareTeam(a, b) {
   return a.team_id != null && a.team_id === b.team_id
 }
 
-export function getAssignmentType(assigner, assignee) {
+export function getAssignmentType(assigner, assignee, teamId) {
   if (!assigner || !assignee) return 'Unknown'
-  const ar = ROLE_RANK[assigner.role] || 1
-  const er = ROLE_RANK[assignee.role] || 1
-  if (assigner.id === assignee.id)              return 'Self'
-  if (assigner.role === 'Admin')                return 'Superior'
+  if (assigner.id === assignee.id) return 'Self'
+  if (assigner.role === 'Admin') return 'Superior'
+
+  // Per-team role: when teamId provided, use team-specific roles
+  const ar = teamId && assigner.team_roles?.[teamId]
+    ? (ROLE_RANK[assigner.team_roles[teamId]] || 1)
+    : (ROLE_RANK[assigner.role] || 1)
+  const er = teamId && assignee.team_roles?.[teamId]
+    ? (ROLE_RANK[assignee.team_roles[teamId]] || 1)
+    : (ROLE_RANK[assignee.role] || 1)
+
   const sameTeam = shareTeam(assigner, assignee)
   if (ar > er && sameTeam)  return 'Superior'
   if (ar > er && !sameTeam) return 'CrossTeam'

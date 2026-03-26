@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
 const AuthContext = createContext(null)
@@ -37,14 +37,15 @@ async function fetchProfileDirect(userId, accessToken) {
     if (profile) {
       try {
         const ptRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/profile_teams?profile_id=eq.${userId}&select=team_id,is_primary,team:teams(id,name)`,
+          `${SUPABASE_URL}/rest/v1/profile_teams?profile_id=eq.${userId}&select=team_id,is_primary,role,team:teams(id,name)`,
           { headers }
         )
         if (ptRes.ok) {
           const pt = await ptRes.json()
           if (pt.length > 0) {
             profile.team_ids = pt.map(r => r.team_id)
-            profile.all_teams = pt.map(r => ({ ...r.team, is_primary: r.is_primary }))
+            profile.all_teams = pt.map(r => ({ ...r.team, is_primary: r.is_primary, role: r.role }))
+            profile.team_roles = Object.fromEntries(pt.map(r => [r.team_id, r.role]))
             const primary = pt.find(r => r.is_primary)
             if (primary?.team) {
               profile.teams = primary.team
@@ -53,7 +54,8 @@ async function fetchProfileDirect(userId, accessToken) {
           } else {
             // No profile_teams rows — fall back to legacy team_id
             profile.team_ids = profile.team_id ? [profile.team_id] : []
-            profile.all_teams = profile.teams ? [{ ...profile.teams, is_primary: true }] : []
+            profile.all_teams = profile.teams ? [{ ...profile.teams, is_primary: true, role: profile.role === 'Admin' ? 'Manager' : profile.role }] : []
+            profile.team_roles = profile.team_id ? { [profile.team_id]: profile.role === 'Admin' ? 'Manager' : profile.role } : {}
           }
         }
       } catch {
@@ -220,6 +222,11 @@ export function AuthProvider({ children }) {
     setLoading(false)
   }, [session, loadProfile])
 
+  const isManagerForTeam = useCallback((teamId) => {
+    if (profile?.role === 'Admin') return true
+    return profile?.team_roles?.[teamId] === 'Manager'
+  }, [profile])
+
   const value = {
     session,
     profile,
@@ -227,7 +234,8 @@ export function AuthProvider({ children }) {
     refreshProfile,
     isAdmin:   profile?.role === 'Admin',
     isManager: profile?.role === 'Manager' || profile?.role === 'Admin',
-    isStaff:   profile?.role === 'Staff'
+    isStaff:   profile?.role === 'Staff',
+    isManagerForTeam
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

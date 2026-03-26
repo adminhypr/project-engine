@@ -57,9 +57,15 @@ export default function ReportsPage() {
       .gte('date_assigned', dateFrom)
       .lte('date_assigned', dateTo + 'T23:59:59')
 
-      // Multi-team: filter by all teams the manager belongs to
+      // Per-team role: only include teams where user is Manager
       if (!isAdmin) {
-        const myTeamIds = profile.team_ids?.length > 0 ? profile.team_ids : (profile.team_id ? [profile.team_id] : [])
+        const mgrTeamIds = (profile.all_teams || [])
+          .filter(t => t.role === 'Manager')
+          .map(t => t.id)
+        // Fallback to all teams if no per-team role data yet
+        const myTeamIds = mgrTeamIds.length > 0
+          ? mgrTeamIds
+          : (profile.team_ids?.length > 0 ? profile.team_ids : (profile.team_id ? [profile.team_id] : []))
         if (myTeamIds.length > 0) tq = tq.in('team_id', myTeamIds)
       }
 

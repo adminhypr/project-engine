@@ -7,8 +7,8 @@ import { useAuth } from './useAuth'
 
 const TASK_SELECT = `
   *,
-  assignee:profiles!tasks_assigned_to_fkey(id, full_name, email, role, team_id, reports_to, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, team:teams!profile_teams_team_id_fkey(id, name))),
-  assigner:profiles!tasks_assigned_by_fkey(id, full_name, email, role, team_id, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, team:teams!profile_teams_team_id_fkey(id, name))),
+  assignee:profiles!tasks_assigned_to_fkey(id, full_name, email, role, team_id, reports_to, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
+  assigner:profiles!tasks_assigned_by_fkey(id, full_name, email, role, team_id, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
   team:teams(id, name),
   comments(count)
 `
@@ -53,7 +53,8 @@ export function useTasks() {
         return {
           ...p,
           team_ids: pt.length > 0 ? pt.map(r => r.team_id) : (p.team_id ? [p.team_id] : []),
-          all_teams: pt.length > 0 ? pt.map(r => ({ ...r.team, is_primary: r.is_primary })) : (p.teams ? [{ id: p.team_id, name: p.teams.name, is_primary: true }] : [])
+          all_teams: pt.length > 0 ? pt.map(r => ({ ...r.team, is_primary: r.is_primary, role: r.role })) : (p.teams ? [{ id: p.team_id, name: p.teams.name, is_primary: true }] : []),
+          team_roles: pt.length > 0 ? Object.fromEntries(pt.map(r => [r.team_id, r.role])) : {}
         }
       }
       return {
@@ -85,11 +86,12 @@ export function useTasks() {
   // My tasks only
   const myTasks = tasks.filter(t => t.assigned_to === profile?.id)
 
-  // Team tasks (for manager view) — includes all teams the manager belongs to
+  // Team tasks (for manager view) — only teams where user has Manager role
   const teamTasks = isManager
     ? tasks.filter(t => {
-        const myTeamIds = profile?.team_ids?.length > 0 ? profile.team_ids : (profile?.team_id ? [profile.team_id] : [])
-        return myTeamIds.includes(t.team_id)
+        if (profile?.role === 'Admin') return true
+        const teamRoles = profile?.team_roles || {}
+        return teamRoles[t.team_id] === 'Manager'
       })
     : []
 
@@ -108,18 +110,16 @@ export function useTaskActions() {
       : profile
     const actualAssigner = profile
 
-    const assignmentType = getAssignmentType(statedAssigner, assignee)
+    const resolvedTeam = teamId || assignee?.team_id
+    const assignmentType = getAssignmentType(statedAssigner, assignee, resolvedTeam)
     const taskId = generateTaskId()
-
-    // Use explicit teamId if provided (multi-team picker), else assignee's primary team
-    const resolvedTeamId = teamId || assignee?.team_id
 
     const { data, error } = await supabase.from('tasks').insert({
       task_id:         taskId,
       assigned_to:     assigneeId,
       assigned_by:     statedAssigner?.id || profile.id,
       assignment_type: assignmentType,
-      team_id:         resolvedTeamId,
+      team_id:         resolvedTeam,
       title,
       urgency:         urgency || 'Med',
       due_date:        dueDate || null,
@@ -252,7 +252,7 @@ export function useProfiles() {
   useEffect(() => {
     async function load() {
       const [{ data: pData }, { data: tData }] = await Promise.all([
-        supabase.from('profiles').select('*, teams!profiles_team_id_fkey(id, name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, team:teams!profile_teams_team_id_fkey(id, name))').order('full_name'),
+        supabase.from('profiles').select('*, teams!profiles_team_id_fkey(id, name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))').order('full_name'),
         supabase.from('teams').select('*').order('name')
       ])
       // Resolve manager names + enrich with multi-team data
@@ -263,7 +263,8 @@ export function useProfiles() {
         return {
           ...p,
           team_ids: pt.length > 0 ? pt.map(r => r.team_id) : (p.team_id ? [p.team_id] : []),
-          all_teams: pt.length > 0 ? pt.map(r => ({ ...r.team, is_primary: r.is_primary })) : (p.teams ? [{ ...p.teams, is_primary: true }] : []),
+          all_teams: pt.length > 0 ? pt.map(r => ({ ...r.team, is_primary: r.is_primary, role: r.role })) : (p.teams ? [{ ...p.teams, is_primary: true }] : []),
+          team_roles: pt.length > 0 ? Object.fromEntries(pt.map(r => [r.team_id, r.role])) : {},
           manager: p.reports_to ? { id: p.reports_to, full_name: profileMap[p.reports_to]?.full_name } : null
         }
       })
