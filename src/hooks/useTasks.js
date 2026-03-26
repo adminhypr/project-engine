@@ -9,7 +9,7 @@ const TASK_SELECT_FULL = `
   *,
   assignee:profiles!tasks_assigned_to_fkey(id, full_name, email, role, team_id, reports_to, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
   assigner:profiles!tasks_assigned_by_fkey(id, full_name, email, role, team_id, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
-  task_assignees(profile_id, is_primary, profile:profiles(id, full_name, avatar_url)),
+  task_assignees!task_assignees_task_id_fkey(profile_id, is_primary, profile:profiles!task_assignees_profile_id_fkey(id, full_name, avatar_url)),
   team:teams(id, name),
   comments(count)
 `
@@ -175,16 +175,15 @@ export function useTaskActions() {
 
     if (error) return { ok: false, msg: error.message }
 
-    // Insert all assignees into junction table (non-blocking if table doesn't exist yet)
+    // Insert all assignees into junction table — must await so data exists before real-time refetch
     if (data) {
       const rows = ids.map((id, i) => ({
         task_id: data.id,
         profile_id: id,
         is_primary: i === 0,
       }))
-      supabase.from('task_assignees').insert(rows).then(({ error: jErr }) => {
-        if (jErr) console.warn('task_assignees insert skipped:', jErr.message)
-      })
+      const { error: jErr } = await supabase.from('task_assignees').insert(rows)
+      if (jErr) console.warn('task_assignees insert failed:', jErr.message)
     }
 
     // Log assigner override to audit log
