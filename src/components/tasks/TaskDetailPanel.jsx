@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { X, Send, Check, RefreshCw, Pencil, Trash2 } from 'lucide-react'
+import { X, Send, Check, RefreshCw, Pencil, Trash2, Plus, Users } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useTaskActions, useProfiles } from '../../hooks/useTasks'
 import { useAuth } from '../../hooks/useAuth'
@@ -14,7 +14,7 @@ import DeleteConfirmModal from './DeleteConfirmModal'
 
 export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   const { profile, isAdmin, isManager } = useAuth()
-  const { updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask, deleteTask } = useTaskActions()
+  const { updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask, deleteTask, addAssignee, removeAssignee } = useTaskActions()
   const { profiles: allProfiles } = useProfiles()
 
   const [status,   setStatus]   = useState(task?.status || 'Not Started')
@@ -39,6 +39,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   const [editDueDate, setEditDueDate] = useState('')
   const [editWhoTo, setEditWhoTo] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
+  const [showAddAssignee, setShowAddAssignee] = useState(false)
 
   const canEdit = isAdmin ||
     (task?.team_id && profile?.team_roles?.[task.team_id] === 'Manager') ||
@@ -48,7 +49,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
 
   const isPending = task?.acceptance_status === 'Pending'
   const isDeclined = task?.acceptance_status === 'Declined'
-  const isMyTask = task?.assigned_to === profile?.id
+  const isMyTask = task?.assigned_to === profile?.id || task?.task_assignees?.some(ta => ta.profile_id === profile?.id)
   const canAcceptDecline = isPending && isMyTask
   const canReassign = isDeclined && (task?.assigned_by === profile?.id || isAdmin)
 
@@ -77,6 +78,10 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   }
 
   async function handleSaveEdit() {
+    if (editDueDate && new Date(editDueDate) < new Date()) {
+      showToast('Due date must be in the future', 'error')
+      return
+    }
     setSavingEdit(true)
     const updates = {
       title: editTitle.trim(),
@@ -135,6 +140,27 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
     if (result.ok) {
       showToast('Task deleted')
       onClose()
+      onUpdated?.()
+    } else {
+      showToast(result.msg, 'error')
+    }
+  }
+
+  async function handleAddAssignee(profileId) {
+    const result = await addAssignee(task.id, profileId)
+    if (result.ok) {
+      showToast('Assignee added')
+      setShowAddAssignee(false)
+      onUpdated?.()
+    } else {
+      showToast(result.msg, 'error')
+    }
+  }
+
+  async function handleRemoveAssignee(profileId) {
+    const result = await removeAssignee(task.id, profileId)
+    if (result.ok) {
+      showToast('Assignee removed')
       onUpdated?.()
     } else {
       showToast(result.msg, 'error')
@@ -356,11 +382,57 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
         {/* Meta grid */}
         <div className="px-4 sm:px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-3 border-b border-slate-100 dark:border-dark-border">
           {[
-            { label: 'Assigned To',   value: task.assignee?.full_name },
+            { label: 'Assigned To',   value: (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(task.assignees?.length > 0 ? task.assignees : [{ id: task.assigned_to, full_name: task.assignee?.full_name, is_primary: true }]).map(a => (
+                  <span key={a.id} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium
+                    ${a.is_primary
+                      ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300'
+                      : 'bg-slate-100 text-slate-600 dark:bg-dark-hover dark:text-slate-300'
+                    }`}>
+                    {a.full_name || 'Unknown'}
+                    {!a.is_primary && isOwner && (
+                      <button
+                        onClick={() => handleRemoveAssignee(a.id)}
+                        className="text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
+                      >
+                        <X size={10} />
+                      </button>
+                    )}
+                  </span>
+                ))}
+                {isOwner && (
+                  showAddAssignee ? (
+                    <select
+                      autoFocus
+                      className="form-input text-xs py-0.5 px-2 w-auto min-w-[120px]"
+                      value=""
+                      onChange={e => { if (e.target.value) handleAddAssignee(e.target.value) }}
+                      onBlur={() => setShowAddAssignee(false)}
+                    >
+                      <option value="">Select...</option>
+                      {allProfiles
+                        .filter(p => !task.assignees?.some(a => a.id === p.id) && p.id !== task.assigned_to)
+                        .map(p => (
+                          <option key={p.id} value={p.id}>{p.full_name}</option>
+                        ))
+                      }
+                    </select>
+                  ) : (
+                    <button
+                      onClick={() => setShowAddAssignee(true)}
+                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg text-[10px] font-medium text-slate-400 hover:text-brand-500 hover:bg-brand-50 dark:hover:bg-brand-500/10 transition-colors"
+                    >
+                      <Plus size={10} /> Add
+                    </button>
+                  )
+                )}
+              </div>
+            )},
             { label: 'Assigned By',   value: task.assigner?.full_name },
             { label: 'Date Assigned', value: formatDate(task.date_assigned) },
             { label: 'Due Date',      value: editing
-              ? <input type="datetime-local" value={editDueDate} onChange={e => setEditDueDate(e.target.value)} className="form-input text-sm py-1" />
+              ? <input type="datetime-local" value={editDueDate} onChange={e => setEditDueDate(e.target.value)} min={new Date().toISOString().slice(0, 16)} className="form-input text-sm py-1" />
               : task.due_date ? formatDate(task.due_date) : '—'
             },
             { label: 'Team',          value: task.team?.name },

@@ -9,6 +9,7 @@ const TASK_SELECT = `
   *,
   assignee:profiles!tasks_assigned_to_fkey(id, full_name, email, role, team_id, reports_to, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
   assigner:profiles!tasks_assigned_by_fkey(id, full_name, email, role, team_id, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
+  task_assignees(profile_id, is_primary, profile:profiles(id, full_name, avatar_url)),
   team:teams(id, name),
   comments(count)
 `
@@ -57,12 +58,21 @@ export function useTasks() {
           team_roles: pt.length > 0 ? Object.fromEntries(pt.map(r => [r.team_id, r.role])) : {}
         }
       }
+      // Build assignees array from junction table
+      const assignees = (t.task_assignees || []).map(ta => ({
+        id: ta.profile?.id || ta.profile_id,
+        full_name: ta.profile?.full_name,
+        avatar_url: ta.profile?.avatar_url,
+        is_primary: ta.is_primary,
+      }))
+
       return {
         ...t,
         priority:      getPriority(t),
         comment_count: t.comments?.[0]?.count || 0,
         assignee:      t.assignee ? { ...enrichProfile(t.assignee), manager: managerMap[t.assignee.reports_to] || null } : t.assignee,
         assigner:      enrichProfile(t.assigner),
+        assignees,
       }
     })
 
@@ -83,8 +93,11 @@ export function useTasks() {
     return () => supabase.removeChannel(channel)
   }, [profile, fetchTasks])
 
-  // My tasks only
-  const myTasks = tasks.filter(t => t.assigned_to === profile?.id)
+  // My tasks only (primary + secondary assignee)
+  const myTasks = tasks.filter(t =>
+    t.assigned_to === profile?.id ||
+    t.task_assignees?.some(ta => ta.profile_id === profile?.id)
+  )
 
   // Team tasks (for manager view) — only teams where user has Manager role
   const teamTasks = isManager
@@ -102,9 +115,12 @@ export function useTaskActions() {
   const { profile } = useAuth()
 
   async function assignTask(payload) {
-    const { assigneeId, title, urgency, dueDate, whoTo, notes, icon, allProfiles, overrideAssignerId, teamId } = payload
+    const { assigneeIds, assigneeId, title, urgency, dueDate, whoTo, notes, icon, allProfiles, overrideAssignerId, teamId } = payload
 
-    const assignee = allProfiles.find(p => p.id === assigneeId)
+    // Support both single assigneeId (legacy) and multiple assigneeIds
+    const ids = assigneeIds?.length ? assigneeIds : [assigneeId]
+    const primaryId = ids[0]
+    const assignee = allProfiles.find(p => p.id === primaryId)
     const statedAssigner = overrideAssignerId
       ? allProfiles.find(p => p.id === overrideAssignerId)
       : profile
@@ -116,7 +132,7 @@ export function useTaskActions() {
 
     const { data, error } = await supabase.from('tasks').insert({
       task_id:         taskId,
-      assigned_to:     assigneeId,
+      assigned_to:     primaryId,
       assigned_by:     statedAssigner?.id || profile.id,
       assignment_type: assignmentType,
       team_id:         resolvedTeam,
@@ -131,6 +147,16 @@ export function useTaskActions() {
     }).select().single()
 
     if (error) return { ok: false, msg: error.message }
+
+    // Insert all assignees into junction table
+    if (data) {
+      const rows = ids.map((id, i) => ({
+        task_id: data.id,
+        profile_id: id,
+        is_primary: i === 0,
+      }))
+      await supabase.from('task_assignees').insert(rows)
+    }
 
     // Log assigner override to audit log
     if (overrideAssignerId && overrideAssignerId !== profile.id && data) {
@@ -241,7 +267,26 @@ export function useTaskActions() {
     return { ok: true }
   }
 
-  return { assignTask, updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask, deleteTask, deleteTasks, updateTasks }
+  async function addAssignee(taskId, profileId) {
+    const { error } = await supabase.from('task_assignees').insert({
+      task_id: taskId,
+      profile_id: profileId,
+      is_primary: false,
+    })
+    if (error) return { ok: false, msg: error.message }
+    return { ok: true }
+  }
+
+  async function removeAssignee(taskId, profileId) {
+    const { error } = await supabase.from('task_assignees')
+      .delete()
+      .eq('task_id', taskId)
+      .eq('profile_id', profileId)
+    if (error) return { ok: false, msg: error.message }
+    return { ok: true }
+  }
+
+  return { assignTask, updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask, deleteTask, deleteTasks, updateTasks, addAssignee, removeAssignee }
 }
 
 export function useProfiles() {

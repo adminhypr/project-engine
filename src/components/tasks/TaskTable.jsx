@@ -92,6 +92,11 @@ export default function TaskTable({
                     <span className="flex items-center gap-1">
                       <User size={11} className="text-slate-400 dark:text-slate-500" />
                       {task.assignee.full_name}
+                      {task.assignees?.length > 1 && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-300">
+                          +{task.assignees.length - 1}
+                        </span>
+                      )}
                       {task.team?.name && <span className="text-slate-400 dark:text-slate-600">· {task.team.name}</span>}
                     </span>
                   )}

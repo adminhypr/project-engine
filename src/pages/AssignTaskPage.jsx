@@ -7,7 +7,7 @@ import { AssignmentBadge } from '../components/ui'
 import { getAssignmentType } from '../lib/assignmentType'
 import { useAuth } from '../hooks/useAuth'
 import { PageTransition, SuccessBurst } from '../components/ui/animations'
-import { CheckCircle, Users } from 'lucide-react'
+import { CheckCircle, Users, X } from 'lucide-react'
 import TaskIconPicker from '../components/ui/TaskIconPicker'
 
 export default function AssignTaskPage() {
@@ -17,13 +17,13 @@ export default function AssignTaskPage() {
   const navigate = useNavigate()
 
   const [form, setForm] = useState({
-    assigneeId: '',
-    title:      '',
-    urgency:    'Med',
-    dueDate:    '',
-    whoTo:      '',
-    notes:      '',
-    icon:       ''
+    assigneeIds: [],
+    title:       '',
+    urgency:     'Med',
+    dueDate:     '',
+    whoTo:       '',
+    notes:       '',
+    icon:        ''
   })
   const [overrideAssignerId, setOverrideAssignerId] = useState('')
   const [selectedTeamId, setSelectedTeamId] = useState('')
@@ -32,32 +32,52 @@ export default function AssignTaskPage() {
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
 
+  // Primary assignee is the first selected
+  const primaryAssignee = profiles.find(p => p.id === form.assigneeIds[0])
+
   // Use override assigner for type preview if set
   const effectiveAssigner = overrideAssignerId
     ? profiles.find(p => p.id === overrideAssignerId)
     : profile
-  const selectedAssignee = profiles.find(p => p.id === form.assigneeId)
-  const previewType = selectedAssignee && effectiveAssigner
-    ? getAssignmentType(effectiveAssigner, selectedAssignee, selectedTeamId || undefined)
+  const previewType = primaryAssignee && effectiveAssigner
+    ? getAssignmentType(effectiveAssigner, primaryAssignee, selectedTeamId || undefined)
     : null
 
-  // Multi-team: does the assignee have multiple teams?
+  // Multi-team: does the primary assignee have multiple teams?
   const assigneeTeams = useMemo(() => {
-    if (!selectedAssignee) return []
-    return selectedAssignee.all_teams || (selectedAssignee.teams ? [{ id: selectedAssignee.team_id, name: selectedAssignee.teams.name, is_primary: true }] : [])
-  }, [selectedAssignee])
+    if (!primaryAssignee) return []
+    return primaryAssignee.all_teams || (primaryAssignee.teams ? [{ id: primaryAssignee.team_id, name: primaryAssignee.teams.name, is_primary: true }] : [])
+  }, [primaryAssignee])
 
   const showTeamPicker = assigneeTeams.length > 1
 
-  // Auto-select primary team when assignee changes
-  function handleAssigneeChange(assigneeId) {
-    set('assigneeId', assigneeId)
-    const assignee = profiles.find(p => p.id === assigneeId)
-    if (assignee) {
-      const primary = assignee.all_teams?.find(t => t.is_primary)
-      setSelectedTeamId(primary?.id || assignee.team_id || '')
-    } else {
-      setSelectedTeamId('')
+  // Add an assignee
+  function handleAddAssignee(assigneeId) {
+    if (!assigneeId || form.assigneeIds.includes(assigneeId)) return
+    const newIds = [...form.assigneeIds, assigneeId]
+    set('assigneeIds', newIds)
+    // Auto-select primary team from first assignee
+    if (newIds.length === 1) {
+      const assignee = profiles.find(p => p.id === assigneeId)
+      if (assignee) {
+        const primary = assignee.all_teams?.find(t => t.is_primary)
+        setSelectedTeamId(primary?.id || assignee.team_id || '')
+      }
+    }
+  }
+
+  // Remove an assignee
+  function handleRemoveAssignee(assigneeId) {
+    const newIds = form.assigneeIds.filter(id => id !== assigneeId)
+    set('assigneeIds', newIds)
+    if (newIds.length === 0) setSelectedTeamId('')
+    // If primary was removed, update team from new primary
+    if (form.assigneeIds[0] === assigneeId && newIds.length > 0) {
+      const newPrimary = profiles.find(p => p.id === newIds[0])
+      if (newPrimary) {
+        const primary = newPrimary.all_teams?.find(t => t.is_primary)
+        setSelectedTeamId(primary?.id || newPrimary.team_id || '')
+      }
     }
   }
 
@@ -71,8 +91,12 @@ export default function AssignTaskPage() {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!form.assigneeId || !form.title.trim()) {
-      showToast('Please fill in Assign To and Task Description', 'error')
+    if (!form.assigneeIds.length || !form.title.trim()) {
+      showToast('Please select at least one assignee and add a task description', 'error')
+      return
+    }
+    if (form.dueDate && new Date(form.dueDate) < new Date()) {
+      showToast('Due date must be in the future', 'error')
       return
     }
     setSubmitting(true)
@@ -86,7 +110,7 @@ export default function AssignTaskPage() {
 
     if (res.ok) {
       setResult(res)
-      setForm({ assigneeId: '', title: '', urgency: 'Med', dueDate: '', whoTo: '', notes: '', icon: '' })
+      setForm({ assigneeIds: [], title: '', urgency: 'Med', dueDate: '', whoTo: '', notes: '', icon: '' })
       setSelectedTeamId('')
     } else {
       showToast(res.msg, 'error')
@@ -109,8 +133,7 @@ export default function AssignTaskPage() {
               </motion.div>
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Task Assigned!</h3>
               <p className="text-slate-500 dark:text-slate-400 text-sm mb-3">
-                Task <span className="font-mono font-semibold">{result.taskId}</span> has been assigned to{' '}
-                <strong>{profiles.find(p => p.id === form.assigneeId)?.full_name || 'them'}</strong>.
+                Task <span className="font-mono font-semibold">{result.taskId}</span> has been assigned.
               </p>
               <div className="flex items-center justify-center gap-2 mb-6">
                 <span className="text-sm text-slate-500">Assignment type:</span>
@@ -140,18 +163,44 @@ export default function AssignTaskPage() {
                 <div>
                   <label className="form-label">Assign To *</label>
                   <select
-                    value={form.assigneeId}
-                    onChange={e => handleAssigneeChange(e.target.value)}
+                    value=""
+                    onChange={e => handleAddAssignee(e.target.value)}
                     className="form-input"
-                    required
                   >
-                    <option value="">— Select person —</option>
-                    {profiles.map(p => (
+                    <option value="">— Add person —</option>
+                    {profiles.filter(p => !form.assigneeIds.includes(p.id)).map(p => (
                       <option key={p.id} value={p.id}>
                         {p.full_name} ({formatTeamNames(p)})
                       </option>
                     ))}
                   </select>
+                  {form.assigneeIds.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {form.assigneeIds.map((id, i) => {
+                        const p = profiles.find(pr => pr.id === id)
+                        return (
+                          <span
+                            key={id}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium
+                              ${i === 0
+                                ? 'bg-brand-50 text-brand-700 border border-brand-200 dark:bg-brand-500/15 dark:text-brand-300 dark:border-brand-500/30'
+                                : 'bg-slate-100 text-slate-600 border border-slate-200 dark:bg-dark-hover dark:text-slate-300 dark:border-dark-border'
+                              }`}
+                          >
+                            {p?.full_name || 'Unknown'}
+                            {i === 0 && <span className="text-[10px] opacity-60 ml-0.5">primary</span>}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveAssignee(id)}
+                              className="text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 ml-0.5"
+                            >
+                              <X size={12} />
+                            </button>
+                          </span>
+                        )
+                      })}
+                    </div>
+                  )}
                   {previewType && (
                     <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                       Assignment type: <AssignmentBadge type={previewType} />
@@ -248,6 +297,7 @@ export default function AssignTaskPage() {
                     type="datetime-local"
                     value={form.dueDate}
                     onChange={e => set('dueDate', e.target.value)}
+                    min={new Date().toISOString().slice(0, 16)}
                     className="form-input"
                   />
                 </div>
@@ -289,7 +339,7 @@ export default function AssignTaskPage() {
                   {submitting ? 'Assigning...' : 'Assign Task →'}
                 </motion.button>
                 <button type="button" className="btn-secondary" onClick={() => {
-                  setForm({ assigneeId: '', title: '', urgency: 'Med', dueDate: '', whoTo: '', notes: '', icon: '' })
+                  setForm({ assigneeIds: [], title: '', urgency: 'Med', dueDate: '', whoTo: '', notes: '', icon: '' })
                   setSelectedTeamId('')
                 }}>
                   Clear

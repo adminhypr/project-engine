@@ -145,7 +145,7 @@ export default function NotificationBell({ onTaskClick }) {
   const taskIdsRef = useRef([])
   const tasksRef = useRef([])
   taskIdsRef.current = tasks
-    .filter(t => t.assigned_to === profile?.id || t.assigned_by === profile?.id)
+    .filter(t => t.assigned_to === profile?.id || t.assigned_by === profile?.id || t.task_assignees?.some(ta => ta.profile_id === profile?.id))
     .map(t => t.id)
   tasksRef.current = tasks
 

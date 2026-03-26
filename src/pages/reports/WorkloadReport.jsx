@@ -2,7 +2,7 @@ import ExportBtn from './ExportBtn'
 
 export default function WorkloadReport({ tasks, profiles }) {
   const data = profiles.map(p => {
-    const mine = tasks.filter(t => t.assigned_to === p.id)
+    const mine = tasks.filter(t => t.assigned_to === p.id || t.task_assignees?.some(ta => ta.profile_id === p.id))
     return {
       name:        p.full_name,
       team:        p.profile_teams?.length > 0 ? p.profile_teams.map(pt => pt.team?.name || '').filter(Boolean).join(', ') : p.teams?.name || '—',

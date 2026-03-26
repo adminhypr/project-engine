@@ -4,7 +4,7 @@ import ExportBtn from './ExportBtn'
 export default function ProductivityReport({ tasks, profiles }) {
   const now = new Date()
   const data = profiles.map(p => {
-    const mine     = tasks.filter(t => t.assigned_to === p.id)
+    const mine     = tasks.filter(t => t.assigned_to === p.id || t.task_assignees?.some(ta => ta.profile_id === p.id))
     const given    = tasks.filter(t => t.assigned_by === p.id)
     const done     = mine.filter(t => t.status === 'Done')
     const completionRate = mine.length ? Math.round((done.length / mine.length) * 100) : 0

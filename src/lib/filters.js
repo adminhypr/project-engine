@@ -8,9 +8,11 @@ export function applyFilters(tasks, filters) {
     if (filters.acceptance && t.acceptance_status !== filters.acceptance) return false
     if (filters.search) {
       const q = filters.search.toLowerCase()
+      const assigneeNamesMatch = t.assignees?.some(a => (a.full_name || '').toLowerCase().includes(q))
       if (!t.title.toLowerCase().includes(q) &&
           !(t.task_id || '').toLowerCase().includes(q) &&
           !(t.assignee?.full_name || '').toLowerCase().includes(q) &&
+          !assigneeNamesMatch &&
           !(t.assigner?.full_name || '').toLowerCase().includes(q) &&
           !(t.who_due_to || '').toLowerCase().includes(q)) return false
     }
