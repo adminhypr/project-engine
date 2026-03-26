@@ -5,11 +5,19 @@ import { getAssignmentType } from '../lib/assignmentType'
 import { generateTaskId } from '../lib/helpers'
 import { useAuth } from './useAuth'
 
-const TASK_SELECT = `
+const TASK_SELECT_FULL = `
   *,
   assignee:profiles!tasks_assigned_to_fkey(id, full_name, email, role, team_id, reports_to, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
   assigner:profiles!tasks_assigned_by_fkey(id, full_name, email, role, team_id, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
   task_assignees(profile_id, is_primary, profile:profiles(id, full_name, avatar_url)),
+  team:teams(id, name),
+  comments(count)
+`
+
+const TASK_SELECT_FALLBACK = `
+  *,
+  assignee:profiles!tasks_assigned_to_fkey(id, full_name, email, role, team_id, reports_to, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
+  assigner:profiles!tasks_assigned_by_fkey(id, full_name, email, role, team_id, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
   team:teams(id, name),
   comments(count)
 `
@@ -25,12 +33,13 @@ export function useTasks() {
     if (!silent) setLoading(true)
     setError(null)
 
-    let query = supabase.from('tasks').select(TASK_SELECT).order('date_assigned', { ascending: false })
-
-    // RLS handles team filtering for managers (supports multi-team).
-    // No client-side filter needed — managers see tasks for all their teams.
-
-    const { data, error } = await query
+    // Try with task_assignees join; fall back without if table doesn't exist yet
+    let { data, error } = await supabase.from('tasks').select(TASK_SELECT_FULL).order('date_assigned', { ascending: false })
+    if (error) {
+      const retry = await supabase.from('tasks').select(TASK_SELECT_FALLBACK).order('date_assigned', { ascending: false })
+      data = retry.data
+      error = retry.error
+    }
     if (error) { setError(error.message); setLoading(false); return }
 
     // Resolve reporting manager names for assignees
@@ -148,14 +157,16 @@ export function useTaskActions() {
 
     if (error) return { ok: false, msg: error.message }
 
-    // Insert all assignees into junction table
+    // Insert all assignees into junction table (non-blocking if table doesn't exist yet)
     if (data) {
       const rows = ids.map((id, i) => ({
         task_id: data.id,
         profile_id: id,
         is_primary: i === 0,
       }))
-      await supabase.from('task_assignees').insert(rows)
+      supabase.from('task_assignees').insert(rows).then(({ error: jErr }) => {
+        if (jErr) console.warn('task_assignees insert skipped:', jErr.message)
+      })
     }
 
     // Log assigner override to audit log
