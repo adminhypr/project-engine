@@ -34,13 +34,30 @@ export function useTasks() {
     setError(null)
 
     // Try with task_assignees join; fall back without if table doesn't exist yet
+    let usedFallback = false
     let { data, error } = await supabase.from('tasks').select(TASK_SELECT_FULL).order('date_assigned', { ascending: false })
     if (error) {
+      console.warn('task_assignees join failed, using fallback query:', error.message)
+      usedFallback = true
       const retry = await supabase.from('tasks').select(TASK_SELECT_FALLBACK).order('date_assigned', { ascending: false })
       data = retry.data
       error = retry.error
     }
     if (error) { setError(error.message); setLoading(false); return }
+
+    // If fallback was used, fetch task_assignees separately
+    let assigneesMap = {}
+    if (usedFallback && data?.length) {
+      const { data: taData } = await supabase
+        .from('task_assignees')
+        .select('task_id, profile_id, is_primary, profile:profiles(id, full_name, avatar_url)')
+      if (taData) {
+        for (const ta of taData) {
+          if (!assigneesMap[ta.task_id]) assigneesMap[ta.task_id] = []
+          assigneesMap[ta.task_id].push(ta)
+        }
+      }
+    }
 
     // Resolve reporting manager names for assignees
     const managerIds = [...new Set((data || []).map(t => t.assignee?.reports_to).filter(Boolean))]
@@ -67,8 +84,9 @@ export function useTasks() {
           team_roles: pt.length > 0 ? Object.fromEntries(pt.map(r => [r.team_id, r.role])) : {}
         }
       }
-      // Build assignees array from junction table
-      const assignees = (t.task_assignees || []).map(ta => ({
+      // Build assignees array from junction table (inline join or fallback map)
+      const rawAssignees = t.task_assignees?.length ? t.task_assignees : (assigneesMap[t.id] || [])
+      const assignees = rawAssignees.map(ta => ({
         id: ta.profile?.id || ta.profile_id,
         full_name: ta.profile?.full_name,
         avatar_url: ta.profile?.avatar_url,
