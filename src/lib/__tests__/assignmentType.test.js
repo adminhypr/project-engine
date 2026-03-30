@@ -86,6 +86,25 @@ describe('getAssignmentType', () => {
     expect(getAssignmentType(mgr, staff)).toBe('CrossTeam')
   })
 
+  // reports_to tests
+  it('returns Upward when assigner reports_to assignee, even with equal roles', () => {
+    const marie = makeUser({ id: 'marie', role: 'Manager', team_id: 'team-a', reports_to: 'david' })
+    const david = makeUser({ id: 'david', role: 'Manager', team_id: 'team-a' })
+    expect(getAssignmentType(marie, david)).toBe('Upward')
+  })
+
+  it('returns Superior when assignee reports_to assigner, even with equal roles', () => {
+    const david = makeUser({ id: 'david', role: 'Manager', team_id: 'team-a' })
+    const marie = makeUser({ id: 'marie', role: 'Manager', team_id: 'team-a', reports_to: 'david' })
+    expect(getAssignmentType(david, marie)).toBe('Superior')
+  })
+
+  it('returns Upward when assigner reports_to assignee despite higher role rank', () => {
+    const mgr = makeUser({ id: 'm1', role: 'Manager', team_id: 'team-a', reports_to: 's1' })
+    const staff = makeUser({ id: 's1', role: 'Staff', team_id: 'team-a' })
+    expect(getAssignmentType(mgr, staff)).toBe('Upward')
+  })
+
   it('falls back to team_id when team_ids is empty', () => {
     const s1 = makeUser({ id: 's1', role: 'Staff', team_id: 'team-a', team_ids: [] })
     const s2 = makeUser({ id: 's2', role: 'Staff', team_id: 'team-a', team_ids: [] })

@@ -16,6 +16,12 @@ function shareTeam(a, b) {
 export function getAssignmentType(assigner, assignee, teamId) {
   if (!assigner || !assignee) return 'Unknown'
   if (assigner.id === assignee.id) return 'Self'
+
+  // reports_to takes precedence: if assigner reports to assignee, it's Upward
+  if (assigner.reports_to === assignee.id) return 'Upward'
+  // If assignee reports to assigner, it's Superior
+  if (assignee.reports_to === assigner.id) return 'Superior'
+
   if (assigner.role === 'Admin') return 'Superior'
 
   // Per-team role: when teamId provided, use team-specific roles
