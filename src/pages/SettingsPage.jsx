@@ -405,7 +405,7 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
                 {user.full_name?.[0] || '?'}
               </div>
           }
-          {isAdmin && !isSelf && editingName ? (
+          {isAdmin && editingName ? (
             <input
               autoFocus
               value={nameValue}
@@ -417,7 +417,7 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
           ) : (
             <span className="flex items-center gap-1 group/name">
               {nameValue.trim() !== (user.full_name || '') ? nameValue : user.full_name}
-              {isAdmin && !isSelf && (
+              {isAdmin && (
                 <button
                   onClick={() => setEditingName(true)}
                   className="text-slate-300 hover:text-brand-500 dark:text-slate-600 dark:hover:text-brand-400 opacity-0 group-hover/name:opacity-100 transition-all"
@@ -552,9 +552,12 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
       {isAdmin && (
         <td className="table-td">
           <div className="flex items-center gap-1.5">
-            {!isSelf && dirty && (
+            {dirty && (isSelf ? nameValue.trim() !== (user.full_name || '') : true) && (
               <motion.button
-                onClick={() => onSave({ reports_to: reportsTo || null, full_name: nameValue.trim() || user.full_name })}
+                onClick={() => onSave(isSelf
+                  ? { full_name: nameValue.trim() || user.full_name }
+                  : { reports_to: reportsTo || null, full_name: nameValue.trim() || user.full_name }
+                )}
                 disabled={saving}
                 className="btn-primary py-1 px-3 text-xs"
                 whileTap={{ scale: 0.95 }}
