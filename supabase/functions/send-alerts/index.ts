@@ -157,7 +157,7 @@ async function sendRedAlerts(): Promise<number> {
          <strong style="color: #991b1b;">${reason}</strong>
        </div>
        <div style="margin-top: 20px; text-align: center;">
-         <a href="${APP_URL}/my-tasks" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
+         <a href="${APP_URL}/my-tasks?task=${task.id}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
        </div>`)
 
     const managerEmail = await getManagerEmail(task)
@@ -221,7 +221,7 @@ async function sendDueReminders(): Promise<number> {
          <strong style="color: ${isUrgent ? '#9a3412' : '#854d0e'};">Due ${due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${due.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</strong>
        </div>
        <div style="margin-top: 20px; text-align: center;">
-         <a href="${APP_URL}/my-tasks" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
+         <a href="${APP_URL}/my-tasks?task=${task.id}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
        </div>`)
 
     const ok = await sendEmail([toEmail], `${emoji} Due soon: "${task.title}"`, html)

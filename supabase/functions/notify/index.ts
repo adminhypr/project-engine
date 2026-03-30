@@ -101,7 +101,7 @@ async function onTaskCreated(record: any) {
          <strong style="color: #854d0e;">This task requires your acceptance</strong>
        </div>` : ''}
      <div style="margin-top: 20px; text-align: center;">
-       <a href="${APP_URL}/my-tasks" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
+       <a href="${APP_URL}/my-tasks?task=${task.id}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
      </div>`)
 
   await sendEmail([task.assignee.email], `New task: "${task.title}"`, html)
@@ -130,7 +130,7 @@ async function onTaskDeclined(record: any, oldRecord: any) {
        </div>` : ''}
      <p style="margin: 16px 0 0; font-size: 14px; color: #374151;">You can reassign this task from the task detail panel.</p>
      <div style="margin-top: 20px; text-align: center;">
-       <a href="${APP_URL}/my-tasks" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">Reassign Task</a>
+       <a href="${APP_URL}/my-tasks?task=${task.id}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">Reassign Task</a>
      </div>`)
 
   await sendEmail([task.assigner.email], `Task declined: "${task.title}"`, html)
@@ -153,7 +153,7 @@ async function onTaskCompleted(record: any, oldRecord: any) {
        <p style="margin: 0; font-size: 13px; color: #6b7280;">${task.task_id}${task.who_due_to ? ` · For: ${task.who_due_to}` : ''}</p>
      </div>
      <div style="margin-top: 20px; text-align: center;">
-       <a href="${APP_URL}/my-tasks" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Details</a>
+       <a href="${APP_URL}/my-tasks?task=${task.id}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Details</a>
      </div>`)
 
   await sendEmail([task.assigner.email], `Task completed: "${task.title}"`, html)
@@ -184,7 +184,7 @@ async function onTaskReassigned(record: any, oldRecord: any) {
          <strong style="color: #854d0e;">This task requires your acceptance</strong>
        </div>` : ''}
      <div style="margin-top: 20px; text-align: center;">
-       <a href="${APP_URL}/my-tasks" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
+       <a href="${APP_URL}/my-tasks?task=${task.id}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
      </div>`)
 
   await sendEmail([task.assignee.email], `Task reassigned to you: "${task.title}"`, html)
