@@ -65,6 +65,9 @@ export default function MyTasksPage() {
     : filters
   const filtered = applyFilters(activeTasks, effectiveFilters)
 
+  const mineRedOverdue = filtered.filter(t => t.priority === 'red' && t.due_date && new Date(t.due_date) < new Date()).length
+  const mineRedInactive = filtered.filter(t => t.priority === 'red' && (!t.due_date || new Date(t.due_date) >= new Date())).length
+
   const stats = view === 'board'
     ? [
         { label: 'Not Started', value: filtered.filter(t => t.status === 'Not Started').length, color: 'text-slate-500' },
@@ -74,16 +77,21 @@ export default function MyTasksPage() {
       ]
     : tab === 'mine'
       ? [
-          { label: 'Overdue / Inactive', value: myTasks.filter(t => t.priority === 'red').length,    color: 'text-red-500' },
-          { label: 'Urgent',             value: myTasks.filter(t => t.priority === 'orange').length,  color: 'text-orange-500' },
-          { label: 'Completed',          value: myTasks.filter(t => t.status === 'Done').length,      color: 'text-emerald-600' },
-          { label: 'Total Tasks',        value: myTasks.length,                                        color: 'text-slate-900 dark:text-white' },
+          { label: 'Overdue / Inactive', value: filtered.filter(t => t.priority === 'red').length, color: 'text-red-500',
+            detail: `${mineRedOverdue} overdue (past due date)\n${mineRedInactive} inactive (no updates 36h+)` },
+          { label: 'Urgent',             value: filtered.filter(t => t.priority === 'orange').length, color: 'text-orange-500',
+            detail: 'Due within the next 12 hours' },
+          { label: 'Completed',          value: filtered.filter(t => t.status === 'Done').length, color: 'text-emerald-600' },
+          { label: 'Total Tasks',        value: filtered.length, color: 'text-slate-900 dark:text-white',
+            detail: `${filtered.filter(t => t.status === 'Not Started').length} not started · ${filtered.filter(t => t.status === 'In Progress').length} in progress · ${filtered.filter(t => t.status === 'Blocked').length} blocked` },
         ]
       : [
-          { label: 'Pending',            value: assignedByMe.filter(t => t.acceptance_status === 'Pending').length,  color: 'text-yellow-500' },
-          { label: 'In Progress',        value: assignedByMe.filter(t => t.status === 'In Progress').length,         color: 'text-blue-500' },
-          { label: 'Completed',          value: assignedByMe.filter(t => t.status === 'Done').length,                color: 'text-emerald-600' },
-          { label: 'Total Assigned',     value: assignedByMe.length,                                                 color: 'text-slate-900 dark:text-white' },
+          { label: 'Pending',            value: filtered.filter(t => t.acceptance_status === 'Pending').length, color: 'text-yellow-500',
+            detail: 'Awaiting acceptance from assignee' },
+          { label: 'In Progress',        value: filtered.filter(t => t.status === 'In Progress').length, color: 'text-blue-500' },
+          { label: 'Completed',          value: filtered.filter(t => t.status === 'Done').length, color: 'text-emerald-600' },
+          { label: 'Total Assigned',     value: filtered.length, color: 'text-slate-900 dark:text-white',
+            detail: `${filtered.filter(t => t.status === 'Not Started').length} not started · ${filtered.filter(t => t.status === 'In Progress').length} in progress · ${filtered.filter(t => t.status === 'Done').length} done` },
         ]
 
   async function handleAccept(task) {

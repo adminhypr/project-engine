@@ -121,6 +121,10 @@ export default function TeamViewPage() {
     else showToast(result.msg, 'error')
   }
 
+  const redOverdue = filtered.filter(t => t.priority === 'red' && t.due_date && new Date(t.due_date) < new Date()).length
+  const redInactive = filtered.filter(t => t.priority === 'red' && (!t.due_date || new Date(t.due_date) >= new Date())).length
+  const orangeCount = filtered.filter(t => t.priority === 'orange').length
+
   const stats = view === 'board'
     ? [
         { label: 'Not Started', value: filtered.filter(t => t.status === 'Not Started').length, color: 'text-slate-500' },
@@ -129,10 +133,14 @@ export default function TeamViewPage() {
         { label: 'Done',        value: filtered.filter(t => t.status === 'Done').length,        color: 'text-emerald-600' },
       ]
     : [
-        { label: 'Red',        value: viewTasks.filter(t => t.priority === 'red').length,    color: 'text-red-500' },
-        { label: 'In Progress',value: viewTasks.filter(t => t.status === 'In Progress').length, color: 'text-sky-600' },
-        { label: 'Blocked',    value: viewTasks.filter(t => t.status === 'Blocked').length,  color: 'text-red-600' },
-        { label: 'Total',      value: viewTasks.length,                                       color: 'text-slate-900 dark:text-white' },
+        { label: 'Overdue / Inactive', value: filtered.filter(t => t.priority === 'red').length, color: 'text-red-500',
+          detail: `${redOverdue} overdue (past due date)\n${redInactive} inactive (no updates 36h+)` },
+        { label: 'Urgent',      value: orangeCount, color: 'text-orange-500',
+          detail: 'Due within the next 12 hours' },
+        { label: 'Blocked',     value: filtered.filter(t => t.status === 'Blocked').length, color: 'text-red-600',
+          detail: 'Tasks marked as blocked — need attention' },
+        { label: 'Total',       value: filtered.length, color: 'text-slate-900 dark:text-white',
+          detail: `${filtered.filter(t => t.status === 'Not Started').length} not started · ${filtered.filter(t => t.status === 'In Progress').length} in progress · ${filtered.filter(t => t.status === 'Done').length} done` },
       ]
 
   if (loading) return <LoadingScreen />

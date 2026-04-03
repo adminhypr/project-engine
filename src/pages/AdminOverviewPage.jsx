@@ -64,6 +64,9 @@ export default function AdminOverviewPage() {
     ? teamBreakdown.find(([id]) => id === sidebarTeamFilter)?.[1]?.name || 'Selected team'
     : null
 
+  const adminRedOverdue = filtered.filter(t => t.priority === 'red' && t.due_date && new Date(t.due_date) < new Date()).length
+  const adminRedInactive = filtered.filter(t => t.priority === 'red' && (!t.due_date || new Date(t.due_date) >= new Date())).length
+
   const stats = view === 'board'
     ? [
         { label: 'Not Started', value: filtered.filter(t => t.status === 'Not Started').length, color: 'text-slate-500' },
@@ -72,10 +75,13 @@ export default function AdminOverviewPage() {
         { label: 'Done',        value: filtered.filter(t => t.status === 'Done').length,        color: 'text-emerald-600' },
       ]
     : [
-        { label: 'Red Org-wide',  value: tasks.filter(t => t.priority === 'red').length,    color: 'text-red-500' },
-        { label: 'Urgent',        value: tasks.filter(t => t.priority === 'orange').length,  color: 'text-orange-500' },
-        { label: 'Completed',     value: tasks.filter(t => t.status === 'Done').length,      color: 'text-emerald-600' },
-        { label: 'Total Tasks',   value: tasks.length,                                        color: 'text-slate-900 dark:text-white' },
+        { label: 'Overdue / Inactive', value: filtered.filter(t => t.priority === 'red').length, color: 'text-red-500',
+          detail: `${adminRedOverdue} overdue (past due date)\n${adminRedInactive} inactive (no updates 36h+)` },
+        { label: 'Urgent',        value: filtered.filter(t => t.priority === 'orange').length, color: 'text-orange-500',
+          detail: 'Due within the next 12 hours' },
+        { label: 'Completed',     value: filtered.filter(t => t.status === 'Done').length, color: 'text-emerald-600' },
+        { label: 'Total Tasks',   value: filtered.length, color: 'text-slate-900 dark:text-white',
+          detail: `${filtered.filter(t => t.status === 'Not Started').length} not started · ${filtered.filter(t => t.status === 'In Progress').length} in progress · ${filtered.filter(t => t.status === 'Blocked').length} blocked` },
       ]
 
   const handleSelectionChange = useCallback((taskId, isSelected) => {

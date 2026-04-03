@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PRIORITY_COLORS, PRIORITY_LABELS } from '../../lib/priority'
 import { ASSIGNMENT_TYPE_STYLES } from '../../lib/assignmentType'
@@ -17,22 +18,48 @@ export function PageHeader({ title, subtitle, actions }) {
 }
 
 // ── Stats strip ──────────────────────────────
+function StatCard({ label, value, color, detail, onClick, index }) {
+  const [showTooltip, setShowTooltip] = useState(false)
+  const isClickable = !!onClick
+
+  return (
+    <motion.div
+      className={`relative bg-white dark:bg-dark-card rounded-2xl border border-slate-200/60 dark:border-dark-border p-4 shadow-soft dark:shadow-none transition-all duration-150
+        ${isClickable ? 'cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-card' : ''}
+        ${detail ? 'cursor-default' : ''}`}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: index * 0.05 }}
+      onMouseEnter={() => detail && setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+      onClick={onClick}
+    >
+      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-1">{label}</p>
+      <p className={`text-3xl font-bold ${color || 'text-slate-900'}`}>
+        <AnimatedNumber value={value} />
+      </p>
+      <AnimatePresence>
+        {showTooltip && detail && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ duration: 0.15 }}
+            className="absolute left-0 right-0 top-full mt-2 z-30 bg-slate-800 dark:bg-slate-700 text-white text-xs rounded-xl px-3.5 py-2.5 shadow-elevated whitespace-pre-line leading-relaxed"
+          >
+            {detail}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  )
+}
+
 export function StatsStrip({ stats }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 p-4 sm:p-6 pb-0">
-      {stats.map(({ label, value, color }, i) => (
-        <motion.div
-          key={label}
-          className="bg-white dark:bg-dark-card rounded-2xl border border-slate-200/60 dark:border-dark-border p-4 shadow-soft dark:shadow-none"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: i * 0.05 }}
-        >
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-1">{label}</p>
-          <p className={`text-3xl font-bold ${color || 'text-slate-900'}`}>
-            <AnimatedNumber value={value} />
-          </p>
-        </motion.div>
+      {stats.map((stat, i) => (
+        <StatCard key={stat.label} {...stat} index={i} />
       ))}
     </div>
   )
