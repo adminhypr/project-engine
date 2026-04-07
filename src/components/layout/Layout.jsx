@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
 import { signOut } from '../../lib/auth'
 import {
-  CheckSquare, Plus, Users, LayoutDashboard,
+  CheckSquare, Plus, Users, LayoutDashboard, Boxes,
   BarChart2, Settings, LogOut, Menu, X, ChevronRight, Moon, Sun
 } from 'lucide-react'
 import { useTheme } from '../../hooks/useTheme'
@@ -24,6 +24,7 @@ export default function Layout({ children }) {
   const navItems = [
     { to: '/my-tasks', icon: CheckSquare, label: 'My Tasks',       show: true },
     { to: '/assign',   icon: Plus,         label: 'Assign a Task',  show: true },
+    { to: '/hub',      icon: Boxes,        label: 'Project Hub',    show: true },
     { to: '/team',     icon: Users,        label: 'Team View',      show: isManager },
     { to: '/admin',    icon: LayoutDashboard, label: 'Admin Overview', show: isAdmin },
     { to: '/reports',  icon: BarChart2,    label: 'Reports',        show: isManager },
