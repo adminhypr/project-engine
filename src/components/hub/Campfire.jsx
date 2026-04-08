@@ -1,11 +1,11 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, memo } from 'react'
 import { useHubChat } from '../../hooks/useHubChat'
 import { useAuth } from '../../hooks/useAuth'
 import { Spinner } from '../ui/index'
 import ChatMessage from './ChatMessage'
 import ChatInput from './ChatInput'
 
-export default function Campfire({ hubId }) {
+function Campfire({ hubId }) {
   const { profile } = useAuth()
   const { messages, loading, sendMessage, deleteMessage, loadMore, hasMore } = useHubChat(hubId)
   const bottomRef = useRef(null)
@@ -49,3 +49,5 @@ export default function Campfire({ hubId }) {
     </div>
   )
 }
+
+export default memo(Campfire)

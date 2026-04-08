@@ -17,7 +17,7 @@ export function useHubChat(hubId) {
     if (!hubRef.current) return []
     let query = supabase
       .from('hub_chat_messages')
-      .select('*, author:profiles(id, full_name, avatar_url)')
+      .select('*, author:profiles!hub_chat_messages_author_id_fkey(id, full_name, avatar_url)')
       .eq('hub_id', hubRef.current)
       .order('created_at', { ascending: false })
       .limit(PAGE_SIZE)
@@ -48,7 +48,7 @@ export function useHubChat(hubId) {
         async (payload) => {
           const { data } = await supabase
             .from('hub_chat_messages')
-            .select('*, author:profiles(id, full_name, avatar_url)')
+            .select('*, author:profiles!hub_chat_messages_author_id_fkey(id, full_name, avatar_url)')
             .eq('id', payload.new.id)
             .single()
           if (data) setMessages(prev => [...prev, data])
@@ -80,7 +80,7 @@ export function useHubChat(hubId) {
     const cursor = messages[0].created_at
     let query = supabase
       .from('hub_chat_messages')
-      .select('*, author:profiles(id, full_name, avatar_url)')
+      .select('*, author:profiles!hub_chat_messages_author_id_fkey(id, full_name, avatar_url)')
       .eq('hub_id', hubRef.current)
       .order('created_at', { ascending: false })
       .limit(PAGE_SIZE)

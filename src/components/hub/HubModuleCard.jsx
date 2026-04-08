@@ -2,36 +2,47 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronDown } from 'lucide-react'
 
-export default function HubModuleCard({ title, icon: Icon, children, defaultOpen = true, badge }) {
+export default function HubModuleCard({ title, icon: Icon, children, defaultOpen = true, badge, color = '#6366f1' }) {
   const [open, setOpen] = useState(defaultOpen)
 
   return (
-    <div className="card shadow-card dark:shadow-none overflow-hidden">
+    <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-dark-border rounded-2xl overflow-hidden shadow-card dark:shadow-none">
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center gap-3 px-4 sm:px-5 py-3.5 text-left hover:bg-slate-50 dark:hover:bg-dark-hover transition-colors"
+        className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-slate-50 dark:hover:bg-dark-hover transition-colors"
       >
-        {Icon && <Icon size={18} className="text-brand-500 dark:text-brand-400 shrink-0" />}
-        <span className="text-sm font-semibold text-slate-900 dark:text-white flex-1">{title}</span>
+        {Icon && (
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+            style={{ backgroundColor: `${color}18` }}
+          >
+            <Icon size={15} style={{ color }} />
+          </div>
+        )}
+        <span className="text-sm font-bold text-slate-900 dark:text-white flex-1">{title}</span>
         {badge != null && (
-          <span className="badge bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300 text-xs px-2 py-0.5">
+          <span
+            className="text-xs font-semibold px-2 py-0.5 rounded-full"
+            style={{ backgroundColor: `${color}18`, color }}
+          >
             {badge}
           </span>
         )}
         <motion.div animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }}>
-          <ChevronDown size={16} className="text-slate-400" />
+          <ChevronDown size={15} className="text-slate-400" />
         </motion.div>
       </button>
+
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
+            transition={{ duration: 0.22, ease: 'easeOut' }}
             className="overflow-hidden"
           >
-            <div className="px-4 sm:px-5 pb-4">
+            <div className="border-t border-slate-100 dark:border-dark-border px-5 py-4">
               {children}
             </div>
           </motion.div>

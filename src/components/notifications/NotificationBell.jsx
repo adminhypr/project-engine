@@ -1,15 +1,30 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Bell, CheckCircle, AlertTriangle, Clock, UserPlus, UserCog, MessageSquare, X } from 'lucide-react'
+import { Bell, CheckCircle, AlertTriangle, Clock, UserPlus, UserCog, MessageSquare, Boxes, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useTasks } from '../../hooks/useTasks'
 import { useAuth } from '../../hooks/useAuth'
 import { formatDate } from '../../lib/helpers'
 
-function getNotifications(myTasks, profile, unsetupUsers, recentComments) {
+function getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInvites) {
   const notifications = []
   const now = new Date()
+
+  // Hub invitations
+  hubInvites.forEach(inv => {
+    notifications.push({
+      id: `hub-invite-${inv.hub_id}`,
+      type: 'hub-invite',
+      icon: <Boxes size={14} />,
+      color: 'text-purple-600 bg-purple-500/15',
+      title: 'Hub invitation',
+      body: `You were added to "${inv.hub_name}"`,
+      link: `/hub/${inv.hub_id}`,
+      time: inv.created_at,
+      priority: 0.3,
+    })
+  })
 
   // Recent comments on my tasks by other people
   recentComments.forEach(c => {
@@ -133,6 +148,7 @@ export default function NotificationBell({ onTaskClick }) {
   const [isOpen, setIsOpen] = useState(false)
   const [unsetupUsers, setUnsetupUsers] = useState([])
   const [recentComments, setRecentComments] = useState([])
+  const [hubInvites, setHubInvites] = useState([])
   const [dismissed, setDismissed] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('pe-dismissed-notifs') || '[]')
@@ -208,7 +224,38 @@ export default function NotificationBell({ onTaskClick }) {
     return () => supabase.removeChannel(channel)
   }, [isManager])
 
-  const allNotifications = getNotifications(myTasks, profile, unsetupUsers, recentComments)
+  // Hub invitations — recent hub_members rows where I was added (not by me creating the hub)
+  useEffect(() => {
+    if (!profile?.id) return
+    async function fetchHubInvites() {
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      const { data } = await supabase
+        .from('hub_members')
+        .select('hub_id, role, created_at, hub:hubs!hub_members_hub_id_fkey(name, created_by)')
+        .eq('profile_id', profile.id)
+        .gte('created_at', weekAgo)
+        .order('created_at', { ascending: false })
+      if (data) {
+        // Only show invites where someone else added me (not hubs I created)
+        const invites = data
+          .filter(m => m.hub?.created_by !== profile.id)
+          .map(m => ({ hub_id: m.hub_id, hub_name: m.hub?.name || 'Hub', created_at: m.created_at }))
+        setHubInvites(invites)
+      }
+    }
+    fetchHubInvites()
+
+    const channel = supabase
+      .channel('hub-invite-notif')
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'hub_members', filter: `profile_id=eq.${profile.id}` },
+        () => fetchHubInvites()
+      )
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [profile?.id])
+
+  const allNotifications = getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInvites)
   const notifications = allNotifications.filter(n => !dismissed.includes(n.id))
   const count = notifications.length
 

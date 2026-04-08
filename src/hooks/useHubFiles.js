@@ -17,7 +17,7 @@ export function useHubFiles(hubId, folderId = null) {
     if (!hubRef.current) return
     let folderQuery = supabase
       .from('hub_folders')
-      .select('*, creator:profiles(id, full_name)')
+      .select('*, creator:profiles!hub_folders_created_by_fkey(id, full_name)')
       .eq('hub_id', hubRef.current)
       .order('name')
     if (folderId) folderQuery = folderQuery.eq('parent_id', folderId)
@@ -25,7 +25,7 @@ export function useHubFiles(hubId, folderId = null) {
 
     let fileQuery = supabase
       .from('hub_files')
-      .select('*, uploader:profiles(id, full_name, avatar_url)')
+      .select('*, uploader:profiles!hub_files_uploaded_by_fkey(id, full_name, avatar_url)')
       .eq('hub_id', hubRef.current)
       .order('created_at', { ascending: false })
     if (folderId) fileQuery = fileQuery.eq('folder_id', folderId)

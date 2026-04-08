@@ -19,7 +19,7 @@ export function useHubEvents(hubId) {
 
     const { data, error } = await supabase
       .from('hub_events')
-      .select('*, creator:profiles(id, full_name)')
+      .select('*, creator:profiles!hub_events_created_by_fkey(id, full_name)')
       .eq('hub_id', hubRef.current)
       .gte('starts_at', start.toISOString())
       .lte('starts_at', end.toISOString())

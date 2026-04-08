@@ -14,7 +14,7 @@ export function useHubMessages(hubId) {
     if (!hubRef.current) return
     const { data, error } = await supabase
       .from('hub_messages')
-      .select('*, author:profiles(id, full_name, avatar_url)')
+      .select('*, author:profiles!hub_messages_author_id_fkey(id, full_name, avatar_url)')
       .eq('hub_id', hubRef.current)
       .is('parent_id', null)
       .order('pinned', { ascending: false })
@@ -80,7 +80,7 @@ export function useHubMessages(hubId) {
   const getReplies = useCallback(async (parentId) => {
     const { data, error } = await supabase
       .from('hub_messages')
-      .select('*, author:profiles(id, full_name, avatar_url)')
+      .select('*, author:profiles!hub_messages_author_id_fkey(id, full_name, avatar_url)')
       .eq('parent_id', parentId)
       .order('created_at', { ascending: true })
     if (error) showToast('Failed to load replies', 'error')

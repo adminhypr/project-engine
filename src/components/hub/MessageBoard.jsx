@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import { useHubMessages } from '../../hooks/useHubMessages'
 import { useAuth } from '../../hooks/useAuth'
 import { Spinner } from '../ui/index'
@@ -6,7 +6,7 @@ import MessageThread from './MessageThread'
 import MessageComposer from './MessageComposer'
 import { Plus, Pin } from 'lucide-react'
 
-export default function MessageBoard({ hubId }) {
+function MessageBoard({ hubId }) {
   const { profile, isManager } = useAuth()
   const { messages, loading, postMessage, replyToMessage, deleteMessage, togglePin, getReplies } = useHubMessages(hubId)
   const [showComposer, setShowComposer] = useState(false)
@@ -59,3 +59,5 @@ export default function MessageBoard({ hubId }) {
     </div>
   )
 }
+
+export default memo(MessageBoard)

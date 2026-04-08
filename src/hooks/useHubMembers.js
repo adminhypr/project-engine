@@ -12,7 +12,7 @@ export function useHubMembers(hubId) {
     if (!hubRef.current) return
     const { data, error } = await supabase
       .from('hub_members')
-      .select('*, profile:profiles(id, full_name, email, avatar_url, role)')
+      .select('*, profile:profiles!hub_members_profile_id_fkey(id, full_name, email, avatar_url, role)')
       .eq('hub_id', hubRef.current)
       .order('role', { ascending: true })
       .order('created_at', { ascending: true })

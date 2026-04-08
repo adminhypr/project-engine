@@ -16,13 +16,13 @@ export function useHubCheckIns(hubId) {
     const [{ data: promptData, error: pErr }, { data: responseData, error: rErr }] = await Promise.all([
       supabase
         .from('hub_check_in_prompts')
-        .select('*, creator:profiles(id, full_name)')
+        .select('*, creator:profiles!hub_check_in_prompts_created_by_fkey(id, full_name)')
         .eq('hub_id', hubRef.current)
         .eq('active', true)
         .order('created_at', { ascending: false }),
       supabase
         .from('hub_check_in_responses')
-        .select('*, author:profiles(id, full_name, avatar_url), prompt:hub_check_in_prompts!inner(hub_id)')
+        .select('*, author:profiles!hub_check_in_responses_author_id_fkey(id, full_name, avatar_url), prompt:hub_check_in_prompts!inner(hub_id)')
         .eq('prompt.hub_id', hubRef.current)
         .order('response_date', { ascending: false })
         .order('created_at', { ascending: false })
