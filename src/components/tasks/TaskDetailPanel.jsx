@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { X, Send, Check, RefreshCw, Pencil, Trash2, Plus, Users } from 'lucide-react'
+import { X, Send, Check, RefreshCw, Pencil, Trash2, Plus, Users, Paperclip } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useTaskActions, useProfiles } from '../../hooks/useTasks'
 import { useAuth } from '../../hooks/useAuth'
@@ -11,11 +11,14 @@ import ActivityLog from './ActivityLog'
 import DeclineModal from './DeclineModal'
 import ReassignModal from './ReassignModal'
 import DeleteConfirmModal from './DeleteConfirmModal'
+import { FilePickerInput, AttachmentList, CommentAttachments, hasOversizedFiles } from '../ui/FileAttachment'
+import { useAttachments } from '../../hooks/useAttachments'
 
 export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   const { profile, isAdmin, isManager } = useAuth()
   const { updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask, deleteTask, addAssignee, removeAssignee } = useTaskActions()
   const { profiles: allProfiles } = useProfiles()
+  const { uploadAttachments, getTaskAttachments, getAttachmentUrl, deleteAttachment } = useAttachments()
 
   const [status,   setStatus]   = useState(task?.status || 'Not Started')
   const [notes,    setNotes]    = useState(task?.notes || '')
@@ -40,6 +43,8 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   const [editWhoTo, setEditWhoTo] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
   const [showAddAssignee, setShowAddAssignee] = useState(false)
+  const [attachments, setAttachments] = useState([])
+  const [commentFiles, setCommentFiles] = useState([])
 
   const canEdit = isAdmin ||
     (task?.team_id && profile?.team_roles?.[task.team_id] === 'Manager') ||
@@ -66,6 +71,9 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
     getTaskComments(task.id).then(data => {
       setComments(data)
       setLoadingComments(false)
+    })
+    getTaskAttachments(task.id).then(res => {
+      if (res.ok) setAttachments(res.attachments)
     })
   }, [task?.id])
 
@@ -244,23 +252,44 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   }
 
   async function handlePostComment() {
-    if (!newComment.trim() || !task) return
+    if ((!newComment.trim() && commentFiles.length === 0) || !task) return
+    if (hasOversizedFiles(commentFiles)) {
+      showToast('Remove files over 5 MB before submitting', 'error')
+      return
+    }
     const text = newComment.trim()
     setPosting(true)
-    const result = await addComment(task.id, text)
+    const result = text
+      ? await addComment(task.id, text)
+      : { ok: true, comment: null }
     setPosting(false)
     if (result.ok) {
-      setComments(prev => [result.comment, ...prev])
+      if (result.comment) {
+        setComments(prev => [result.comment, ...prev])
+      }
+      // Upload attached files
+      if (commentFiles.length > 0) {
+        const upload = await uploadAttachments(task.id, commentFiles, result.comment?.id || null)
+        if (!upload.ok) {
+          showToast('Some files failed to upload', 'error')
+        }
+        // Refresh attachments list
+        const refreshed = await getTaskAttachments(task.id)
+        if (refreshed.ok) setAttachments(refreshed.attachments)
+        setCommentFiles([])
+      }
       setNewComment('')
       setMentionedIds([])
       setMentionQuery(null)
 
       // Notify assignee, assigner, and @mentioned people (non-blocking)
-      supabase.functions.invoke('user-notify', {
-        body: { type: 'comment', taskId: task.id, authorId: profile.id, commentText: text, mentionedIds }
-      }).then(({ error }) => {
-        if (error) console.warn('Comment notification email failed:', error)
-      }).catch(err => console.warn('Comment notification email failed:', err))
+      if (text) {
+        supabase.functions.invoke('user-notify', {
+          body: { type: 'comment', taskId: task.id, authorId: profile.id, commentText: text, mentionedIds }
+        }).then(({ error }) => {
+          if (error) console.warn('Comment notification email failed:', error)
+        }).catch(err => console.warn('Comment notification email failed:', err))
+      }
     } else {
       showToast(result.msg, 'error')
     }
@@ -482,6 +511,27 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
           </div>
         </div>
 
+        {/* Attachments */}
+        {attachments.length > 0 && (
+          <div className="px-5 py-4 border-b border-slate-100 dark:border-dark-border">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <Paperclip size={12} />
+              Attachments ({attachments.length})
+            </p>
+            <AttachmentList
+              attachments={attachments}
+              onDownload={getAttachmentUrl}
+              onDelete={async (id, path) => {
+                const res = await deleteAttachment(id, path)
+                if (res.ok) setAttachments(prev => prev.filter(a => a.id !== id))
+                return res
+              }}
+              currentUserId={profile?.id}
+              isAdmin={isAdmin}
+            />
+          </div>
+        )}
+
         {/* Status + notes update */}
         {canEdit && task.acceptance_status !== 'Declined' && (
           <div className="px-5 py-4 border-b border-slate-100 dark:border-dark-border bg-slate-50 dark:bg-dark-bg">
@@ -560,11 +610,14 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
             </div>
             <button
               onClick={handlePostComment}
-              disabled={posting || !newComment.trim()}
+              disabled={posting || (!newComment.trim() && commentFiles.length === 0) || hasOversizedFiles(commentFiles)}
               className="btn-primary h-[60px] px-4"
             >
               <Send size={16} />
             </button>
+          </div>
+          <div className="mb-4 -mt-2">
+            <FilePickerInput files={commentFiles} onChange={setCommentFiles} compact />
           </div>
 
           {loadingComments ? (
@@ -592,6 +645,10 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
                         : part
                     )}
                   </p>
+                  <CommentAttachments
+                    attachments={attachments.filter(a => a.comment_id === c.id)}
+                    onDownload={getAttachmentUrl}
+                  />
                 </div>
               ))}
             </div>
