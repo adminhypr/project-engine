@@ -9,6 +9,7 @@ import TeamViewPage from './pages/TeamViewPage'
 import AdminOverviewPage from './pages/AdminOverviewPage'
 import ReportsPage from './pages/reports/ReportsPage'
 import SettingsPage from './pages/SettingsPage'
+import HubPage from './pages/HubPage'
 import ErrorBoundary from './components/ErrorBoundary'
 import { ThemeProvider } from './hooks/useTheme'
 
@@ -58,6 +59,8 @@ function AppRoutes() {
             <Route path="/"        element={<Navigate to="/my-tasks" replace />} />
             <Route path="/my-tasks" element={<MyTasksPage />} />
             <Route path="/assign"   element={<AssignTaskPage />} />
+            <Route path="/hub"        element={<HubPage />} />
+            <Route path="/hub/:hubId" element={<HubPage />} />
             <Route path="/team"     element={<TeamViewPage />} />
             <Route path="/admin"    element={<AdminOverviewPage />} />
             <Route path="/reports"  element={<ReportsPage />} />
