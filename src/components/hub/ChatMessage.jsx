@@ -1,4 +1,5 @@
 import { Trash2 } from 'lucide-react'
+import RichContentRenderer from '../ui/RichContentRenderer'
 
 export default function ChatMessage({ message, isOwn, onDelete }) {
   const time = new Date(message.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
@@ -19,9 +20,13 @@ export default function ChatMessage({ message, isOwn, onDelete }) {
           </span>
           <span className="text-xs text-slate-400 dark:text-slate-500">{time}</span>
         </div>
-        <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap break-words">
-          {message.content}
-        </p>
+        <div className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+          <RichContentRenderer
+            content={message.content}
+            mentions={message.mentions}
+            inlineImages={message.inline_images}
+          />
+        </div>
       </div>
       {isOwn && (
         <button

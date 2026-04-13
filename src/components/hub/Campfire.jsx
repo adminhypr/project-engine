@@ -44,7 +44,7 @@ function Campfire({ hubId }) {
         <div ref={bottomRef} />
       </div>
       <div className="mt-3 pt-3 border-t border-slate-200/60 dark:border-dark-border">
-        <ChatInput onSend={sendMessage} />
+        <ChatInput hubId={hubId} onSend={sendMessage} />
       </div>
     </div>
   )
