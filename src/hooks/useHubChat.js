@@ -58,18 +58,39 @@ export function useHubChat(hubId) {
     return () => supabase.removeChannel(channel)
   }, [hubId])
 
-  const sendMessage = useCallback(async (content) => {
+  const sendMessage = useCallback(async (content, mentions = [], inlineImages = []) => {
     if (!hubRef.current || !profile?.id || !content.trim()) return false
-    const { error } = await supabase.from('hub_chat_messages').insert({
+    const { data, error } = await supabase.from('hub_chat_messages').insert({
       hub_id: hubRef.current,
       author_id: profile.id,
-      content: content.trim()
-    })
-    if (error) showToast('Failed to send message', 'error')
-    return !error
+      content: content.trim(),
+      mentions,
+      inline_images: inlineImages.map(({ preview, ...rest }) => rest),
+    }).select().single()
+    if (error) { showToast('Failed to send message', 'error'); return false }
+
+    // Insert hub_mentions for each unique mentioned user
+    if (data && mentions.length > 0) {
+      const uniqueUsers = [...new Map(mentions.map(m => [m.user_id, m])).values()]
+        .filter(m => m.user_id !== profile.id)
+      if (uniqueUsers.length > 0) {
+        await supabase.from('hub_mentions').insert(
+          uniqueUsers.map(m => ({
+            hub_id: hubRef.current,
+            mentioned_by: profile.id,
+            mentioned_user: m.user_id,
+            entity_type: 'chat',
+            entity_id: data.id,
+          }))
+        )
+      }
+    }
+    return true
   }, [profile?.id])
 
   const deleteMessage = useCallback(async (messageId) => {
+    // Clean up mentions
+    await supabase.from('hub_mentions').delete().eq('entity_type', 'chat').eq('entity_id', messageId)
     const { error } = await supabase.from('hub_chat_messages').delete().eq('id', messageId)
     if (error) { showToast('Failed to delete message', 'error'); return }
     setMessages(prev => prev.filter(m => m.id !== messageId))

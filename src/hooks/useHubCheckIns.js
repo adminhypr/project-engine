@@ -67,18 +67,39 @@ export function useHubCheckIns(hubId) {
     return true
   }, [profile?.id, fetchData])
 
-  const submitResponse = useCallback(async (promptId, content) => {
+  const submitResponse = useCallback(async (promptId, content, mentions = []) => {
     if (!profile?.id || !content.trim()) return false
-    const { error } = await supabase.from('hub_check_in_responses').upsert({
+    const { data, error } = await supabase.from('hub_check_in_responses').upsert({
       prompt_id: promptId,
       author_id: profile.id,
       content: content.trim(),
+      mentions,
       response_date: new Date().toISOString().split('T')[0]
-    }, { onConflict: 'prompt_id,author_id,response_date' })
+    }, { onConflict: 'prompt_id,author_id,response_date' }).select().single()
     if (error) { showToast('Failed to submit response', 'error'); return false }
+
+    if (data && mentions.length > 0) {
+      // For upserts, clean old mentions first
+      await supabase.from('hub_mentions').delete().eq('entity_type', 'check_in_response').eq('entity_id', data.id)
+      const uniqueUsers = [...new Map(mentions.map(m => [m.user_id, m])).values()]
+        .filter(m => m.user_id !== profile.id)
+      if (uniqueUsers.length > 0) {
+        const prompt = prompts.find(p => p.id === promptId)
+        const hId = prompt?.hub_id || hubRef.current
+        await supabase.from('hub_mentions').insert(
+          uniqueUsers.map(m => ({
+            hub_id: hId,
+            mentioned_by: profile.id,
+            mentioned_user: m.user_id,
+            entity_type: 'check_in_response',
+            entity_id: data.id,
+          }))
+        )
+      }
+    }
     await fetchData()
     return true
-  }, [profile?.id, fetchData])
+  }, [profile?.id, fetchData, prompts])
 
   const deletePrompt = useCallback(async (promptId) => {
     const { error } = await supabase.from('hub_check_in_prompts').update({ active: false }).eq('id', promptId)

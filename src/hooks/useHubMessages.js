@@ -44,30 +44,67 @@ export function useHubMessages(hubId) {
     return () => supabase.removeChannel(channel)
   }, [hubId, fetchMessages])
 
-  const postMessage = useCallback(async (title, content) => {
+  const postMessage = useCallback(async (title, content, mentions = [], inlineImages = []) => {
     if (!hubRef.current || !profile?.id) return false
-    const { error } = await supabase.from('hub_messages').insert({
+    const { data, error } = await supabase.from('hub_messages').insert({
       hub_id: hubRef.current,
       author_id: profile.id,
-      title, content
-    })
-    if (error) showToast('Failed to post message', 'error')
-    return !error
+      title, content,
+      mentions,
+      inline_images: inlineImages.map(({ preview, ...rest }) => rest),
+    }).select().single()
+    if (error) { showToast('Failed to post message', 'error'); return false }
+
+    if (data && mentions.length > 0) {
+      const uniqueUsers = [...new Map(mentions.map(m => [m.user_id, m])).values()]
+        .filter(m => m.user_id !== profile.id)
+      if (uniqueUsers.length > 0) {
+        await supabase.from('hub_mentions').insert(
+          uniqueUsers.map(m => ({
+            hub_id: hubRef.current,
+            mentioned_by: profile.id,
+            mentioned_user: m.user_id,
+            entity_type: 'message',
+            entity_id: data.id,
+          }))
+        )
+      }
+    }
+    return true
   }, [profile?.id])
 
-  const replyToMessage = useCallback(async (parentId, content) => {
+  const replyToMessage = useCallback(async (parentId, content, mentions = [], inlineImages = []) => {
     if (!hubRef.current || !profile?.id) return false
-    const { error } = await supabase.from('hub_messages').insert({
+    const { data, error } = await supabase.from('hub_messages').insert({
       hub_id: hubRef.current,
       author_id: profile.id,
       parent_id: parentId,
-      content
-    })
-    if (error) showToast('Failed to post reply', 'error')
-    return !error
+      content,
+      mentions,
+      inline_images: inlineImages.map(({ preview, ...rest }) => rest),
+    }).select().single()
+    if (error) { showToast('Failed to post reply', 'error'); return false }
+
+    if (data && mentions.length > 0) {
+      const uniqueUsers = [...new Map(mentions.map(m => [m.user_id, m])).values()]
+        .filter(m => m.user_id !== profile.id)
+      if (uniqueUsers.length > 0) {
+        await supabase.from('hub_mentions').insert(
+          uniqueUsers.map(m => ({
+            hub_id: hubRef.current,
+            mentioned_by: profile.id,
+            mentioned_user: m.user_id,
+            entity_type: 'message_reply',
+            entity_id: data.id,
+          }))
+        )
+      }
+    }
+    return true
   }, [profile?.id])
 
   const deleteMessage = useCallback(async (messageId) => {
+    await supabase.from('hub_mentions').delete().eq('entity_id', messageId)
     const { error } = await supabase.from('hub_messages').delete().eq('id', messageId)
     if (error) showToast('Failed to delete message', 'error')
   }, [])
