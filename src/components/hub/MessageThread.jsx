@@ -1,12 +1,15 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Pin, MessageSquare, Trash2 } from 'lucide-react'
+import RichInput from '../ui/RichInput'
+import RichContentRenderer from '../ui/RichContentRenderer'
 
-export default function MessageThread({ message, isOwn, isManager, onReply, onDelete, onTogglePin, getReplies }) {
+export default function MessageThread({ message, hubId, isOwn, isManager, onReply, onDelete, onTogglePin, getReplies }) {
   const [expanded, setExpanded] = useState(false)
   const [replies, setReplies]   = useState([])
   const [replyText, setReplyText] = useState('')
   const [loadingReplies, setLoadingReplies] = useState(false)
   const [sending, setSending] = useState(false)
+  const submitRef = useRef(null)
 
   const time = new Date(message.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
@@ -20,11 +23,10 @@ export default function MessageThread({ message, isOwn, isManager, onReply, onDe
     setExpanded(!expanded)
   }
 
-  async function handleReply(e) {
-    e.preventDefault()
-    if (!replyText.trim() || sending) return
+  async function handleReply({ content, mentions, inlineImages }) {
+    if (!content.trim() || sending) return
     setSending(true)
-    await onReply(message.id, replyText)
+    await onReply(message.id, content, mentions, inlineImages)
     setReplyText('')
     const data = await getReplies(message.id)
     setReplies(data)
@@ -51,7 +53,13 @@ export default function MessageThread({ message, isOwn, isManager, onReply, onDe
             {message.title && (
               <h4 className="text-sm font-bold text-slate-900 dark:text-white mt-1">{message.title}</h4>
             )}
-            <p className="text-sm text-slate-700 dark:text-slate-300 mt-1 whitespace-pre-wrap">{message.content}</p>
+            <div className="text-sm text-slate-700 dark:text-slate-300 mt-1">
+              <RichContentRenderer
+                content={message.content}
+                mentions={message.mentions}
+                inlineImages={message.inline_images}
+              />
+            </div>
           </div>
         </div>
 
@@ -93,27 +101,46 @@ export default function MessageThread({ message, isOwn, isManager, onReply, onDe
                         {r.author?.full_name?.[0] || '?'}
                       </div>
                     )}
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-baseline gap-1.5">
                         <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{r.author?.full_name}</span>
                         <span className="text-xs text-slate-400">{new Date(r.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
                       </div>
-                      <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap">{r.content}</p>
+                      <div className="text-xs text-slate-600 dark:text-slate-400">
+                        <RichContentRenderer
+                          content={r.content}
+                          mentions={r.mentions}
+                          inlineImages={r.inline_images}
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
-              <form onSubmit={handleReply} className="flex gap-2">
-                <input
-                  value={replyText}
-                  onChange={e => setReplyText(e.target.value)}
-                  placeholder="Write a reply..."
-                  className="form-input flex-1 text-xs py-1.5"
-                />
-                <button type="submit" disabled={!replyText.trim() || sending} className="btn btn-primary text-xs px-3 py-1.5 disabled:opacity-40">
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <RichInput
+                    value={replyText}
+                    onChange={setReplyText}
+                    onSubmit={handleReply}
+                    submitRef={submitRef}
+                    hubId={hubId}
+                    enableMentions
+                    enableImages
+                    placeholder="Write a reply..."
+                    className="text-xs py-1.5"
+                    singleLine
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => submitRef.current?.()}
+                  disabled={!replyText.trim() || sending}
+                  className="btn btn-primary text-xs px-3 py-1.5 disabled:opacity-40"
+                >
                   Reply
                 </button>
-              </form>
+              </div>
             </>
           )}
         </div>

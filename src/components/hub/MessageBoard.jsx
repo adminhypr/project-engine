@@ -13,8 +13,8 @@ function MessageBoard({ hubId }) {
 
   if (loading) return <div className="py-8 flex justify-center"><Spinner /></div>
 
-  async function handlePost(title, content) {
-    const ok = await postMessage(title, content)
+  async function handlePost(title, content, mentions, inlineImages) {
+    const ok = await postMessage(title, content, mentions, inlineImages)
     if (ok) setShowComposer(false)
     return ok
   }
@@ -31,6 +31,7 @@ function MessageBoard({ hubId }) {
         </button>
       ) : (
         <MessageComposer
+          hubId={hubId}
           onSubmit={handlePost}
           onCancel={() => setShowComposer(false)}
         />
@@ -47,6 +48,7 @@ function MessageBoard({ hubId }) {
           <MessageThread
             key={msg.id}
             message={msg}
+            hubId={hubId}
             isOwn={msg.author_id === profile?.id}
             isManager={isManager}
             onReply={replyToMessage}
