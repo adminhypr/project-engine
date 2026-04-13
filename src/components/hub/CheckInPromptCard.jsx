@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Trash2 } from 'lucide-react'
 import CheckInResponseForm from './CheckInResponseForm'
+import RichContentRenderer from '../ui/RichContentRenderer'
 
 const SCHEDULE_LABELS = {
   daily: 'Every weekday',
@@ -8,7 +9,7 @@ const SCHEDULE_LABELS = {
   weekly_friday: 'Weekly (Fri)',
 }
 
-export default function CheckInPromptCard({ prompt, responses, profileId, isManager, onSubmitResponse, onDelete }) {
+export default function CheckInPromptCard({ hubId, prompt, responses, profileId, isManager, onSubmitResponse, onDelete }) {
   const today = new Date().toISOString().split('T')[0]
 
   const myResponse = responses.find(r => r.author_id === profileId && r.response_date === today)
@@ -42,7 +43,7 @@ export default function CheckInPromptCard({ prompt, responses, profileId, isMana
       {/* Today's response form */}
       {!myResponse && (
         <div className="px-4 pb-3">
-          <CheckInResponseForm promptId={prompt.id} onSubmit={onSubmitResponse} />
+          <CheckInResponseForm hubId={hubId} promptId={prompt.id} onSubmit={onSubmitResponse} />
         </div>
       )}
 
@@ -66,7 +67,9 @@ export default function CheckInPromptCard({ prompt, responses, profileId, isMana
                     )}
                     <div>
                       <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{r.author?.full_name}</span>
-                      <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap">{r.content}</p>
+                      <div className="text-xs text-slate-600 dark:text-slate-400">
+                        <RichContentRenderer content={r.content} mentions={r.mentions} />
+                      </div>
                     </div>
                   </div>
                 ))}

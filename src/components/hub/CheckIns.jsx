@@ -67,6 +67,7 @@ export default function CheckIns({ hubId }) {
       {prompts.map(prompt => (
         <CheckInPromptCard
           key={prompt.id}
+          hubId={hubId}
           prompt={prompt}
           responses={responses.filter(r => r.prompt_id === prompt.id)}
           profileId={profile?.id}
