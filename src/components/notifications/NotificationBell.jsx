@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Bell, CheckCircle, AlertTriangle, Clock, UserPlus, UserCog, MessageSquare, Boxes, X } from 'lucide-react'
+import { Bell, CheckCircle, AlertTriangle, Clock, UserPlus, UserCog, MessageSquare, Boxes, AtSign, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useTasks } from '../../hooks/useTasks'
 import { useAuth } from '../../hooks/useAuth'
 import { formatDate } from '../../lib/helpers'
+import { useMentionNotifications } from '../../hooks/useMentionNotifications'
 
-function getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInvites) {
+function getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInvites, hubMentions) {
   const notifications = []
   const now = new Date()
 
@@ -23,6 +24,23 @@ function getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInv
       link: `/hub/${inv.hub_id}`,
       time: inv.created_at,
       priority: 0.3,
+    })
+  })
+
+  // Hub @mentions
+  hubMentions.forEach(m => {
+    const moduleLabel = { chat: 'Campfire', message: 'Message Board', message_reply: 'Message Board', check_in_response: 'Check-ins' }[m.entity_type] || 'Hub'
+    notifications.push({
+      id: `hub-mention-${m.id}`,
+      type: 'hub-mention',
+      icon: <AtSign size={14} />,
+      color: 'text-brand-600 bg-brand-500/15',
+      title: `${m.mentioner?.full_name || 'Someone'} mentioned you`,
+      body: `in ${m.hub?.name || 'a hub'} — ${moduleLabel}`,
+      link: `/hub/${m.hub_id}`,
+      mentionId: m.id,
+      time: m.created_at,
+      priority: 0.2,
     })
   })
 
@@ -149,6 +167,7 @@ export default function NotificationBell({ onTaskClick }) {
   const [unsetupUsers, setUnsetupUsers] = useState([])
   const [recentComments, setRecentComments] = useState([])
   const [hubInvites, setHubInvites] = useState([])
+  const { mentions: hubMentions, markSeen: markMentionSeen } = useMentionNotifications()
   const [dismissed, setDismissed] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('pe-dismissed-notifs') || '[]')
@@ -255,7 +274,7 @@ export default function NotificationBell({ onTaskClick }) {
     return () => supabase.removeChannel(channel)
   }, [profile?.id])
 
-  const allNotifications = getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInvites)
+  const allNotifications = getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInvites, hubMentions)
   const notifications = allNotifications.filter(n => !dismissed.includes(n.id))
   const count = notifications.length
 
@@ -286,6 +305,7 @@ export default function NotificationBell({ onTaskClick }) {
 
   function handleNotifClick(n) {
     dismiss(n.id)
+    if (n.mentionId) markMentionSeen(n.mentionId)
     if (n.link) {
       navigate(n.link)
     } else if (n.taskId) {
