@@ -190,7 +190,6 @@ function Todos({ hubId }) {
                         item={item}
                         onToggle={() => toggleItem(item.id, item.completed)}
                         onOpen={() => setDetailItem(item)}
-                        isOwn={item.created_by === profile?.id}
                       />
                     ))}
                   </SortableContext>
@@ -204,18 +203,22 @@ function Todos({ hubId }) {
         )
       })}
 
-      {/* Detail panel */}
-      {detailItem && (
-        <TodoItemDetail
-          item={detailItem}
-          hubId={hubId}
-          onClose={() => setDetailItem(null)}
-          onUpdate={updateItem}
-          onDelete={deleteItem}
-          onToggle={toggleItem}
-          onSetAssignees={setAssignees}
-        />
-      )}
+      {/* Detail panel — derive live item from items array so realtime updates flow through */}
+      {detailItem && (() => {
+        const liveItem = items.find(i => i.id === detailItem.id)
+        if (!liveItem) return null
+        return (
+          <TodoItemDetail
+            item={liveItem}
+            hubId={hubId}
+            onClose={() => setDetailItem(null)}
+            onUpdate={updateItem}
+            onDelete={deleteItem}
+            onToggle={toggleItem}
+            onSetAssignees={setAssignees}
+          />
+        )
+      })()}
     </div>
   )
 }

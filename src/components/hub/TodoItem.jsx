@@ -11,7 +11,7 @@ function formatDueDate(d) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-export default function TodoItem({ item, onToggle, onOpen, isOwn }) {
+export default function TodoItem({ item, onToggle, onOpen }) {
   const {
     attributes, listeners, setNodeRef,
     transform, transition, isDragging,
@@ -43,7 +43,7 @@ export default function TodoItem({ item, onToggle, onOpen, isOwn }) {
       {/* Checkbox */}
       <button
         onClick={onToggle}
-        className={`w-4.5 h-4.5 rounded border-2 shrink-0 flex items-center justify-center transition-colors ${
+        className={`w-[18px] h-[18px] rounded border-2 shrink-0 flex items-center justify-center transition-colors ${
           item.completed
             ? 'bg-green-500 border-green-500 text-white'
             : 'border-slate-300 dark:border-slate-600 hover:border-brand-500'

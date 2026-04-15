@@ -150,8 +150,7 @@ create policy "hub_todo_items_insert" on public.hub_todo_items for insert with c
 );
 
 create policy "hub_todo_items_update" on public.hub_todo_items for update using (
-  created_by = auth.uid()
-  or exists (select 1 from public.hub_members hm where hm.hub_id = hub_todo_items.hub_id and hm.profile_id = auth.uid() and hm.role in ('owner', 'admin'))
+  exists (select 1 from public.hub_members hm where hm.hub_id = hub_todo_items.hub_id and hm.profile_id = auth.uid())
   or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'Admin')
 );
 
