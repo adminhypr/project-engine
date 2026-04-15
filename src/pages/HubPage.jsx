@@ -17,15 +17,17 @@ import MessageBoard from '../components/hub/MessageBoard'
 import CheckIns from '../components/hub/CheckIns'
 import Schedule from '../components/hub/Schedule'
 import DocsFiles from '../components/hub/DocsFiles'
+import Todos from '../components/hub/Todos'
 import {
   Activity, Users, Flame, MessageSquare, ClipboardCheck,
-  Calendar, FolderOpen, ArrowLeft
+  Calendar, FolderOpen, ArrowLeft, CheckSquare
 } from 'lucide-react'
 
 const DEFAULT_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4']
 
 const MODULE_DEFS = {
   'message-board': { title: 'Message Board', icon: MessageSquare, color: '#7c3aed', defaultOpen: true },
+  'to-dos':        { title: 'To-Dos',        icon: CheckSquare,    color: '#8b5cf6', defaultOpen: true },
   'check-ins':     { title: 'Check-ins',     icon: ClipboardCheck, color: '#059669', defaultOpen: true },
   'schedule':      { title: 'Schedule',       icon: Calendar,       color: '#d97706', defaultOpen: false },
   'docs-files':    { title: 'Docs & Files',   icon: FolderOpen,     color: '#0284c7', defaultOpen: false },
@@ -36,6 +38,7 @@ const MODULE_DEFS = {
 
 const MODULE_COMPONENTS = {
   'message-board': MessageBoard,
+  'to-dos':        Todos,
   'check-ins':     CheckIns,
   'schedule':      Schedule,
   'docs-files':    DocsFiles,

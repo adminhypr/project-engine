@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { showToast } from '../components/ui/index'
 
-export const DEFAULT_LEFT_ORDER = ['message-board', 'check-ins', 'schedule', 'docs-files']
+export const DEFAULT_LEFT_ORDER = ['message-board', 'to-dos', 'check-ins', 'schedule', 'docs-files']
 export const DEFAULT_SIDEBAR_ORDER = ['campfire', 'whos-here', 'activity']
 
 const DEFAULTS = { left: DEFAULT_LEFT_ORDER, sidebar: DEFAULT_SIDEBAR_ORDER }
