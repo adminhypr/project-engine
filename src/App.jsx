@@ -10,6 +10,7 @@ import AdminOverviewPage from './pages/AdminOverviewPage'
 import ReportsPage from './pages/reports/ReportsPage'
 import SettingsPage from './pages/SettingsPage'
 import HubPage from './pages/HubPage'
+import HubTodosPage from './pages/HubTodosPage'
 import ErrorBoundary from './components/ErrorBoundary'
 import { ThemeProvider } from './hooks/useTheme'
 
@@ -61,6 +62,7 @@ function AppRoutes() {
             <Route path="/assign"   element={<AssignTaskPage />} />
             <Route path="/hub"        element={<HubPage />} />
             <Route path="/hub/:hubId" element={<HubPage />} />
+            <Route path="/hub/:hubId/todos/*" element={<HubTodosPage />} />
             <Route path="/team"     element={<TeamViewPage />} />
             <Route path="/admin"    element={<AdminOverviewPage />} />
             <Route path="/reports"  element={<ReportsPage />} />
