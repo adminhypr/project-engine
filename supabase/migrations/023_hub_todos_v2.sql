@@ -150,7 +150,9 @@ $$;
 
 create trigger trg_hub_activity_todo_completed
   after update on public.hub_todo_items
-  for each row execute function public.hub_activity_on_todo_completed();
+  for each row
+  when (old.completed is distinct from new.completed)
+  execute function public.hub_activity_on_todo_completed();
 
 -- Activity: list created
 create or replace function public.hub_activity_on_todo_list_created()
