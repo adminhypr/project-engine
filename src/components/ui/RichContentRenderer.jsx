@@ -25,8 +25,9 @@ function ImageModal({ src, alt, onClose }) {
   )
 }
 
-export default function RichContentRenderer({ content, mentions = [], inlineImages = [] }) {
+export default function RichContentRenderer({ content, mentions = [], inlineImages = [], attachments = [], attachmentBucket = 'hub-files' }) {
   const [signedUrls, setSignedUrls] = useState({})
+  const [attSignedUrls, setAttSignedUrls] = useState({})
   const [modalImage, setModalImage] = useState(null)
 
   const handleCloseModal = useCallback(() => setModalImage(null), [])
@@ -49,6 +50,21 @@ export default function RichContentRenderer({ content, mentions = [], inlineImag
     signAll()
     return () => { cancelled = true }
   }, [inlineImages])
+
+  useEffect(() => {
+    if (attachments.length === 0) return
+    let cancelled = false
+    async function signAll() {
+      const urls = {}
+      for (const a of attachments) {
+        const { data } = await supabase.storage.from(attachmentBucket).createSignedUrl(a.path, 3600)
+        if (data?.signedUrl) urls[a.path] = data.signedUrl
+      }
+      if (!cancelled) setAttSignedUrls(urls)
+    }
+    signAll()
+    return () => { cancelled = true }
+  }, [attachments, attachmentBucket])
 
   const segments = useMemo(
     () => buildMentionSegments(content || '', mentions),
@@ -95,6 +111,26 @@ export default function RichContentRenderer({ content, mentions = [], inlineImag
           })}
         </div>
       ) : null}
+
+      {attachments.length > 0 && (
+        <div className="flex flex-wrap gap-2 mt-2">
+          {attachments.map((a, i) => {
+            const url = attSignedUrls[a.path]
+            return (
+              <a
+                key={a.path + i}
+                href={url || '#'}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 text-xs px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-dark-bg/50 border border-slate-200 dark:border-dark-border hover:bg-slate-100 dark:hover:bg-dark-hover transition-colors"
+              >
+                <span className="text-slate-500 dark:text-slate-400">📎</span>
+                <span className="text-slate-700 dark:text-slate-300 truncate max-w-[160px]">{a.name}</span>
+              </a>
+            )
+          })}
+        </div>
+      )}
 
       {modalImage !== null && (
         <ImageModal src={modalImage.src} alt={modalImage.alt} onClose={handleCloseModal} />
