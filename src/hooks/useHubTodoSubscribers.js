@@ -48,7 +48,7 @@ export function useHubTodoSubscribers(itemId) {
     const { error } = await supabase
       .from('hub_todo_item_subscribers')
       .insert({ item_id: itemRef.current, profile_id: target })
-    if (error && !error.message.includes('duplicate key')) {
+    if (error && error.code !== '23505') {
       showToast('Failed to subscribe', 'error'); return false
     }
     await fetchSubs()

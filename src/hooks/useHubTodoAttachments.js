@@ -21,7 +21,8 @@ export function useHubTodoAttachments(hubId) {
     setUploading(prev => [...prev, { id: tempId, name: file.name }])
 
     const uid = crypto.randomUUID()
-    const storagePath = `${hubId}/${uid}_${file.name}`
+    const safeName = file.name.replace(/[/\\\x00-\x1f]/g, '_')
+    const storagePath = `${hubId}/${uid}_${safeName}`
 
     const { error } = await supabase.storage.from(BUCKET).upload(storagePath, file)
     setUploading(prev => prev.filter(u => u.id !== tempId))
