@@ -241,3 +241,47 @@ create policy "hub_todo_items_select" on public.hub_todo_items for select using 
     or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'Admin')
   )
 );
+
+
+-- ─────────────────────────────────────────────
+-- Storage bucket: hub-todo-attachments
+-- ─────────────────────────────────────────────
+
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('hub-todo-attachments', 'hub-todo-attachments', false, 10485760)
+on conflict (id) do update set file_size_limit = 10485760;
+
+-- Read: any hub member (for any list/item in their hubs)
+create policy "hub_todo_attachments_read" on storage.objects for select using (
+  bucket_id = 'hub-todo-attachments'
+  and exists (
+    select 1 from public.hub_members hm
+    where hm.profile_id = auth.uid()
+    and hm.hub_id::text = (storage.foldername(name))[1]
+  )
+);
+
+-- Write: any hub member, into their hub's prefix
+create policy "hub_todo_attachments_write" on storage.objects for insert with check (
+  bucket_id = 'hub-todo-attachments'
+  and exists (
+    select 1 from public.hub_members hm
+    where hm.profile_id = auth.uid()
+    and hm.hub_id::text = (storage.foldername(name))[1]
+  )
+);
+
+-- Delete: uploader or hub owner/admin or global Admin
+create policy "hub_todo_attachments_delete" on storage.objects for delete using (
+  bucket_id = 'hub-todo-attachments'
+  and (
+    owner = auth.uid()
+    or exists (
+      select 1 from public.hub_members hm
+      where hm.profile_id = auth.uid()
+      and hm.hub_id::text = (storage.foldername(name))[1]
+      and hm.role in ('owner','admin')
+    )
+    or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'Admin')
+  )
+);
