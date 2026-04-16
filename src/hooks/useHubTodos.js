@@ -19,11 +19,13 @@ export function useHubTodos(hubId) {
         .from('hub_todo_lists')
         .select('*, creator:profiles!hub_todo_lists_created_by_fkey(id, full_name, avatar_url)')
         .eq('hub_id', hubRef.current)
+        .is('deleted_at', null)
         .order('position'),
       supabase
         .from('hub_todo_items')
         .select('*, creator:profiles!hub_todo_items_created_by_fkey(id, full_name, avatar_url), completer:profiles!hub_todo_items_completed_by_fkey(id, full_name), hub_todo_item_assignees(profile_id, profiles(id, full_name, avatar_url))')
         .eq('hub_id', hubRef.current)
+        .is('deleted_at', null)
         .order('position')
     ])
     if (lErr || iErr) showToast('Failed to load to-dos', 'error')
@@ -58,16 +60,22 @@ export function useHubTodos(hubId) {
   }, [hubId, fetchData])
 
   /* ── List mutations ── */
-  const createList = useCallback(async (title, description = '') => {
-    if (!hubRef.current || !profile?.id) return false
+  const createList = useCallback(async (input) => {
+    if (!hubRef.current || !profile?.id) return null
+    // Back-compat: allow createList("just a title") alongside the object form.
+    const payload = typeof input === 'string' ? { title: input } : (input || {})
+    const { title, description = null, color = 'blue', attachments = [] } = payload
+    if (!title?.trim()) return null
     const position = lists.length
-    const { error } = await supabase.from('hub_todo_lists').insert({
+    const { data, error } = await supabase.from('hub_todo_lists').insert({
       hub_id: hubRef.current, created_by: profile.id,
-      title, description: description || null, position
-    })
-    if (error) { showToast('Failed to create list', 'error'); return false }
+      title: title.trim(), description, color,
+      attachments: attachments.map(({ preview, ...rest }) => rest),
+      position
+    }).select().single()
+    if (error) { showToast('Failed to create list', 'error'); return null }
     await fetchData()
-    return true
+    return data
   }, [profile?.id, lists.length, fetchData])
 
   const updateList = useCallback(async (id, updates) => {
@@ -78,8 +86,19 @@ export function useHubTodos(hubId) {
   }, [fetchData])
 
   const deleteList = useCallback(async (id) => {
-    const { error } = await supabase.from('hub_todo_lists').delete().eq('id', id)
+    const { error } = await supabase.from('hub_todo_lists')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', id)
     if (error) { showToast('Failed to delete list', 'error'); return false }
+    await fetchData()
+    return true
+  }, [fetchData])
+
+  const undoDeleteList = useCallback(async (id) => {
+    const { error } = await supabase.from('hub_todo_lists')
+      .update({ deleted_at: null })
+      .eq('id', id)
+    if (error) { showToast('Failed to restore list', 'error'); return false }
     await fetchData()
     return true
   }, [fetchData])
@@ -93,17 +112,28 @@ export function useHubTodos(hubId) {
   }, [fetchData])
 
   /* ── Item mutations ── */
-  const createItem = useCallback(async (listId, title) => {
-    if (!hubRef.current || !profile?.id) return false
+  const createItem = useCallback(async (listId, input) => {
+    if (!hubRef.current || !profile?.id) return null
+    const payload = typeof input === 'string' ? { title: input } : (input || {})
+    const { title, notes = null, due_date = null, assigneeIds = [], attachments = [] } = payload
+    if (!title?.trim()) return null
+
     const listItems = items.filter(i => i.list_id === listId)
     const position = listItems.length
-    const { error } = await supabase.from('hub_todo_items').insert({
+    const { data, error } = await supabase.from('hub_todo_items').insert({
       list_id: listId, hub_id: hubRef.current, created_by: profile.id,
-      title, position
-    })
-    if (error) { showToast('Failed to add to-do', 'error'); return false }
+      title: title.trim(), notes, due_date,
+      attachments: attachments.map(({ preview, ...rest }) => rest),
+      position
+    }).select().single()
+    if (error) { showToast('Failed to add to-do', 'error'); return null }
+    if (assigneeIds.length > 0) {
+      await supabase.from('hub_todo_item_assignees').insert(
+        assigneeIds.map(pid => ({ item_id: data.id, profile_id: pid }))
+      )
+    }
     await fetchData()
-    return true
+    return data
   }, [profile?.id, items, fetchData])
 
   const toggleItem = useCallback(async (id, currentlyCompleted) => {
@@ -122,6 +152,9 @@ export function useHubTodos(hubId) {
     if (payload.inlineImages) {
       payload.inline_images = payload.inlineImages.map(({ preview, ...rest }) => rest)
       delete payload.inlineImages
+    }
+    if (payload.attachments) {
+      payload.attachments = payload.attachments.map(({ preview, ...rest }) => rest)
     }
     const { data, error } = await supabase.from('hub_todo_items').update(payload).eq('id', id).select().single()
     if (error) { showToast('Failed to update to-do', 'error'); return false }
@@ -148,9 +181,19 @@ export function useHubTodos(hubId) {
   }, [profile?.id, fetchData])
 
   const deleteItem = useCallback(async (id) => {
-    await supabase.from('hub_mentions').delete().eq('entity_id', id)
-    const { error } = await supabase.from('hub_todo_items').delete().eq('id', id)
+    const { error } = await supabase.from('hub_todo_items')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', id)
     if (error) { showToast('Failed to delete to-do', 'error'); return false }
+    await fetchData()
+    return true
+  }, [fetchData])
+
+  const undoDeleteItem = useCallback(async (id) => {
+    const { error } = await supabase.from('hub_todo_items')
+      .update({ deleted_at: null })
+      .eq('id', id)
+    if (error) { showToast('Failed to restore to-do', 'error'); return false }
     await fetchData()
     return true
   }, [fetchData])
@@ -178,8 +221,8 @@ export function useHubTodos(hubId) {
 
   return {
     lists, items, loading,
-    createList, updateList, deleteList, reorderLists,
-    createItem, toggleItem, updateItem, deleteItem, reorderItems, setAssignees,
+    createList, updateList, deleteList, undoDeleteList, reorderLists,
+    createItem, toggleItem, updateItem, deleteItem, undoDeleteItem, reorderItems, setAssignees,
     refetch: fetchData
   }
 }
