@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import { Bold, Italic, List, ListOrdered } from 'lucide-react'
+import Link from '@tiptap/extension-link'
+import { Bold, Italic, List, ListOrdered, Link as LinkIcon } from 'lucide-react'
 
 export default function TodoEditor({
   value = '',
@@ -15,7 +16,14 @@ export default function TodoEditor({
   autoFocus = false,
 }) {
   const editor = useEditor({
-    extensions: [StarterKit],
+    extensions: [
+      StarterKit.configure({ link: false }),
+      Link.configure({
+        openOnClick: false,
+        autolink: true,
+        HTMLAttributes: { rel: 'noopener noreferrer nofollow', target: '_blank', class: 'text-brand-600 dark:text-brand-400 underline' },
+      }),
+    ],
     content: value || '',
     autofocus: autoFocus,
     editorProps: {
@@ -52,6 +60,18 @@ export default function TodoEditor({
     }
   }, [editor, submitRef, onSubmit])
 
+  function promptLink() {
+    if (!editor) return
+    const prev = editor.getAttributes('link').href || ''
+    const url = window.prompt('Link URL', prev)
+    if (url === null) return
+    if (url === '') {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run()
+      return
+    }
+    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+  }
+
   const btn = 'p-1.5 rounded hover:bg-slate-100 dark:hover:bg-dark-hover text-slate-500 dark:text-slate-400 transition-colors'
   const btnActive = 'bg-brand-50 dark:bg-brand-500/10 text-brand-600 dark:text-brand-400'
   const cls = (active) => `${btn} ${active ? btnActive : ''}`
@@ -61,6 +81,7 @@ export default function TodoEditor({
       <div className="flex items-center gap-0.5 px-2 py-1 border-b border-slate-100 dark:border-dark-border bg-slate-50 dark:bg-dark-bg/50">
         <button type="button" className={cls(editor?.isActive('bold'))} onClick={() => editor?.chain().focus().toggleBold().run()} title="Bold"><Bold size={14} /></button>
         <button type="button" className={cls(editor?.isActive('italic'))} onClick={() => editor?.chain().focus().toggleItalic().run()} title="Italic"><Italic size={14} /></button>
+        <button type="button" className={cls(editor?.isActive('link'))} onClick={promptLink} title="Link"><LinkIcon size={14} /></button>
         <span className="w-px h-4 bg-slate-200 dark:bg-dark-border mx-1" />
         <button type="button" className={cls(editor?.isActive('bulletList'))} onClick={() => editor?.chain().focus().toggleBulletList().run()} title="Bullet list"><List size={14} /></button>
         <button type="button" className={cls(editor?.isActive('orderedList'))} onClick={() => editor?.chain().focus().toggleOrderedList().run()} title="Numbered list"><ListOrdered size={14} /></button>
