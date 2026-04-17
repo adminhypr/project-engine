@@ -5,6 +5,7 @@ import TodoBreadcrumb from './TodoBreadcrumb'
 import NewItemForm from './NewItemForm'
 import TodoItemRow from './TodoItemRow'
 import TrashedToast from './TrashedToast'
+import RichContentRenderer from '../../ui/RichContentRenderer'
 import { todoColorClass } from './todoColors'
 
 export default function TodoListPage({ hubId, hub, lists, items, createItem, toggleItem, deleteItem, undoDeleteItem, deleteList, undoDeleteList }) {
@@ -65,7 +66,15 @@ export default function TodoListPage({ hubId, hub, lists, items, createItem, tog
       </div>
 
       {list.description && (
-        <p className="text-sm text-slate-600 dark:text-slate-400 mb-4 whitespace-pre-wrap">{list.description}</p>
+        <div className="mb-4 text-sm text-slate-600 dark:text-slate-400">
+          <RichContentRenderer
+            content={list.description}
+            mentions={list.mentions || []}
+            inlineImages={list.inline_images || []}
+            attachments={list.attachments || []}
+            attachmentBucket="hub-todo-attachments"
+          />
+        </div>
       )}
 
       <div className="rounded-2xl border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card overflow-hidden mb-4">
