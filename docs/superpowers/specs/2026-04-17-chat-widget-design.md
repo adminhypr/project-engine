@@ -77,7 +77,7 @@ On submit: `useTaskActions.assignTask({ assigneeIds: [otherUserId], title, urgen
 
 ## 5. Data model
 
-Migration: `supabase/migrations/026_direct_messages.sql`
+Migration: `supabase/migrations/027_direct_messages.sql`
 
 ### 5.1 Tables
 
@@ -296,7 +296,7 @@ Component-level smoke tests (Testing Library) for `ChatWidget` open/close and `A
 
 Ten sub-steps, each independently deployable:
 
-1. **Migration 026** + RLS + triggers + `get_or_create_dm` RPC.
+1. **Migration 027** + RLS + triggers + `get_or_create_dm` RPC.
 2. Enable realtime publication on the two new tables.
 3. Hooks: `useGlobalPresence`, `useDmRealtime`, `useConversations`, `useConversation`, `useContactList`.
 4. `ChatWidget` shell (launcher + panel states) with localStorage persistence.
@@ -319,7 +319,7 @@ Otherwise: revisit before starting steps 7–10 if UX of steps 1–6 reveals sur
 ## 12. Files touched (preview)
 
 **New:**
-- `supabase/migrations/026_direct_messages.sql`
+- `supabase/migrations/027_direct_messages.sql`
 - `supabase/functions/dm-offline-notify/index.ts`
 - `src/hooks/useConversations.js`
 - `src/hooks/useConversation.js`

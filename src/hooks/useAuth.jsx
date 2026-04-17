@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { useGlobalPresence } from './useGlobalPresence'
+import { useDmRealtime } from './useDmRealtime'
 
 const AuthContext = createContext(null)
 
@@ -232,11 +234,15 @@ export function AuthProvider({ children }) {
     return profile?.team_roles?.[teamId] === 'Manager'
   }, [profile])
 
+  const presence = useGlobalPresence(profile)
+  useDmRealtime(profile?.id)
+
   const value = {
     session,
     profile,
     loading,
     refreshProfile,
+    presence,
     isAdmin:   profile?.role === 'Admin',
     isManager: profile?.role === 'Manager' || profile?.role === 'Admin',
     isStaff:   profile?.role === 'Staff',

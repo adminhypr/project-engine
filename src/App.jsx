@@ -13,6 +13,7 @@ import HubPage from './pages/HubPage'
 import HubTodosPage from './pages/HubTodosPage'
 import ErrorBoundary from './components/ErrorBoundary'
 import { ThemeProvider } from './hooks/useTheme'
+import ChatWidget from './components/chat/ChatWidget'
 
 function AppRoutes() {
   const { session, loading, profile, refreshProfile } = useAuth()
@@ -53,25 +54,28 @@ function AppRoutes() {
   )
 
   return (
-    <Layout>
-      <ErrorBoundary>
-        <AnimatePresence mode="wait">
-          <Routes>
-            <Route path="/"        element={<Navigate to="/my-tasks" replace />} />
-            <Route path="/my-tasks" element={<MyTasksPage />} />
-            <Route path="/assign"   element={<AssignTaskPage />} />
-            <Route path="/hub"        element={<HubPage />} />
-            <Route path="/hub/:hubId" element={<HubPage />} />
-            <Route path="/hub/:hubId/todos/*" element={<HubTodosPage />} />
-            <Route path="/team"     element={<TeamViewPage />} />
-            <Route path="/admin"    element={<AdminOverviewPage />} />
-            <Route path="/reports"  element={<ReportsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="*"         element={<Navigate to="/my-tasks" replace />} />
-          </Routes>
-        </AnimatePresence>
-      </ErrorBoundary>
-    </Layout>
+    <>
+      <Layout>
+        <ErrorBoundary>
+          <AnimatePresence mode="wait">
+            <Routes>
+              <Route path="/"        element={<Navigate to="/my-tasks" replace />} />
+              <Route path="/my-tasks" element={<MyTasksPage />} />
+              <Route path="/assign"   element={<AssignTaskPage />} />
+              <Route path="/hub"        element={<HubPage />} />
+              <Route path="/hub/:hubId" element={<HubPage />} />
+              <Route path="/hub/:hubId/todos/*" element={<HubTodosPage />} />
+              <Route path="/team"     element={<TeamViewPage />} />
+              <Route path="/admin"    element={<AdminOverviewPage />} />
+              <Route path="/reports"  element={<ReportsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="*"         element={<Navigate to="/my-tasks" replace />} />
+            </Routes>
+          </AnimatePresence>
+        </ErrorBoundary>
+      </Layout>
+      <ChatWidget />
+    </>
   )
 }
 

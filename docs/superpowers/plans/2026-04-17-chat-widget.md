@@ -17,8 +17,8 @@
 ```
 supabase/
   migrations/
-    026_direct_messages.sql            NEW — tables, RLS, RPC, triggers, realtime, storage bucket
-    027_dm_email_queue.sql             NEW — pending_dm_emails + dm_email_log + trigger
+    027_direct_messages.sql            NEW — tables, RLS, RPC, triggers, realtime, storage bucket
+    028_dm_email_queue.sql             NEW — pending_dm_emails + dm_email_log + trigger
   functions/
     dm-offline-notify/
       index.ts                         NEW — Deno edge function, cron-driven
@@ -94,14 +94,14 @@ Stop after Task 14 gives you a usable text-only chat. Continue into Phase 2 for 
 ## Task 1: Database migration — conversations, participants, messages, RLS, RPC, triggers, realtime
 
 **Files:**
-- Create: `supabase/migrations/026_direct_messages.sql`
+- Create: `supabase/migrations/027_direct_messages.sql`
 
 Apply migrations locally with whatever workflow you use (`supabase db push` or the Supabase Studio SQL editor against the dev project — the codebase doesn't check in a specific tool). This task produces SQL only; the plan assumes you'll run it before Task 3.
 
 - [ ] **Step 1: Create the migration file**
 
 ```sql
--- supabase/migrations/026_direct_messages.sql
+-- supabase/migrations/027_direct_messages.sql
 -- 1:1 (and future group) direct messaging.
 
 ------------------------------------------------------------
@@ -328,7 +328,7 @@ create policy "dm_attachments_insert_participant" on storage.objects
 Use whichever path you normally use for this project. A safe default, using psql against your dev project connection string stored in `SUPABASE_DB_URL`:
 
 ```bash
-psql "$SUPABASE_DB_URL" -f supabase/migrations/026_direct_messages.sql
+psql "$SUPABASE_DB_URL" -f supabase/migrations/027_direct_messages.sql
 ```
 
 Expected: no errors. The script is idempotent (uses `if not exists`, `drop policy if exists`, `on conflict do nothing`) so re-running is safe.
@@ -346,7 +346,7 @@ Expected: `ERROR: new row violates row-level security policy`.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add supabase/migrations/026_direct_messages.sql
+git add supabase/migrations/027_direct_messages.sql
 git commit -m "feat(chat): add direct messaging tables, RLS, RPC, realtime publication"
 ```
 
@@ -2791,7 +2791,7 @@ git commit -m "feat(chat): surface unread DMs in NotificationBell with click-to-
 ## Task 19: Offline-delay email edge function
 
 **Files:**
-- Create: `supabase/migrations/027_dm_email_queue.sql`
+- Create: `supabase/migrations/028_dm_email_queue.sql`
 - Create: `supabase/functions/dm-offline-notify/index.ts`
 - Create: `supabase/functions/dm-offline-notify/deno.json`
 
@@ -2801,7 +2801,7 @@ Presence heartbeat signal: we don't have a server-side persistent record of pres
 
 - [ ] **Step 1: Create migration 027**
 
-Create `supabase/migrations/027_dm_email_queue.sql`:
+Create `supabase/migrations/028_dm_email_queue.sql`:
 
 ```sql
 create table if not exists public.pending_dm_emails (
@@ -2854,7 +2854,7 @@ create trigger dm_messages_enqueue_email
 Apply with:
 
 ```bash
-psql "$SUPABASE_DB_URL" -f supabase/migrations/027_dm_email_queue.sql
+psql "$SUPABASE_DB_URL" -f supabase/migrations/028_dm_email_queue.sql
 ```
 
 - [ ] **Step 2: Create the Deno function**
@@ -3047,7 +3047,7 @@ From user A, send a message to user B while B is logged out. Wait 3+ minutes. Co
 - [ ] **Step 5: Commit**
 
 ```bash
-git add supabase/migrations/027_dm_email_queue.sql supabase/functions/dm-offline-notify/
+git add supabase/migrations/028_dm_email_queue.sql supabase/functions/dm-offline-notify/
 git commit -m "feat(chat): offline-delay email notifications for unread DMs"
 ```
 
@@ -3069,8 +3069,8 @@ In `CLAUDE.md`, under the `**Project Hubs data layer:**` bullet, insert a new si
 In the Database section, append to the list:
 
 ```markdown
-- **026_direct_messages.sql** — `conversations`, `conversation_participants`, `dm_messages` tables. `get_or_create_dm` + `mark_conversation_read` RPCs. Soft-delete via `deleted_at`. Realtime enabled. New `dm-attachments` Storage bucket.
-- **027_dm_email_queue.sql** — `pending_dm_emails` queue + `dm_email_log` debounce log + `enqueue_dm_email` trigger. Drives `dm-offline-notify` edge function.
+- **027_direct_messages.sql** — `conversations`, `conversation_participants`, `dm_messages` tables. `get_or_create_dm` + `mark_conversation_read` RPCs. Soft-delete via `deleted_at`. Realtime enabled. New `dm-attachments` Storage bucket.
+- **028_dm_email_queue.sql** — `pending_dm_emails` queue + `dm_email_log` debounce log + `enqueue_dm_email` trigger. Drives `dm-offline-notify` edge function.
 ```
 
 In the Supabase Edge Functions section, append:

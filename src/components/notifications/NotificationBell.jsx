@@ -7,8 +7,9 @@ import { useTasks } from '../../hooks/useTasks'
 import { useAuth } from '../../hooks/useAuth'
 import { formatDate } from '../../lib/helpers'
 import { useMentionNotifications } from '../../hooks/useMentionNotifications'
+import { useConversations } from '../../hooks/useConversations'
 
-function getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInvites, hubMentions) {
+function getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInvites, hubMentions, dmConversations) {
   const notifications = []
   const now = new Date()
 
@@ -41,6 +42,22 @@ function getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInv
       mentionId: m.id,
       time: m.created_at,
       priority: 0.2,
+    })
+  })
+
+  // DM unread — one aggregated entry per conversation
+  dmConversations.forEach(c => {
+    if (!c.unread || c.unread <= 0 || !c.other_profile) return
+    notifications.push({
+      id: `dm-${c.id}`,
+      type: 'dm',
+      icon: <MessageSquare size={14} />,
+      color: 'text-brand-600 bg-brand-500/15',
+      title: `${c.unread} new message${c.unread > 1 ? 's' : ''} from ${c.other_profile.full_name}`,
+      body: c.last_message_preview || '',
+      convId: c.id,
+      time: c.last_message_at,
+      priority: 0.25,
     })
   })
 
@@ -168,6 +185,7 @@ export default function NotificationBell({ onTaskClick }) {
   const [recentComments, setRecentComments] = useState([])
   const [hubInvites, setHubInvites] = useState([])
   const { mentions: hubMentions, markSeen: markMentionSeen } = useMentionNotifications()
+  const { conversations: dmConversations } = useConversations()
   const [dismissed, setDismissed] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('pe-dismissed-notifs') || '[]')
@@ -274,7 +292,7 @@ export default function NotificationBell({ onTaskClick }) {
     return () => supabase.removeChannel(channel)
   }, [profile?.id])
 
-  const allNotifications = getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInvites, hubMentions)
+  const allNotifications = getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInvites, hubMentions, dmConversations)
   const notifications = allNotifications.filter(n => !dismissed.includes(n.id))
   const count = notifications.length
 
@@ -306,7 +324,9 @@ export default function NotificationBell({ onTaskClick }) {
   function handleNotifClick(n) {
     dismiss(n.id)
     if (n.mentionId) markMentionSeen(n.mentionId)
-    if (n.link) {
+    if (n.convId) {
+      window.dispatchEvent(new CustomEvent('pe-chat-open', { detail: { conversationId: n.convId } }))
+    } else if (n.link) {
       navigate(n.link)
     } else if (n.taskId) {
       onTaskClick?.(n.taskId)
