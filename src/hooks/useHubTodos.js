@@ -70,7 +70,6 @@ export function useHubTodos(hubId) {
     const { data, error } = await supabase.from('hub_todo_lists').insert({
       hub_id: hubRef.current, created_by: profile.id,
       title: title.trim(), description, color,
-      mentions,
       attachments: attachments.map(({ preview, ...rest }) => rest),
       position
     }).select().single()
