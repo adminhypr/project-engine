@@ -165,7 +165,8 @@ export default function RichContentRenderer({ content, mentions = [], inlineImag
               src={url}
               alt={name}
               loading="lazy"
-              className="max-w-xs max-h-48 rounded-lg border border-slate-200 dark:border-dark-border"
+              onClick={() => setModalImage({ src: url, alt: name })}
+              className="max-w-xs max-h-48 rounded-lg border border-slate-200 dark:border-dark-border cursor-pointer hover:opacity-90 transition-opacity"
             />
           ) : (
             <span className="inline-block w-32 h-24 rounded-lg border border-slate-200 dark:border-dark-border bg-slate-100 dark:bg-dark-bg animate-pulse" />
@@ -193,6 +194,9 @@ export default function RichContentRenderer({ content, mentions = [], inlineImag
               )
             })}
           </div>
+        )}
+        {modalImage !== null && (
+          <ImageModal src={modalImage.src} alt={modalImage.alt} onClose={handleCloseModal} />
         )}
       </div>
     )

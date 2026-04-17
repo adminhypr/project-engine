@@ -49,6 +49,8 @@ export default function TodoEditor({
   const membersRef = useRef([])
   const profileIdRef = useRef(null)
   const mentionQueryRef = useRef(null)
+  const onSubmitRef = useRef(onSubmit)
+  useEffect(() => { onSubmitRef.current = onSubmit }, [onSubmit])
 
   const filteredMembers = mentionQuery === null ? [] : members
     .filter(m => m.profile?.id && m.profile.id !== profile?.id)
@@ -113,7 +115,7 @@ export default function TodoEditor({
       }),
       Mention.configure({
         HTMLAttributes: { class: 'mention inline-block bg-brand-100 dark:bg-brand-500/20 text-brand-700 dark:text-brand-300 font-medium rounded px-1' },
-        renderLabel: ({ node }) => `@${node.attrs.label ?? node.attrs.id}`,
+        renderText: ({ node }) => `@${node.attrs.label ?? node.attrs.id}`,
         suggestion: {
           char: '@',
           items: ({ query }) => (membersRef.current || [])
@@ -206,7 +208,7 @@ export default function TodoEditor({
         const json = editorRef.current?.getJSON()
         const html = editorRef.current?.getHTML() || ''
         if (!html || html === '<p></p>') return true
-        onSubmit?.({
+        onSubmitRef.current?.({
           html,
           mentions: extractMentionsFromDoc(json),
           inlineImages: extractImagesFromDoc(json),
