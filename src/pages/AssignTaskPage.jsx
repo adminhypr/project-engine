@@ -9,11 +9,14 @@ import { useAuth } from '../hooks/useAuth'
 import { PageTransition, SuccessBurst } from '../components/ui/animations'
 import { CheckCircle, Users, X } from 'lucide-react'
 import TaskIconPicker from '../components/ui/TaskIconPicker'
+import { FilePickerInput, hasOversizedFiles } from '../components/ui/FileAttachment'
+import { useAttachments } from '../hooks/useAttachments'
 
 export default function AssignTaskPage() {
   const { profile, isAdmin } = useAuth()
   const { assignTask } = useTaskActions()
   const { profiles, loading: profilesLoading } = useProfiles()
+  const { uploadAttachments } = useAttachments()
   const navigate = useNavigate()
 
   const [form, setForm] = useState({
@@ -25,6 +28,7 @@ export default function AssignTaskPage() {
     notes:       '',
     icon:        ''
   })
+  const [pendingFiles, setPendingFiles] = useState([])
   const [overrideAssignerId, setOverrideAssignerId] = useState('')
   const [selectedTeamId, setSelectedTeamId] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -99,6 +103,10 @@ export default function AssignTaskPage() {
       showToast('Due date must be in the future', 'error')
       return
     }
+    if (hasOversizedFiles(pendingFiles)) {
+      showToast('Remove files over 5 MB before submitting', 'error')
+      return
+    }
     setSubmitting(true)
     const res = await assignTask({
       ...form,
@@ -109,8 +117,15 @@ export default function AssignTaskPage() {
     setSubmitting(false)
 
     if (res.ok) {
+      if (pendingFiles.length > 0) {
+        const upload = await uploadAttachments(res.task.id, pendingFiles)
+        if (!upload.ok) {
+          showToast('Task created but some files failed to upload', 'error')
+        }
+      }
       setResult(res)
       setForm({ assigneeIds: [], title: '', urgency: 'Med', dueDate: '', whoTo: '', notes: '', icon: '' })
+      setPendingFiles([])
       setSelectedTeamId('')
     } else {
       showToast(res.msg, 'error')
@@ -325,6 +340,12 @@ export default function AssignTaskPage() {
               </div>
 
               <div>
+                <label className="form-label">Attachments (optional)</label>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mb-1">Max 5 MB per file. For larger files, upload to Google Drive and paste the link in Notes.</p>
+                <FilePickerInput files={pendingFiles} onChange={setPendingFiles} />
+              </div>
+
+              <div>
                 <label className="form-label">Task Icon (optional)</label>
                 <TaskIconPicker value={form.icon} onChange={v => set('icon', v)} />
               </div>
@@ -332,7 +353,7 @@ export default function AssignTaskPage() {
               <div className="flex items-center gap-3 pt-2">
                 <motion.button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || hasOversizedFiles(pendingFiles)}
                   className="btn-primary"
                   whileTap={{ scale: 0.97 }}
                 >
@@ -340,6 +361,7 @@ export default function AssignTaskPage() {
                 </motion.button>
                 <button type="button" className="btn-secondary" onClick={() => {
                   setForm({ assigneeIds: [], title: '', urgency: 'Med', dueDate: '', whoTo: '', notes: '', icon: '' })
+                  setPendingFiles([])
                   setSelectedTeamId('')
                 }}>
                   Clear

@@ -11,7 +11,8 @@ const TASK_SELECT_FULL = `
   assigner:profiles!tasks_assigned_by_fkey(id, full_name, email, role, team_id, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
   task_assignees!task_assignees_task_id_fkey(profile_id, is_primary, profile:profiles!task_assignees_profile_id_fkey(id, full_name, avatar_url)),
   team:teams(id, name),
-  comments(count)
+  comments(count),
+  task_attachments(count)
 `
 
 const TASK_SELECT_FALLBACK = `
@@ -19,7 +20,8 @@ const TASK_SELECT_FALLBACK = `
   assignee:profiles!tasks_assigned_to_fkey(id, full_name, email, role, team_id, reports_to, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
   assigner:profiles!tasks_assigned_by_fkey(id, full_name, email, role, team_id, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
   team:teams(id, name),
-  comments(count)
+  comments(count),
+  task_attachments(count)
 `
 
 export function useTasks() {
@@ -107,6 +109,7 @@ export function useTasks() {
         ...t,
         priority:      getPriority(t),
         comment_count: t.comments?.[0]?.count || 0,
+        attachment_count: t.task_attachments?.[0]?.count || 0,
         assignee:      t.assignee ? { ...enrichProfile(t.assignee), manager: managerMap[t.assignee.reports_to] || null } : t.assignee,
         assigner:      enrichProfile(t.assigner),
         assignees,
