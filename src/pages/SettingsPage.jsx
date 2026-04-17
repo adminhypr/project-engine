@@ -6,6 +6,7 @@ import { PageHeader, showToast } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
 import { Star, X, Plus, Send, Mail, Pencil, Trash2, Check, AlertTriangle, Shield } from 'lucide-react'
 import { ModalWrapper } from '../components/ui/animations'
+import AvatarCard from '../components/settings/AvatarCard'
 
 export default function SettingsPage() {
   const { profile, isAdmin } = useAuth()
@@ -113,6 +114,8 @@ export default function SettingsPage() {
         />
 
         <div className="p-4 sm:p-6 space-y-6 max-w-7xl">
+
+          <AvatarCard />
 
           {/* Teams — admin only */}
           {isAdmin && (
