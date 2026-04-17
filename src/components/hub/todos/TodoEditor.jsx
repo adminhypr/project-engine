@@ -44,11 +44,20 @@ export default function TodoEditor({
   const [mentionIndex, setMentionIndex] = useState(0)
   const [mentionRect, setMentionRect] = useState(null)
   const mentionCommandRef = useRef(null)
+  const filteredMembersRef = useRef([])
+  const mentionIndexRef = useRef(0)
+  const membersRef = useRef([])
+  const profileIdRef = useRef(null)
 
   const filteredMembers = mentionQuery === null ? [] : members
     .filter(m => m.profile?.id && m.profile.id !== profile?.id)
     .filter(m => (m.profile?.full_name || '').toLowerCase().includes(mentionQuery.toLowerCase()))
     .slice(0, 6)
+
+  useEffect(() => { filteredMembersRef.current = filteredMembers })
+  useEffect(() => { mentionIndexRef.current = mentionIndex }, [mentionIndex])
+  useEffect(() => { membersRef.current = members }, [members])
+  useEffect(() => { profileIdRef.current = profile?.id }, [profile?.id])
 
   const uploadImage = useCallback(async (file) => {
     const ed = editorRef.current
@@ -105,8 +114,8 @@ export default function TodoEditor({
         renderLabel: ({ node }) => `@${node.attrs.label ?? node.attrs.id}`,
         suggestion: {
           char: '@',
-          items: ({ query }) => members
-            .filter(m => m.profile?.id && m.profile.id !== profile?.id)
+          items: ({ query }) => (membersRef.current || [])
+            .filter(m => m.profile?.id && m.profile.id !== profileIdRef.current)
             .filter(m => (m.profile?.full_name || '').toLowerCase().includes(query.toLowerCase()))
             .slice(0, 6)
             .map(m => ({ id: m.profile.id, label: m.profile.full_name })),
@@ -125,15 +134,18 @@ export default function TodoEditor({
             },
             onKeyDown: (props) => {
               if (props.event.key === 'ArrowDown') {
-                setMentionIndex(i => (i + 1) % Math.max(filteredMembers.length, 1))
+                const n = Math.max(filteredMembersRef.current.length, 1)
+                setMentionIndex(i => (i + 1) % n)
                 return true
               }
               if (props.event.key === 'ArrowUp') {
-                setMentionIndex(i => (i - 1 + Math.max(filteredMembers.length, 1)) % Math.max(filteredMembers.length, 1))
+                const n = Math.max(filteredMembersRef.current.length, 1)
+                setMentionIndex(i => (i - 1 + n) % n)
                 return true
               }
               if (props.event.key === 'Enter') {
-                const picked = filteredMembers[mentionIndex]
+                const list = filteredMembersRef.current
+                const picked = list[mentionIndexRef.current]
                 if (picked) {
                   mentionCommandRef.current?.({ id: picked.profile.id, label: picked.profile.full_name })
                   return true
