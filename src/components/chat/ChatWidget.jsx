@@ -7,7 +7,7 @@ import ChatLauncher from './ChatLauncher'
 import ChatPanel from './ChatPanel'
 import ContactSearch from './ContactSearch'
 import ContactList from './ContactList'
-import ConversationPane from './ConversationPane'
+import ConversationStack from './ConversationStack'
 
 export default function ChatWidget() {
   const { profile } = useAuth()
@@ -27,7 +27,12 @@ export default function ChatWidget() {
       const openIds = s.openConversationIds.includes(convId)
         ? s.openConversationIds
         : [...s.openConversationIds, convId]
-      return { ...s, expanded: true, openConversationIds: openIds }
+      return {
+        ...s,
+        expanded: true,
+        openConversationIds: openIds,
+        minimizedIds: s.minimizedIds.filter(id => id !== convId),
+      }
     })
   }, [createOrOpen])
 
@@ -39,23 +44,38 @@ export default function ChatWidget() {
     }))
   }, [])
 
-  if (!profile?.id) return null
+  const minimizeOne = useCallback((convId) => {
+    setState(s => ({
+      ...s,
+      minimizedIds: s.minimizedIds.includes(convId) ? s.minimizedIds : [...s.minimizedIds, convId],
+    }))
+  }, [])
 
-  // For this task we show at most the last open conversation. Task 15 handles multi-stack.
-  const visibleId = state.openConversationIds[state.openConversationIds.length - 1]
-  const visibleConversation = visibleId ? conversations.find(c => c.id === visibleId) : null
+  const restoreOne = useCallback((convId) => {
+    setState(s => ({
+      ...s,
+      minimizedIds: s.minimizedIds.filter(id => id !== convId),
+      openConversationIds: s.openConversationIds.includes(convId)
+        ? s.openConversationIds
+        : [...s.openConversationIds, convId],
+    }))
+  }, [])
+
+  if (!profile?.id) return null
 
   return (
     <div className="fixed bottom-4 right-4 z-40 flex items-end gap-3">
-      {visibleConversation && (
-        <ConversationPane
-          conversation={visibleConversation}
-          online={presence.get(visibleConversation.other_user_id)?.online || false}
-          onClose={closeOne}
-          onMinimize={() => { /* Task 15 */ }}
-          onMarkRead={markRead}
-        />
-      )}
+      <ConversationStack
+        openConversationIds={state.openConversationIds}
+        minimizedIds={state.minimizedIds}
+        conversations={conversations}
+        presence={presence}
+        onClose={closeOne}
+        onMinimize={minimizeOne}
+        onRestore={restoreOne}
+        onMarkRead={markRead}
+        onAssignTask={() => { /* Task 17 wires this */ }}
+      />
       {state.expanded && (
         <ChatPanel onClose={() => setState(s => ({ ...s, expanded: false }))}>
           <div className="p-3">
