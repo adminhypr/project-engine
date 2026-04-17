@@ -63,8 +63,11 @@ export function useAvatarUpload() {
       }
     } catch { /* non-critical */ }
 
-    await refreshProfile()
-    setUploading(false)
+    try {
+      await refreshProfile()
+    } finally {
+      setUploading(false)
+    }
     showToast('Avatar updated')
     return true
   }, [profile?.id, refreshProfile])
@@ -90,8 +93,11 @@ export function useAvatarUpload() {
       if (toRemove.length > 0) await supabase.storage.from('avatars').remove(toRemove)
     } catch { /* non-critical */ }
 
-    await refreshProfile()
-    setUploading(false)
+    try {
+      await refreshProfile()
+    } finally {
+      setUploading(false)
+    }
     showToast(googleUrl ? 'Reverted to default avatar' : 'Avatar cleared')
     return true
   }, [profile?.id, session?.user?.user_metadata?.avatar_url, refreshProfile])
