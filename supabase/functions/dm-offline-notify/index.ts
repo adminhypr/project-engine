@@ -8,7 +8,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const SUPABASE_URL      = Deno.env.get('SUPABASE_URL')!
 const SERVICE_KEY       = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const RESEND_API_KEY    = Deno.env.get('RESEND_API_KEY')!
-const FROM_EMAIL        = Deno.env.get('DM_FROM_EMAIL') ?? 'chat@example.com'
+const FROM_EMAIL        = Deno.env.get('DM_FROM_EMAIL')
+                          ?? Deno.env.get('ALERT_FROM_EMAIL')
+                          ?? 'alerts@hyprassistants.com'
 const APP_URL           = Deno.env.get('APP_URL') ?? 'https://example.com'
 
 const DELAY_MIN         = 3
@@ -23,7 +25,7 @@ async function sendEmail(to: string, subject: string, html: string) {
       'Authorization': `Bearer ${RESEND_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ from: FROM_EMAIL, to, subject, html }),
+    body: JSON.stringify({ from: `Hypr Task <${FROM_EMAIL}>`, to, subject, html }),
   })
   if (!res.ok) {
     console.error('Resend failed', res.status, await res.text())
