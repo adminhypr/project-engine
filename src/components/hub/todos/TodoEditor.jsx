@@ -253,11 +253,15 @@ export default function TodoEditor({
   function promptLink() {
     if (!editor) return
     const prev = editor.getAttributes('link').href || ''
-    const url = window.prompt('Link URL', prev)
+    let url = window.prompt('Link URL', prev)
     if (url === null) return
+    url = url.trim()
     if (url === '') {
       editor.chain().focus().extendMarkRange('link').unsetLink().run()
       return
+    }
+    if (!/^(https?:\/\/|mailto:|tel:|ftp:\/\/)/i.test(url)) {
+      url = 'https://' + url
     }
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
   }
