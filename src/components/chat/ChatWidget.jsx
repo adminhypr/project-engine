@@ -1,20 +1,32 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { useContactList } from '../../hooks/useContactList'
 import { totalUnread as sumUnread } from '../../lib/dmUnread'
 import { readWidgetState, writeWidgetState } from '../../lib/dmWidgetStorage'
 import ChatLauncher from './ChatLauncher'
 import ChatPanel from './ChatPanel'
+import ContactSearch from './ContactSearch'
+import ContactList from './ContactList'
 
 export default function ChatWidget() {
   const { profile } = useAuth()
   const [state, setState] = useState(() => readWidgetState(profile?.id))
+  const [query, setQuery] = useState('')
 
   useEffect(() => { setState(readWidgetState(profile?.id)) }, [profile?.id])
   useEffect(() => { writeWidgetState(profile?.id, state) }, [profile?.id, state])
 
-  const { conversations } = useContactList('')
+  const { sections, conversations, presence, createOrOpen } = useContactList(query)
   const total = sumUnread(conversations)
+
+  const handleOpen = useCallback(async (otherUserId) => {
+    const convId = await createOrOpen(otherUserId)
+    if (!convId) return
+    setState(s => {
+      if (s.openConversationIds.includes(convId)) return s
+      return { ...s, openConversationIds: [...s.openConversationIds, convId] }
+    })
+  }, [createOrOpen])
 
   if (!profile?.id) return null
 
@@ -22,9 +34,14 @@ export default function ChatWidget() {
     <div className="fixed bottom-4 right-4 z-40 flex items-end gap-3">
       {state.expanded && (
         <ChatPanel onClose={() => setState(s => ({ ...s, expanded: false }))}>
-          <div className="p-4 text-sm text-slate-500 dark:text-slate-400">
-            Contact list will go here (Task 13).
+          <div className="p-3">
+            <ContactSearch value={query} onChange={setQuery} />
           </div>
+          <ContactList
+            sections={sections}
+            presence={presence}
+            onOpen={handleOpen}
+          />
         </ChatPanel>
       )}
       <ChatLauncher
