@@ -3,16 +3,19 @@ import { useAuth } from '../../hooks/useAuth'
 import { useContactList } from '../../hooks/useContactList'
 import { totalUnread as sumUnread } from '../../lib/dmUnread'
 import { readWidgetState, writeWidgetState } from '../../lib/dmWidgetStorage'
+import { supabase } from '../../lib/supabase'
 import ChatLauncher from './ChatLauncher'
 import ChatPanel from './ChatPanel'
 import ContactSearch from './ContactSearch'
 import ContactList from './ContactList'
 import ConversationStack from './ConversationStack'
+import AssignFromChatModal from './AssignFromChatModal'
 
 export default function ChatWidget() {
   const { profile } = useAuth()
   const [state, setState] = useState(() => readWidgetState(profile?.id))
   const [query, setQuery] = useState('')
+  const [assignForConversation, setAssignForConversation] = useState(null)
 
   useEffect(() => { setState(readWidgetState(profile?.id)) }, [profile?.id])
   useEffect(() => { writeWidgetState(profile?.id, state) }, [profile?.id, state])
@@ -61,37 +64,56 @@ export default function ChatWidget() {
     }))
   }, [])
 
+  const handleSystemMessagePost = useCallback(async (sysText) => {
+    if (!assignForConversation || !profile?.id) return
+    await supabase.from('dm_messages').insert({
+      conversation_id: assignForConversation.id,
+      author_id: profile.id,
+      kind: 'system',
+      content: sysText,
+    })
+  }, [assignForConversation, profile?.id])
+
   if (!profile?.id) return null
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 flex items-end gap-3">
-      <ConversationStack
-        openConversationIds={state.openConversationIds}
-        minimizedIds={state.minimizedIds}
-        conversations={conversations}
-        presence={presence}
-        onClose={closeOne}
-        onMinimize={minimizeOne}
-        onRestore={restoreOne}
-        onMarkRead={markRead}
-        onAssignTask={() => { /* Task 17 wires this */ }}
-      />
-      {state.expanded && (
-        <ChatPanel onClose={() => setState(s => ({ ...s, expanded: false }))}>
-          <div className="p-3">
-            <ContactSearch value={query} onChange={setQuery} />
-          </div>
-          <ContactList
-            sections={sections}
-            presence={presence}
-            onOpen={openOne}
-          />
-        </ChatPanel>
+    <>
+      <div className="fixed bottom-4 right-4 z-40 flex items-end gap-3">
+        <ConversationStack
+          openConversationIds={state.openConversationIds}
+          minimizedIds={state.minimizedIds}
+          conversations={conversations}
+          presence={presence}
+          onClose={closeOne}
+          onMinimize={minimizeOne}
+          onRestore={restoreOne}
+          onMarkRead={markRead}
+          onAssignTask={conv => setAssignForConversation(conv)}
+        />
+        {state.expanded && (
+          <ChatPanel onClose={() => setState(s => ({ ...s, expanded: false }))}>
+            <div className="p-3">
+              <ContactSearch value={query} onChange={setQuery} />
+            </div>
+            <ContactList
+              sections={sections}
+              presence={presence}
+              onOpen={openOne}
+            />
+          </ChatPanel>
+        )}
+        <ChatLauncher
+          totalUnread={total}
+          onClick={() => setState(s => ({ ...s, expanded: !s.expanded }))}
+        />
+      </div>
+      {assignForConversation && (
+        <AssignFromChatModal
+          conversation={assignForConversation}
+          onClose={() => setAssignForConversation(null)}
+          onPosted={handleSystemMessagePost}
+        />
       )}
-      <ChatLauncher
-        totalUnread={total}
-        onClick={() => setState(s => ({ ...s, expanded: !s.expanded }))}
-      />
-    </div>
+    </>
   )
 }
