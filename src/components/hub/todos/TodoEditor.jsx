@@ -105,7 +105,7 @@ export default function TodoEditor({
     extensions: [
       StarterKit.configure({ link: false }),
       Link.configure({
-        openOnClick: false,
+        openOnClick: true,
         autolink: true,
         HTMLAttributes: { rel: 'noopener noreferrer nofollow', target: '_blank', class: 'text-brand-600 dark:text-brand-400 underline' },
       }),
@@ -173,7 +173,7 @@ export default function TodoEditor({
     autofocus: autoFocus,
     editorProps: {
       attributes: {
-        class: 'prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[var(--todo-editor-min-h)] px-3 py-2',
+        class: 'prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[var(--todo-editor-min-h)] px-3 py-2 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6',
         'data-placeholder': placeholder,
         style: `--todo-editor-min-h: ${minRows * 1.5}rem`,
       },
