@@ -20,6 +20,23 @@ export default function ChatWidget() {
   useEffect(() => { setState(readWidgetState(profile?.id)) }, [profile?.id])
   useEffect(() => { writeWidgetState(profile?.id, state) }, [profile?.id, state])
 
+  useEffect(() => {
+    function handler(e) {
+      const convId = e.detail?.conversationId
+      if (!convId) return
+      setState(s => ({
+        ...s,
+        expanded: true,
+        openConversationIds: s.openConversationIds.includes(convId)
+          ? s.openConversationIds
+          : [...s.openConversationIds, convId],
+        minimizedIds: s.minimizedIds.filter(id => id !== convId),
+      }))
+    }
+    window.addEventListener('pe-chat-open', handler)
+    return () => window.removeEventListener('pe-chat-open', handler)
+  }, [])
+
   const { sections, conversations, presence, createOrOpen, markRead } = useContactList(query)
   const total = sumUnread(conversations)
 
