@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useMemo, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTaskActions, useProfiles } from '../hooks/useTasks'
 import { PageHeader, showToast } from '../components/ui'
@@ -11,6 +11,7 @@ import { CheckCircle, Users, X } from 'lucide-react'
 import TaskIconPicker from '../components/ui/TaskIconPicker'
 import { FilePickerInput, hasOversizedFiles } from '../components/ui/FileAttachment'
 import { useAttachments } from '../hooks/useAttachments'
+import { parsePrefillParams } from '../lib/dmPrefillUrl'
 
 export default function AssignTaskPage() {
   const { profile, isAdmin } = useAuth()
@@ -33,6 +34,27 @@ export default function AssignTaskPage() {
   const [selectedTeamId, setSelectedTeamId] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [result,     setResult]     = useState(null)
+
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  useEffect(() => {
+    if (profilesLoading) return
+    const pre = parsePrefillParams(searchParams)
+    if (!pre.assigneeId && !pre.title) return
+
+    setForm(f => ({
+      ...f,
+      assigneeIds: pre.assigneeId ? [pre.assigneeId] : f.assigneeIds,
+      title:       pre.title    ?? f.title,
+      urgency:     pre.urgency  ?? f.urgency,
+      dueDate:     pre.dueDate  ?? f.dueDate,
+      notes:       pre.notes    ?? f.notes,
+    }))
+    if (pre.teamId) setSelectedTeamId(pre.teamId)
+
+    // Clear params so refresh doesn't re-apply
+    setSearchParams({}, { replace: true })
+  }, [profilesLoading, searchParams, setSearchParams])
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
 
