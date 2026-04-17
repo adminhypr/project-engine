@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Image from '@tiptap/extension-image'
+import Mention from '@tiptap/extension-mention'
 import { Bold, Italic, List, ListOrdered, Link as LinkIcon, Image as ImageIcon } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../hooks/useAuth'
+import { useHubMembers } from '../../../hooks/useHubMembers'
 import { showToast } from '../../ui/index'
 import { extractImagesFromDoc, extractMentionsFromDoc } from '../../../lib/tiptapExtract'
 
@@ -36,6 +38,17 @@ export default function TodoEditor({
   const fileInputRef = useRef(null)
   // Keep a stable ref to the editor so uploadImage can access it without stale closure
   const editorRef = useRef(null)
+
+  const { members } = useHubMembers(hubId)
+  const [mentionQuery, setMentionQuery] = useState(null)  // null when inactive, string when active
+  const [mentionIndex, setMentionIndex] = useState(0)
+  const [mentionRect, setMentionRect] = useState(null)
+  const mentionCommandRef = useRef(null)
+
+  const filteredMembers = mentionQuery === null ? [] : members
+    .filter(m => m.profile?.id && m.profile.id !== profile?.id)
+    .filter(m => (m.profile?.full_name || '').toLowerCase().includes(mentionQuery.toLowerCase()))
+    .slice(0, 6)
 
   const uploadImage = useCallback(async (file) => {
     const ed = editorRef.current
@@ -86,6 +99,58 @@ export default function TodoEditor({
       FileImage.configure({
         inline: false,
         HTMLAttributes: { class: 'rounded-lg max-w-xs max-h-48' },
+      }),
+      Mention.configure({
+        HTMLAttributes: { class: 'mention inline-block bg-brand-100 dark:bg-brand-500/20 text-brand-700 dark:text-brand-300 font-medium rounded px-1' },
+        renderLabel: ({ node }) => `@${node.attrs.label ?? node.attrs.id}`,
+        suggestion: {
+          char: '@',
+          items: ({ query }) => members
+            .filter(m => m.profile?.id && m.profile.id !== profile?.id)
+            .filter(m => (m.profile?.full_name || '').toLowerCase().includes(query.toLowerCase()))
+            .slice(0, 6)
+            .map(m => ({ id: m.profile.id, label: m.profile.full_name })),
+          render: () => ({
+            onStart: (props) => {
+              mentionCommandRef.current = props.command
+              setMentionQuery(props.query)
+              setMentionIndex(0)
+              setMentionRect(props.clientRect?.() || null)
+            },
+            onUpdate: (props) => {
+              mentionCommandRef.current = props.command
+              setMentionQuery(props.query)
+              setMentionIndex(0)
+              setMentionRect(props.clientRect?.() || null)
+            },
+            onKeyDown: (props) => {
+              if (props.event.key === 'ArrowDown') {
+                setMentionIndex(i => (i + 1) % Math.max(filteredMembers.length, 1))
+                return true
+              }
+              if (props.event.key === 'ArrowUp') {
+                setMentionIndex(i => (i - 1 + Math.max(filteredMembers.length, 1)) % Math.max(filteredMembers.length, 1))
+                return true
+              }
+              if (props.event.key === 'Enter') {
+                const picked = filteredMembers[mentionIndex]
+                if (picked) {
+                  mentionCommandRef.current?.({ id: picked.profile.id, label: picked.profile.full_name })
+                  return true
+                }
+              }
+              if (props.event.key === 'Escape') {
+                setMentionQuery(null)
+                return true
+              }
+              return false
+            },
+            onExit: () => {
+              setMentionQuery(null)
+              setMentionRect(null)
+            },
+          }),
+        },
       }),
     ],
     content: value || '',
@@ -186,6 +251,38 @@ export default function TodoEditor({
         }} />
       </div>
       <EditorContent editor={editor} />
+      {mentionQuery !== null && filteredMembers.length > 0 && mentionRect && (
+        <div
+          className="fixed z-50 w-64 bg-white dark:bg-dark-card border border-slate-200 dark:border-dark-border rounded-xl shadow-elevated overflow-hidden"
+          style={{ top: mentionRect.bottom + 4, left: mentionRect.left }}
+        >
+          {filteredMembers.map((m, i) => (
+            <button
+              key={m.profile.id}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                mentionCommandRef.current?.({ id: m.profile.id, label: m.profile.full_name })
+              }}
+              onMouseEnter={() => setMentionIndex(i)}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors ${
+                i === mentionIndex
+                  ? 'bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-300'
+                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-dark-hover'
+              }`}
+            >
+              {m.profile.avatar_url ? (
+                <img src={m.profile.avatar_url} className="w-6 h-6 rounded-full" alt="" />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-brand-500 flex items-center justify-center text-white text-xs font-bold">
+                  {m.profile.full_name?.[0] || '?'}
+                </div>
+              )}
+              <span className="truncate">{m.profile.full_name}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
