@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useHubTodoComments } from '../../../hooks/useHubTodoComments'
 import { useHubMembers } from '../../../hooks/useHubMembers'
 import { useAuth } from '../../../hooks/useAuth'
-import RichInput from '../../ui/RichInput'
+import TodoEditor from './TodoEditor'
 import RichContentRenderer from '../../ui/RichContentRenderer'
 import RichTextField from './RichTextField'
 import TodoBreadcrumb from './TodoBreadcrumb'
@@ -67,9 +67,10 @@ export default function TodoItemPage({ hubId, hub, lists, items, updateItem, del
     const next = assigneeIds.includes(pid) ? assigneeIds.filter(x => x !== pid) : [...assigneeIds, pid]
     await setAssignees(item.id, next)
   }
-  async function handleAddComment({ content, mentions, inlineImages }) {
-    if (!content.trim()) return
-    await addComment(content, mentions, inlineImages)
+  async function handleAddComment({ html, mentions, inlineImages }) {
+    const stripped = (html || '').replace(/<[^>]+>/g, '').trim()
+    if (!stripped) return
+    await addComment(html, mentions, inlineImages)
     setCommentText('')
   }
   async function handleDelete() {
@@ -212,16 +213,15 @@ export default function TodoItemPage({ hubId, hub, lists, items, updateItem, del
                 </div>
               )}
               <div className="flex-1">
-                <RichInput
+                <TodoEditor
                   value={commentText}
                   onChange={setCommentText}
                   onSubmit={handleAddComment}
                   submitRef={commentSubmitRef}
                   hubId={hubId}
-                  enableMentions
-                  enableImages={false}
                   placeholder="Add a comment here…"
-                  rows={1}
+                  minRows={1}
+                  enableSubmitOnEnter
                 />
               </div>
             </div>
