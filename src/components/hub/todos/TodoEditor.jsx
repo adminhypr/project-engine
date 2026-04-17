@@ -48,6 +48,7 @@ export default function TodoEditor({
   const mentionIndexRef = useRef(0)
   const membersRef = useRef([])
   const profileIdRef = useRef(null)
+  const mentionQueryRef = useRef(null)
 
   const filteredMembers = mentionQuery === null ? [] : members
     .filter(m => m.profile?.id && m.profile.id !== profile?.id)
@@ -58,6 +59,7 @@ export default function TodoEditor({
   useEffect(() => { mentionIndexRef.current = mentionIndex }, [mentionIndex])
   useEffect(() => { membersRef.current = members }, [members])
   useEffect(() => { profileIdRef.current = profile?.id }, [profile?.id])
+  useEffect(() => { mentionQueryRef.current = mentionQuery }, [mentionQuery])
 
   const uploadImage = useCallback(async (file) => {
     const ed = editorRef.current
@@ -194,6 +196,23 @@ export default function TodoEditor({
           if (file.type.startsWith('image/')) { event.preventDefault(); uploadImage(file); handled = true }
         }
         return handled
+      },
+      handleKeyDown(view, event) {
+        if (!enableSubmitOnEnter) return false
+        if (event.key !== 'Enter' || event.shiftKey) return false
+        // Let the mention suggestion consume Enter first if it's open.
+        if (mentionQueryRef.current !== null) return false
+        event.preventDefault()
+        const json = editorRef.current?.getJSON()
+        const html = editorRef.current?.getHTML() || ''
+        if (!html || html === '<p></p>') return true
+        onSubmit?.({
+          html,
+          mentions: extractMentionsFromDoc(json),
+          inlineImages: extractImagesFromDoc(json),
+        })
+        editorRef.current?.commands.clearContent(true)
+        return true
       },
     },
     onUpdate({ editor }) {
