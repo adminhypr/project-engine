@@ -22,12 +22,14 @@ export default function NewItemForm({ listId, hubId, onCreate, onCancel }) {
     e.preventDefault()
     if (!title.trim() || submitting) return
     setSubmitting(true)
+    const notesPayload = notesSubmitRef.getPayload ? notesSubmitRef.getPayload() : { mentions: [] }
     const created = await onCreate(listId, {
       title: title.trim(),
       notes: notes || null,
       due_date: dueDate || null,
       assigneeIds,
       attachments,
+      mentions: notesPayload.mentions,
     })
     setSubmitting(false)
     if (created) onCancel?.()

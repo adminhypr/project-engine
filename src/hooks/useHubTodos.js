@@ -64,16 +64,34 @@ export function useHubTodos(hubId) {
     if (!hubRef.current || !profile?.id) return null
     // Back-compat: allow createList("just a title") alongside the object form.
     const payload = typeof input === 'string' ? { title: input } : (input || {})
-    const { title, description = null, color = 'blue', attachments = [] } = payload
+    const { title, description = null, color = 'blue', attachments = [], mentions = [] } = payload
     if (!title?.trim()) return null
     const position = lists.length
     const { data, error } = await supabase.from('hub_todo_lists').insert({
       hub_id: hubRef.current, created_by: profile.id,
       title: title.trim(), description, color,
+      mentions,
       attachments: attachments.map(({ preview, ...rest }) => rest),
       position
     }).select().single()
     if (error) { showToast('Failed to create list', 'error'); return null }
+
+    if (data && mentions.length > 0) {
+      const uniqueUsers = [...new Map(mentions.map(m => [m.user_id, m])).values()]
+        .filter(m => m.user_id !== profile.id)
+      if (uniqueUsers.length > 0) {
+        await supabase.from('hub_mentions').insert(
+          uniqueUsers.map(m => ({
+            hub_id: hubRef.current,
+            mentioned_by: profile.id,
+            mentioned_user: m.user_id,
+            entity_type: 'todo_list',
+            entity_id: data.id,
+          }))
+        )
+      }
+    }
+
     await fetchData()
     return data
   }, [profile?.id, lists.length, fetchData])
@@ -115,7 +133,7 @@ export function useHubTodos(hubId) {
   const createItem = useCallback(async (listId, input) => {
     if (!hubRef.current || !profile?.id) return null
     const payload = typeof input === 'string' ? { title: input } : (input || {})
-    const { title, notes = null, due_date = null, assigneeIds = [], attachments = [] } = payload
+    const { title, notes = null, due_date = null, assigneeIds = [], attachments = [], mentions = [] } = payload
     if (!title?.trim()) return null
 
     const listItems = items.filter(i => i.list_id === listId)
@@ -123,15 +141,34 @@ export function useHubTodos(hubId) {
     const { data, error } = await supabase.from('hub_todo_items').insert({
       list_id: listId, hub_id: hubRef.current, created_by: profile.id,
       title: title.trim(), notes, due_date,
+      mentions,
       attachments: attachments.map(({ preview, ...rest }) => rest),
       position
     }).select().single()
     if (error) { showToast('Failed to add to-do', 'error'); return null }
+
     if (assigneeIds.length > 0) {
       await supabase.from('hub_todo_item_assignees').insert(
         assigneeIds.map(pid => ({ item_id: data.id, profile_id: pid }))
       )
     }
+
+    if (data && mentions.length > 0) {
+      const uniqueUsers = [...new Map(mentions.map(m => [m.user_id, m])).values()]
+        .filter(m => m.user_id !== profile.id)
+      if (uniqueUsers.length > 0) {
+        await supabase.from('hub_mentions').insert(
+          uniqueUsers.map(m => ({
+            hub_id: hubRef.current,
+            mentioned_by: profile.id,
+            mentioned_user: m.user_id,
+            entity_type: 'todo_note',
+            entity_id: data.id,
+          }))
+        )
+      }
+    }
+
     await fetchData()
     return data
   }, [profile?.id, items, fetchData])

@@ -237,18 +237,30 @@ export default function TodoEditor({
   }, [value, editor])
 
   // Expose a simple submit fn so parents keep the existing submitRef pattern.
+  // Also expose getPayload() for creation forms that need to read mentions at outer-form submit time.
   useEffect(() => {
     if (!submitRef) return
     submitRef.current = () => {
       if (!editor) return
       const json = editor.getJSON()
-      onSubmit?.({
+      onSubmitRef.current?.({
         html: editor.getHTML(),
         mentions: extractMentionsFromDoc(json),
         inlineImages: extractImagesFromDoc(json),
       })
     }
-  }, [editor, submitRef, onSubmit])
+    if (typeof submitRef === 'object' && submitRef !== null) {
+      submitRef.getPayload = () => {
+        if (!editor) return { html: '', mentions: [], inlineImages: [] }
+        const json = editor.getJSON()
+        return {
+          html: editor.getHTML(),
+          mentions: extractMentionsFromDoc(json),
+          inlineImages: extractImagesFromDoc(json),
+        }
+      }
+    }
+  }, [editor, submitRef])
 
   function promptLink() {
     if (!editor) return

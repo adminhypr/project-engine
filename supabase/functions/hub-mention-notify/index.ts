@@ -64,6 +64,9 @@ const MODULE_LABELS: Record<string, string> = {
   message: 'Message Board',
   message_reply: 'Message Board',
   check_in_response: 'Check-ins',
+  todo_note: 'To-dos',
+  todo_comment: 'To-dos',
+  todo_list: 'To-dos',
 }
 
 async function getMessagePreview(entityType: string, entityId: string): Promise<string> {
@@ -90,6 +93,31 @@ async function getMessagePreview(entityType: string, entityId: string): Promise<
       .eq('id', entityId)
       .single()
     content = data?.content || ''
+  } else if (entityType === 'todo_note') {
+    const { data } = await supabase
+      .from('hub_todo_items')
+      .select('notes, title')
+      .eq('id', entityId)
+      .single()
+    content = data?.notes || data?.title || ''
+  } else if (entityType === 'todo_comment') {
+    const { data } = await supabase
+      .from('hub_todo_comments')
+      .select('content')
+      .eq('id', entityId)
+      .single()
+    content = data?.content || ''
+  } else if (entityType === 'todo_list') {
+    const { data } = await supabase
+      .from('hub_todo_lists')
+      .select('description, title')
+      .eq('id', entityId)
+      .single()
+    content = data?.description || data?.title || ''
+  }
+
+  if (entityType.startsWith('todo_')) {
+    content = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
   }
 
   // Truncate for email preview

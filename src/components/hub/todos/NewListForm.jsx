@@ -14,7 +14,14 @@ export default function NewListForm({ hubId, onCreate, onCancel }) {
     e.preventDefault()
     if (!title.trim() || submitting) return
     setSubmitting(true)
-    const created = await onCreate({ title: title.trim(), description: description || null, color, attachments })
+    const descPayload = notesSubmitRef.getPayload ? notesSubmitRef.getPayload() : { mentions: [] }
+    const created = await onCreate({
+      title: title.trim(),
+      description: description || null,
+      color,
+      attachments,
+      mentions: descPayload.mentions,
+    })
     setSubmitting(false)
     if (created) onCancel?.()
   }
