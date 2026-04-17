@@ -40,6 +40,7 @@ export default function DmChatMessage({ message, isMine, onDelete }) {
               content={message.content || ''}
               mentions={message.mentions || []}
               inlineImages={message.inline_images || []}
+              imagesBucket="dm-attachments"
             />
           )}
         </div>

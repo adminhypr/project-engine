@@ -66,7 +66,7 @@ const PURIFY_CONFIG = {
   ALLOWED_ATTR: ['href','target','rel','class','data-type','data-id','data-label','src','alt','data-file-id','data-file-name','data-mime','data-storage-path'],
 }
 
-export default function RichContentRenderer({ content, mentions = [], inlineImages = [], attachments = [], attachmentBucket = 'hub-files' }) {
+export default function RichContentRenderer({ content, mentions = [], inlineImages = [], attachments = [], attachmentBucket = 'hub-files', imagesBucket = 'hub-files' }) {
   const [signedUrls, setSignedUrls] = useState({})
   const [attSignedUrls, setAttSignedUrls] = useState({})
   const [modalImage, setModalImage] = useState(null)
@@ -81,7 +81,7 @@ export default function RichContentRenderer({ content, mentions = [], inlineImag
       const urls = {}
       for (const img of inlineImages) {
         const { data } = await supabase.storage
-          .from('hub-files')
+          .from(imagesBucket)
           .createSignedUrl(img.storage_path, 3600)
         if (data?.signedUrl) urls[img.storage_path] = data.signedUrl
       }
@@ -90,7 +90,7 @@ export default function RichContentRenderer({ content, mentions = [], inlineImag
 
     signAll()
     return () => { cancelled = true }
-  }, [inlineImages])
+  }, [inlineImages, imagesBucket])
 
   useEffect(() => {
     if (attachments.length === 0) return

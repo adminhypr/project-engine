@@ -16,7 +16,7 @@ async function uploadImages(conversationId, items) {
       .from('dm-attachments')
       .upload(path, it.file, { contentType: it.type, upsert: false })
     if (error) { showToast('Image upload failed', 'error'); continue }
-    uploaded.push({ path, name: it.name, size: it.size, type: it.type })
+    uploaded.push({ storage_path: path, name: it.name, size: it.size, type: it.type })
   }
   return uploaded
 }
