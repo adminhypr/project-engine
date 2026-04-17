@@ -39,7 +39,7 @@ export default function ConversationPane({
         onLoadMore={loadMore}
         onDelete={deleteMessage}
       />
-      <ChatComposer onSend={sendMessage} />
+      <ChatComposer conversationId={conversation.id} onSend={sendMessage} />
     </div>
   )
 }
