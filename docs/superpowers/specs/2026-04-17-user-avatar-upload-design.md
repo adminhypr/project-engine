@@ -95,7 +95,7 @@ uploading: boolean
 
 ### `useAuth` refetch
 
-`useAuth` today loads the profile once. Add a small `refetchProfile()` method to its return value so the hook consumer can force a reload after an avatar write. No other call sites are affected.
+`useAuth` already exposes `refreshProfile()`. The new hook calls it after any avatar write to trigger a re-render with the updated `profiles.avatar_url`. No change to `useAuth` itself is needed.
 
 ### UI — `AvatarCard.jsx`
 
@@ -116,7 +116,7 @@ User picks file
   → supabase.storage.upload('avatars/<uid>/<ts>-<name>')
   → supabase.storage.getPublicUrl(...)
   → supabase.from('profiles').update({ avatar_url })
-  → useAuth.refetchProfile() → local profile state re-renders
+  → useAuth.refreshProfile() → local profile state re-renders
   → 31 consumer components re-read avatar_url on their next render/refetch
 ```
 
@@ -158,7 +158,6 @@ Pure-unit tests are low-value for this feature (the logic is thin glue around `s
 ### Modified
 
 - `src/pages/SettingsPage.jsx` — mount `<AvatarCard />` at the top of the profile section.
-- `src/hooks/useAuth.jsx` — expose a `refetchProfile()` method.
 
 ## Open questions
 
