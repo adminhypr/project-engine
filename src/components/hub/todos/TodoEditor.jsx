@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import { Bold, Italic, List, ListOrdered } from 'lucide-react'
 
 export default function TodoEditor({
   value = '',
@@ -51,8 +52,19 @@ export default function TodoEditor({
     }
   }, [editor, submitRef, onSubmit])
 
+  const btn = 'p-1.5 rounded hover:bg-slate-100 dark:hover:bg-dark-hover text-slate-500 dark:text-slate-400 transition-colors'
+  const btnActive = 'bg-brand-50 dark:bg-brand-500/10 text-brand-600 dark:text-brand-400'
+  const cls = (active) => `${btn} ${active ? btnActive : ''}`
+
   return (
     <div className="rounded-xl border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card overflow-hidden">
+      <div className="flex items-center gap-0.5 px-2 py-1 border-b border-slate-100 dark:border-dark-border bg-slate-50 dark:bg-dark-bg/50">
+        <button type="button" className={cls(editor?.isActive('bold'))} onClick={() => editor?.chain().focus().toggleBold().run()} title="Bold"><Bold size={14} /></button>
+        <button type="button" className={cls(editor?.isActive('italic'))} onClick={() => editor?.chain().focus().toggleItalic().run()} title="Italic"><Italic size={14} /></button>
+        <span className="w-px h-4 bg-slate-200 dark:bg-dark-border mx-1" />
+        <button type="button" className={cls(editor?.isActive('bulletList'))} onClick={() => editor?.chain().focus().toggleBulletList().run()} title="Bullet list"><List size={14} /></button>
+        <button type="button" className={cls(editor?.isActive('orderedList'))} onClick={() => editor?.chain().focus().toggleOrderedList().run()} title="Numbered list"><ListOrdered size={14} /></button>
+      </div>
       <EditorContent editor={editor} />
     </div>
   )
