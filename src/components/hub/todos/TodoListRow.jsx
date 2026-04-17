@@ -1,10 +1,16 @@
 import { Link } from 'react-router-dom'
 import { todoColorClass } from './todoColors'
 
+function previewText(s) {
+  if (!s) return ''
+  return s.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
 export default function TodoListRow({ list, hubId }) {
   const total = list.totalItems
   const done = list.completedItems
   const pct = total ? Math.round((done / total) * 100) : 0
+  const descPreview = previewText(list.description)
 
   return (
     <Link
@@ -15,8 +21,8 @@ export default function TodoListRow({ list, hubId }) {
         <span className={`w-3 h-3 rounded-full shrink-0 ${todoColorClass(list.color)}`} />
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">{list.title}</h3>
-          {list.description && (
-            <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{list.description}</p>
+          {descPreview && (
+            <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{descPreview}</p>
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
