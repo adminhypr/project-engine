@@ -17,7 +17,7 @@ import MessageBoard from '../components/hub/MessageBoard'
 import CheckIns from '../components/hub/CheckIns'
 import Schedule from '../components/hub/Schedule'
 import DocsFiles from '../components/hub/DocsFiles'
-import Todos from '../components/hub/Todos'
+import TodosModuleCard from '../components/hub/todos/TodosModuleCard'
 import {
   Activity, Users, Flame, MessageSquare, ClipboardCheck,
   Calendar, FolderOpen, ArrowLeft, CheckSquare
@@ -38,7 +38,7 @@ const MODULE_DEFS = {
 
 const MODULE_COMPONENTS = {
   'message-board': MessageBoard,
-  'to-dos':        Todos,
+  'to-dos':        TodosModuleCard,
   'check-ins':     CheckIns,
   'schedule':      Schedule,
   'docs-files':    DocsFiles,
