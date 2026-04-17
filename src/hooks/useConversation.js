@@ -56,12 +56,15 @@ export function useConversation(conversationId) {
 
   const sendMessage = useCallback(async (content, inlineImages = []) => {
     const cid = cidRef.current
-    if (!cid || !profile?.id || !content.trim()) return false
+    if (!cid || !profile?.id) return false
+    const trimmed = (content || '').trim()
+    const hasImages = Array.isArray(inlineImages) && inlineImages.length > 0
+    if (!trimmed && !hasImages) return false
     const { error } = await supabase.from('dm_messages').insert({
       conversation_id: cid,
       author_id: profile.id,
       kind: 'user',
-      content: content.trim(),
+      content: trimmed,
       inline_images: inlineImages.map(({ preview, ...rest }) => rest),
     })
     if (error) { showToast('Failed to send message', 'error'); return false }
