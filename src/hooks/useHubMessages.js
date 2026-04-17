@@ -14,14 +14,18 @@ export function useHubMessages(hubId) {
     if (!hubRef.current) return
     const { data, error } = await supabase
       .from('hub_messages')
-      .select('*, author:profiles!hub_messages_author_id_fkey(id, full_name, avatar_url)')
+      .select('*, author:profiles!hub_messages_author_id_fkey(id, full_name, avatar_url), reply_count:hub_messages!hub_messages_parent_id_fkey(count)')
       .eq('hub_id', hubRef.current)
       .is('parent_id', null)
       .order('pinned', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(30)
     if (error) showToast('Failed to load messages', 'error')
-    setMessages(data || [])
+    const normalized = (data || []).map(m => ({
+      ...m,
+      reply_count: Array.isArray(m.reply_count) ? (m.reply_count[0]?.count ?? 0) : (m.reply_count ?? 0),
+    }))
+    setMessages(normalized)
     setLoading(false)
   }, [])
 

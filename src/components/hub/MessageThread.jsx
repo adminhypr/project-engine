@@ -66,7 +66,7 @@ export default function MessageThread({ message, hubId, isOwn, isManager, onRepl
         <div className="flex items-center gap-2 mt-2.5 ml-11">
           <button onClick={handleExpand} className="text-xs text-brand-500 hover:text-brand-600 dark:text-brand-400 font-medium flex items-center gap-1">
             <MessageSquare size={12} />
-            {expanded ? 'Hide replies' : 'Replies'}
+            {expanded ? 'Hide replies' : `Replies${message.reply_count ? ` (${message.reply_count})` : ''}`}
           </button>
           {(isOwn || isManager) && (
             <button onClick={() => onTogglePin(message.id, message.pinned)} className="text-xs text-slate-400 hover:text-amber-500 flex items-center gap-1">

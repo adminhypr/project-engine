@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
@@ -60,7 +61,7 @@ export default function RichInput({
 
       if (parsed.active && textareaRef.current) {
         const rect = textareaRef.current.getBoundingClientRect()
-        setDropdownPos({ top: rect.height + 4, left: 0 })
+        setDropdownPos({ top: rect.bottom + 4, left: rect.left })
       }
     }
   }
@@ -233,12 +234,30 @@ export default function RichInput({
 
   useEffect(() => {
     function handleClick(e) {
-      if (textareaRef.current && !textareaRef.current.parentElement.contains(e.target)) {
+      if (!textareaRef.current) return
+      const inTextarea = textareaRef.current.parentElement.contains(e.target)
+      const inDropdown = e.target.closest?.('[data-mention-dropdown]')
+      if (!inTextarea && !inDropdown) {
         setMentionState({ active: false, query: '', startIndex: -1 })
       }
     }
     if (mentionState.active) document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
+  }, [mentionState.active])
+
+  useEffect(() => {
+    if (!mentionState.active) return
+    function updatePos() {
+      if (!textareaRef.current) return
+      const rect = textareaRef.current.getBoundingClientRect()
+      setDropdownPos({ top: rect.bottom + 4, left: rect.left })
+    }
+    window.addEventListener('resize', updatePos)
+    window.addEventListener('scroll', updatePos, true)
+    return () => {
+      window.removeEventListener('resize', updatePos)
+      window.removeEventListener('scroll', updatePos, true)
+    }
   }, [mentionState.active])
 
   const hasImages = inlineImages.length > 0 || uploading.length > 0
@@ -263,9 +282,10 @@ export default function RichInput({
         />
       </div>
 
-      {mentionState.active && filteredMembers.length > 0 && (
+      {mentionState.active && filteredMembers.length > 0 && createPortal(
         <div
-          className="absolute z-50 w-64 bg-white dark:bg-dark-card border border-slate-200 dark:border-dark-border rounded-xl shadow-elevated overflow-hidden"
+          data-mention-dropdown
+          className="fixed z-[9999] w-64 bg-white dark:bg-dark-card border border-slate-200 dark:border-dark-border rounded-xl shadow-elevated overflow-hidden"
           style={{ top: dropdownPos.top, left: dropdownPos.left }}
         >
           {filteredMembers.map((m, i) => (
@@ -293,7 +313,8 @@ export default function RichInput({
               <span className="truncate">{m.profile?.full_name}</span>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
 
       {hasImages && (
