@@ -1,8 +1,11 @@
-import { Trash2, Check, CheckCheck, CornerUpLeft } from 'lucide-react'
+import { useState } from 'react'
+import { Trash2, Check, CheckCheck, CornerUpLeft, SmilePlus } from 'lucide-react'
 import RichContentRenderer from '../ui/RichContentRenderer'
 import { renderChatInlineMarkdown, extractTaskIdFromMessage } from '../../lib/chatInlineMarkdown'
 import ChatTaskCard from './ChatTaskCard'
 import { useReplyContext } from './ReplyContext'
+import ReactionPicker from './ReactionPicker'
+import MessageReactions from './MessageReactions'
 
 function formatTime(iso) {
   try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
@@ -33,8 +36,9 @@ function QuotedReply({ message, isMine, onJump }) {
   )
 }
 
-export default function DmChatMessage({ message, isMine, onDelete, receipt }) {
+export default function DmChatMessage({ message, isMine, onDelete, receipt, reactions, onToggleReaction }) {
   const { requestReply, scrollToMessage } = useReplyContext()
+  const [pickerOpen, setPickerOpen] = useState(false)
   const isSystem = message.kind === 'system'
   const isDeleted = !!message.deleted_at
 
@@ -67,16 +71,36 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt }) {
         )}
         <QuotedReply message={message} isMine={isMine} onJump={scrollToMessage} />
         <div className="flex items-center gap-1">
+          {/* Reply + React buttons (shown before the bubble for their messages, after for mine) */}
           {!isMine && !isDeleted && (
-            <button
-              type="button"
-              onClick={() => requestReply(message, replyTargetName)}
-              className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-brand-500 order-1"
-              aria-label="Reply"
-              title="Reply"
-            >
-              <CornerUpLeft className="w-3.5 h-3.5" />
-            </button>
+            <div className="relative flex items-center gap-1 order-1">
+              <button
+                type="button"
+                onClick={() => requestReply(message, replyTargetName)}
+                className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-brand-500"
+                aria-label="Reply"
+                title="Reply"
+              >
+                <CornerUpLeft className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setPickerOpen(v => !v)}
+                className={`text-slate-400 hover:text-brand-500 ${pickerOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                aria-label="Add reaction"
+                title="Add reaction"
+              >
+                <SmilePlus className="w-3.5 h-3.5" />
+              </button>
+              {pickerOpen && (
+                <div className="absolute bottom-full left-0 mb-1 z-20">
+                  <ReactionPicker
+                    onPick={(emoji) => onToggleReaction?.(message.id, emoji)}
+                    onClose={() => setPickerOpen(false)}
+                  />
+                </div>
+              )}
+            </div>
           )}
           <div className={`px-3 py-2 rounded-2xl text-sm ${
             isMine
@@ -95,17 +119,44 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt }) {
             )}
           </div>
           {isMine && !isDeleted && (
-            <button
-              type="button"
-              onClick={() => requestReply(message, replyTargetName)}
-              className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-brand-500"
-              aria-label="Reply"
-              title="Reply"
-            >
-              <CornerUpLeft className="w-3.5 h-3.5" />
-            </button>
+            <div className="relative flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setPickerOpen(v => !v)}
+                className={`text-slate-400 hover:text-brand-500 ${pickerOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                aria-label="Add reaction"
+                title="Add reaction"
+              >
+                <SmilePlus className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => requestReply(message, replyTargetName)}
+                className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-brand-500"
+                aria-label="Reply"
+                title="Reply"
+              >
+                <CornerUpLeft className="w-3.5 h-3.5" />
+              </button>
+              {pickerOpen && (
+                <div className="absolute bottom-full right-0 mb-1 z-20">
+                  <ReactionPicker
+                    onPick={(emoji) => onToggleReaction?.(message.id, emoji)}
+                    onClose={() => setPickerOpen(false)}
+                  />
+                </div>
+              )}
+            </div>
           )}
         </div>
+        {!isDeleted && (
+          <div className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+            <MessageReactions
+              reactions={reactions}
+              onToggle={(emoji) => onToggleReaction?.(message.id, emoji)}
+            />
+          </div>
+        )}
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-[10px] text-slate-400">{formatTime(message.created_at)}</span>
           {isMine && !isDeleted && receipt === 'seen' && (

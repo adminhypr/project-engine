@@ -89,6 +89,7 @@ export default function ConversationPane({
           onDelete={deleteMessage}
           otherLastReadAt={otherLastReadAt}
           scrollRootRef={scrollRootRef}
+          conversationId={conversation.id}
         />
         {otherTyping && <TypingIndicator name={otherName} />}
         <ChatComposer

@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, Fragment } from 'react'
 import DmChatMessage from './DmChatMessage'
 import DateSeparator, { isSameDay } from '../ui/DateSeparator'
+import { useMessageReactions } from '../../hooks/useMessageReactions'
 
 export default function MessageList({
   messages, myId, loading, hasMore, onLoadMore, onDelete, otherLastReadAt, scrollRootRef,
+  conversationId,
 }) {
+  const { byMessageId, toggle } = useMessageReactions(conversationId)
   const bottomRef = useRef(null)
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'auto' })
@@ -54,6 +57,8 @@ export default function MessageList({
               isMine={isMine}
               onDelete={onDelete}
               receipt={showReceipt ? (seen ? 'seen' : 'delivered') : null}
+              reactions={byMessageId[m.id]}
+              onToggleReaction={toggle}
             />
           </Fragment>
         )
