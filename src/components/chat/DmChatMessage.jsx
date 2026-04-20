@@ -1,5 +1,6 @@
 import { Trash2 } from 'lucide-react'
 import RichContentRenderer from '../ui/RichContentRenderer'
+import { renderChatInlineMarkdown } from '../../lib/chatInlineMarkdown'
 
 function formatTime(iso) {
   try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
@@ -14,7 +15,7 @@ export default function DmChatMessage({ message, isMine, onDelete }) {
     return (
       <div className="my-2 text-center">
         <span className="inline-block px-3 py-1 text-xs rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-          {message.content}
+          {renderChatInlineMarkdown(message.content)}
         </span>
       </div>
     )

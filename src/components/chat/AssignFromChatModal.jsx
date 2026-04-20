@@ -53,7 +53,9 @@ export default function AssignFromChatModal({ conversation, onClose, onPosted })
       showToast('Failed to assign task', 'error')
       return
     }
-    const sysMsg = `${profile.full_name} assigned a task: **${form.title.trim()}**` +
+    const titleTrim = form.title.trim()
+    const taskLink = result.taskId ? `[${titleTrim}](/my-tasks?task=${result.taskId})` : `**${titleTrim}**`
+    const sysMsg = `${profile.full_name} assigned a task: ${taskLink}` +
       (form.dueDate ? ` (due ${form.dueDate})` : '')
     await onPosted?.(sysMsg, result.taskId)
     showToast('Task assigned', 'success')
