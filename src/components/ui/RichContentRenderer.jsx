@@ -166,10 +166,11 @@ export default function RichContentRenderer({ content, mentions = [], inlineImag
               alt={name}
               loading="lazy"
               onClick={() => setModalImage({ src: url, alt: name })}
-              className="max-w-xs max-h-48 rounded-lg border border-slate-200 dark:border-dark-border cursor-pointer hover:opacity-90 transition-opacity"
+              className="max-w-full max-h-48 h-auto rounded-lg border border-slate-200 dark:border-dark-border cursor-pointer hover:opacity-90 transition-opacity"
+              style={{ maxWidth: 'min(320px, 100%)' }}
             />
           ) : (
-            <span className="inline-block w-32 h-24 rounded-lg border border-slate-200 dark:border-dark-border bg-slate-100 dark:bg-dark-bg animate-pulse" />
+            <span className="inline-block max-w-full w-32 h-24 rounded-lg border border-slate-200 dark:border-dark-border bg-slate-100 dark:bg-dark-bg animate-pulse" />
           )
         }
         if (node.name === 'a') {
@@ -229,14 +230,15 @@ export default function RichContentRenderer({ content, mentions = [], inlineImag
                 src={url}
                 alt={img.file_name}
                 loading="lazy"
-                className="max-w-xs max-h-48 rounded-lg border border-slate-200 dark:border-dark-border cursor-pointer hover:opacity-90 transition-opacity"
+                className="max-w-full max-h-48 h-auto rounded-lg border border-slate-200 dark:border-dark-border cursor-pointer hover:opacity-90 transition-opacity"
+                style={{ maxWidth: 'min(320px, 100%)' }}
                 onClick={() => setModalImage({ src: url, alt: img.file_name })}
                 onError={e => { e.target.style.display = 'none' }}
               />
             ) : (
               <div
                 key={img.file_id || i}
-                className="w-32 h-24 rounded-lg border border-slate-200 dark:border-dark-border bg-slate-100 dark:bg-dark-bg animate-pulse"
+                className="max-w-full w-32 h-24 rounded-lg border border-slate-200 dark:border-dark-border bg-slate-100 dark:bg-dark-bg animate-pulse"
               />
             )
           })}
