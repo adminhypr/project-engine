@@ -23,12 +23,36 @@ async function uploadImages(conversationId, items) {
   return uploaded
 }
 
+const MIN_H = 40
+const DEFAULT_H = 40
+const MAX_H = 260
+
 export default function ChatComposer({ conversationId, onSend, onTyping, disabled }) {
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [images, setImages] = useState([])
+  const [textareaHeight, setTextareaHeight] = useState(DEFAULT_H)
   const { target: replyTarget, clearReply } = useReplyContext()
   const textareaRef = useRef(null)
+
+  function startResize(e) {
+    e.preventDefault()
+    const startY = e.clientY
+    const startH = textareaHeight
+    function onMove(ev) {
+      // Dragging up grows the textarea — Y decreases as the pointer rises.
+      const next = Math.min(MAX_H, Math.max(MIN_H, startH + (startY - ev.clientY)))
+      setTextareaHeight(next)
+    }
+    function onUp() {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      document.body.style.userSelect = ''
+    }
+    document.body.style.userSelect = 'none'
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
 
   // Focus composer whenever a reply target is set, so the user can type
   // immediately after clicking the reply button on a message.
@@ -116,6 +140,17 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
         onAdd={item => setImages(s => [...s, item])}
         onRemove={idx => setImages(s => s.filter((_, i) => i !== idx))}
       />
+      {/* Drag handle — grab and pull up to grow the composer. */}
+      <div
+        onPointerDown={startResize}
+        onDoubleClick={() => setTextareaHeight(DEFAULT_H)}
+        className="h-1.5 mx-2 rounded-full bg-transparent hover:bg-slate-200 dark:hover:bg-slate-700 cursor-ns-resize flex items-center justify-center group"
+        role="separator"
+        aria-label="Resize composer (double-click to reset)"
+        title="Drag to resize · double-click to reset"
+      >
+        <span className="w-8 h-0.5 rounded-full bg-slate-300 dark:bg-slate-600 group-hover:bg-slate-400 dark:group-hover:bg-slate-500" />
+      </div>
       <div className="p-2 pt-0 flex items-end gap-2">
         <textarea
           ref={textareaRef}
@@ -128,7 +163,8 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
           onPaste={handlePaste}
           placeholder={replyTarget ? `Reply to ${replyTarget.authorName}…` : 'Type a message…'}
           rows={1}
-          className="flex-1 resize-none rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-dark-border px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 max-h-32"
+          style={{ height: textareaHeight }}
+          className="flex-1 resize-none rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-dark-border px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
         />
         <button
           type="button"
