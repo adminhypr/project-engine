@@ -1,9 +1,10 @@
-import { useRef, useEffect, memo } from 'react'
+import { useRef, useEffect, memo, Fragment } from 'react'
 import { useHubChat } from '../../hooks/useHubChat'
 import { useAuth } from '../../hooks/useAuth'
 import { Spinner } from '../ui/index'
 import ChatMessage from './ChatMessage'
 import ChatInput from './ChatInput'
+import DateSeparator, { isSameDay } from '../ui/DateSeparator'
 
 function Campfire({ hubId }) {
   const { profile } = useAuth()
@@ -33,14 +34,20 @@ function Campfire({ hubId }) {
             No messages yet. Start the conversation!
           </p>
         )}
-        {messages.map(msg => (
-          <ChatMessage
-            key={msg.id}
-            message={msg}
-            isOwn={msg.author_id === profile?.id}
-            onDelete={deleteMessage}
-          />
-        ))}
+        {messages.map((msg, i) => {
+          const prev = messages[i - 1]
+          const showSeparator = !prev || !isSameDay(prev.created_at, msg.created_at)
+          return (
+            <Fragment key={msg.id}>
+              {showSeparator && <DateSeparator iso={msg.created_at} />}
+              <ChatMessage
+                message={msg}
+                isOwn={msg.author_id === profile?.id}
+                onDelete={deleteMessage}
+              />
+            </Fragment>
+          )
+        })}
         <div ref={bottomRef} />
       </div>
       <div className="mt-3 pt-3 border-t border-slate-200/60 dark:border-dark-border">

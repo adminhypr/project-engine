@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, Fragment } from 'react'
 import DmChatMessage from './DmChatMessage'
+import DateSeparator, { isSameDay } from '../ui/DateSeparator'
 
 export default function MessageList({ messages, myId, loading, hasMore, onLoadMore, onDelete }) {
   const bottomRef = useRef(null)
@@ -27,14 +28,20 @@ export default function MessageList({ messages, myId, loading, hasMore, onLoadMo
           </button>
         </div>
       )}
-      {messages.map(m => (
-        <DmChatMessage
-          key={m.id}
-          message={m}
-          isMine={m.author_id === myId}
-          onDelete={onDelete}
-        />
-      ))}
+      {messages.map((m, i) => {
+        const prev = messages[i - 1]
+        const showSeparator = !prev || !isSameDay(prev.created_at, m.created_at)
+        return (
+          <Fragment key={m.id}>
+            {showSeparator && <DateSeparator iso={m.created_at} />}
+            <DmChatMessage
+              message={m}
+              isMine={m.author_id === myId}
+              onDelete={onDelete}
+            />
+          </Fragment>
+        )
+      })}
       <div ref={bottomRef} />
     </div>
   )
