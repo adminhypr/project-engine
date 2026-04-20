@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { showToast } from '../components/ui/index'
 
-const MAX_BYTES = 5 * 1024 * 1024 // 5 MB
+const MAX_BYTES = 10 * 1024 * 1024 // 10 MB
 
 function sanitizeName(name) {
   return (name || 'avatar').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80)
@@ -20,7 +20,7 @@ export function useAvatarUpload() {
       return false
     }
     if (file.size > MAX_BYTES) {
-      showToast('Image exceeds 5 MB limit', 'error')
+      showToast('Image exceeds 10 MB limit', 'error')
       return false
     }
 

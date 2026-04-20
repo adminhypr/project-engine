@@ -20,7 +20,7 @@ In addition to task management, the app hosts **Project Hubs** — Basecamp-styl
 
 ## Architecture
 
-**Stack:** React 18 + Vite, Tailwind CSS, Framer Motion, Supabase (Postgres + Auth + Realtime), Recharts, deployed on Vercel.
+**Stack:** React 18 + Vite 5, Tailwind CSS 3, Framer Motion, Supabase (Postgres + Auth + Realtime + Storage), Recharts, TipTap (rich text for @mentions), `@dnd-kit` (drag-and-drop for todos and module order), `papaparse` (CSV export), deployed on Vercel.
 
 **Path alias:** `@` maps to `/src` (configured in vite.config.js).
 
@@ -75,16 +75,22 @@ Schema in `supabase/migrations/` (apply in filename order):
 - **013_fix_profile_teams_recursion.sql** — Breaks a policy recursion introduced by 007/010.
 
 **Project Hubs (014–020):**
-- **014_attachments.sql** — `task_attachments` table + `task-attachments` Storage bucket.
-- **014_project_hub.sql** — Hub module board, check-ins, events, chat, activity feed. *(Shares the 014 prefix with the attachments migration — both applied in the same release.)*
+- **014_project_hub.sql** — Hub module board, check-ins, events, chat, activity feed.
 - **015_hub_events_realtime.sql** — Enables realtime on hub event tables.
 - **016_custom_hubs.sql** — Independent hubs with explicit membership, file/folder storage. Migrates existing `hub_*` tables from `team_id`-scoped to `hub_id`-scoped.
 - **017_fix_hub_members_recursion.sql** / **018_fix_hub_creator_select.sql** — Break recursion in hub member visibility policies.
 - **019_hub_module_order.sql** — `hub_members.module_order` JSONB for per-user drag-sorted module layout.
 - **020_hub_team_id_nullable.sql** — Makes `team_id` nullable on hub tables (`hub_id` is the real FK) and adds missing hub-scoped INSERT/UPDATE/DELETE policies.
-- **022_hub_todos.sql** — `hub_todo_lists`, `hub_todo_items`, `hub_todo_item_assignees`, `hub_todo_comments`. Named to-do lists with drag-sortable checkable items, multi-assignee, due dates, comments, and @mentions integration.
-- **027_direct_messages.sql** — `conversations`, `conversation_participants`, `dm_messages` tables. `get_or_create_dm` + `mark_conversation_read` RPCs. Soft-delete via `deleted_at`. Realtime enabled. New `dm-attachments` Storage bucket.
+
+**Attachments, to-dos, mentions, avatars, DMs (021–029):**
+- **021_attachments.sql** — `task_attachments` table + `task-attachments` Storage bucket (5 MB per file).
+- **022_hub_todos.sql** / **023_hub_todos_v2.sql** — `hub_todo_lists`, `hub_todo_items`, `hub_todo_item_assignees`, `hub_todo_comments`. Named to-do lists with drag-sortable checkable items, multi-assignee, due dates, comments, and @mentions integration.
+- **024_fix_todo_soft_delete_rls.sql** — RLS fix for soft-deleted todo items.
+- **025_hub_mentions.sql** — `hub_mentions` table that drives both email (`hub-mention-notify`) and in-app notifications.
+- **026_avatar_upload.sql** — Avatar Storage bucket + `profiles.avatar_url`.
+- **027_direct_messages.sql** — `conversations`, `conversation_participants`, `dm_messages` tables. `get_or_create_dm` + `mark_conversation_read` RPCs. Soft-delete via `deleted_at`. Realtime enabled. `dm-attachments` Storage bucket.
 - **028_dm_email_queue.sql** — `pending_dm_emails` queue + `dm_email_log` debounce log + `enqueue_dm_email` trigger. Drives `dm-offline-notify` edge function.
+- **029_schedule_dm_offline_notify.sql** — pg_cron schedule for the DM offline notify edge function.
 
 ## Supabase Edge Functions
 

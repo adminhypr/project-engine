@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { useAvatarUpload } from '../../hooks/useAvatarUpload'
-import { Upload, RotateCcw, Loader2 } from 'lucide-react'
+import { Upload, RotateCcw, Trash2, Loader2 } from 'lucide-react'
 
 export default function AvatarCard() {
   const { profile, session } = useAuth()
@@ -13,7 +13,8 @@ export default function AvatarCard() {
   const googleUrl = session?.user?.user_metadata?.avatar_url || null
   const currentUrl = profile.avatar_url || null
   const hasCustomAvatar = !!currentUrl && currentUrl !== googleUrl
-  const canReset = hasCustomAvatar && !!googleUrl
+  const canRemove = !!currentUrl
+  const hasGoogleFallback = hasCustomAvatar && !!googleUrl
 
   function pickFile() {
     if (!uploading) fileRef.current?.click()
@@ -38,7 +39,7 @@ export default function AvatarCard() {
         </div>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={pickFile}
@@ -46,22 +47,22 @@ export default function AvatarCard() {
               className="btn btn-primary text-xs flex items-center gap-1.5 disabled:opacity-40"
             >
               {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-              {uploading ? 'Uploading…' : 'Upload new photo'}
+              {uploading ? 'Uploading…' : currentUrl ? 'Change photo' : 'Upload photo'}
             </button>
-            {canReset && (
+            {canRemove && (
               <button
                 type="button"
                 onClick={removeAvatar}
                 disabled={uploading}
                 className="btn btn-ghost text-xs flex items-center gap-1.5 disabled:opacity-40"
               >
-                <RotateCcw size={12} />
-                Reset to default
+                {hasGoogleFallback ? <RotateCcw size={12} /> : <Trash2 size={12} />}
+                {hasGoogleFallback ? 'Reset to Google photo' : 'Remove photo'}
               </button>
             )}
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-            JPEG, PNG, WebP, or GIF. Max 5 MB.
+            JPEG, PNG, WebP, or GIF. Max 10 MB.
           </p>
         </div>
 
