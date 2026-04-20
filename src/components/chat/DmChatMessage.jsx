@@ -1,6 +1,7 @@
 import { Trash2, Check, CheckCheck } from 'lucide-react'
 import RichContentRenderer from '../ui/RichContentRenderer'
-import { renderChatInlineMarkdown } from '../../lib/chatInlineMarkdown'
+import { renderChatInlineMarkdown, extractTaskIdFromMessage } from '../../lib/chatInlineMarkdown'
+import ChatTaskCard from './ChatTaskCard'
 
 function formatTime(iso) {
   try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
@@ -12,11 +13,13 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt }) {
   const isDeleted = !!message.deleted_at
 
   if (isSystem) {
+    const linkedTaskId = extractTaskIdFromMessage(message.content)
     return (
-      <div className="my-2 text-center">
-        <span className="inline-block px-3 py-1 text-xs rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+      <div className="my-2 flex flex-col items-center">
+        <span className="inline-block px-3 py-1 text-xs rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-center">
           {renderChatInlineMarkdown(message.content)}
         </span>
+        {linkedTaskId && <ChatTaskCard taskId={linkedTaskId} />}
       </div>
     )
   }

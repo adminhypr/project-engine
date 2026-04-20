@@ -12,6 +12,17 @@ function isInternal(url) {
   return typeof url === 'string' && url.startsWith('/')
 }
 
+// Pulls the first referenced task UUID out of a system message, if any,
+// so the message can render a task-card preview beneath the inline text.
+// Matches /my-tasks?task={uuid} inside a markdown link's url portion.
+const TASK_URL = /\/my-tasks\?task=([0-9a-fA-F-]{16,})/
+
+export function extractTaskIdFromMessage(text) {
+  if (!text) return null
+  const m = text.match(TASK_URL)
+  return m ? m[1] : null
+}
+
 export function renderChatInlineMarkdown(text) {
   if (!text) return null
   const out = []
