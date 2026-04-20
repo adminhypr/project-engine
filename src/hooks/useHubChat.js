@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { showToast } from '../components/ui/index'
+import { useDocumentVisible } from '../lib/useDocumentVisible'
 
 const PAGE_SIZE = 50
 
@@ -51,7 +52,7 @@ export function useHubChat(hubId) {
             .select('*, author:profiles!hub_chat_messages_author_id_fkey(id, full_name, avatar_url)')
             .eq('id', payload.new.id)
             .single()
-          if (data) setMessages(prev => [...prev, data])
+          if (data) setMessages(prev => (prev.some(m => m.id === data.id) ? prev : [...prev, data]))
         }
       )
       .subscribe()
@@ -66,8 +67,12 @@ export function useHubChat(hubId) {
       content: content.trim(),
       mentions,
       inline_images: inlineImages.map(({ preview, ...rest }) => rest),
-    }).select().single()
+    }).select('*, author:profiles!hub_chat_messages_author_id_fkey(id, full_name, avatar_url)').single()
     if (error) { showToast('Failed to send message', 'error'); return false }
+
+    // Optimistic append so the bubble shows instantly even if the realtime
+    // socket is momentarily stale. The subscription dedupes by id.
+    if (data) setMessages(prev => (prev.some(m => m.id === data.id) ? prev : [...prev, data]))
 
     // Insert hub_mentions for each unique mentioned user
     if (data && mentions.length > 0) {
@@ -111,6 +116,19 @@ export function useHubChat(hubId) {
     setMessages(prev => [...older, ...prev])
     setHasMore(older.length === PAGE_SIZE)
   }, [hasMore, messages])
+
+  // Resync on tab-visible — same reasoning as the DM hook.
+  const resync = useCallback(async () => {
+    if (!hubRef.current) return
+    const latest = await fetchMessages()
+    setMessages(prev => {
+      if (prev.length === 0) return latest
+      const byId = new Map(prev.map(m => [m.id, m]))
+      for (const m of latest) if (!byId.has(m.id)) byId.set(m.id, m)
+      return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at))
+    })
+  }, [fetchMessages])
+  useDocumentVisible(resync)
 
   return { messages, loading, sendMessage, deleteMessage, loadMore, hasMore }
 }

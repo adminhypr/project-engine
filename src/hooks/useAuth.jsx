@@ -188,8 +188,11 @@ export function AuthProvider({ children }) {
         if (!mounted) return
         setSession(newSession)
         if (event === 'TOKEN_REFRESHED') {
-          // Token rotated — session is updated above, but skip profile reload
-          // (profile data hasn't changed, and reloading cascades to useTasks)
+          // Hand the rotated JWT to the realtime socket so open channels don't
+          // silently go stale (causes "message sent but doesn't appear" bug).
+          if (newSession?.access_token) {
+            try { supabase.realtime.setAuth(newSession.access_token) } catch { /* noop */ }
+          }
           return
         }
         if (newSession) {
@@ -201,9 +204,24 @@ export function AuthProvider({ children }) {
       }
     )
 
+    // When the tab becomes visible again after sleep/inactivity, reassert auth
+    // on the realtime socket. Supabase-js reconnects the transport on its own,
+    // but the channel-level JWT may be stale if it was refreshed while hidden.
+    function handleVisibility() {
+      if (document.visibilityState !== 'visible') return
+      supabase.auth.getSession().then(({ data }) => {
+        const token = data?.session?.access_token
+        if (token) {
+          try { supabase.realtime.setAuth(token) } catch { /* noop */ }
+        }
+      })
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
     return () => {
       mounted = false
       subscription.unsubscribe()
+      document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [loadProfile])
 

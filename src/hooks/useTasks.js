@@ -4,6 +4,7 @@ import { getPriority } from '../lib/priority'
 import { getAssignmentType } from '../lib/assignmentType'
 import { generateTaskId } from '../lib/helpers'
 import { useAuth } from './useAuth'
+import { useDocumentVisible } from '../lib/useDocumentVisible'
 
 const TASK_SELECT_FULL = `
   *,
@@ -134,6 +135,12 @@ export function useTasks() {
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [profileId, fetchTasks])
+
+  // Silent refetch on tab-visible — catches task inserts/updates that happened
+  // while the realtime socket was asleep.
+  useDocumentVisible(useCallback(() => {
+    if (profileRef.current) fetchTasks(true)
+  }, [fetchTasks]))
 
   // My tasks only (primary + secondary assignee)
   const myTasks = tasks.filter(t =>

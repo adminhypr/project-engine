@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { showToast } from '../components/ui'
 import { onMessage } from '../lib/dmEventBus'
+import { useDocumentVisible } from '../lib/useDocumentVisible'
 
 const PAGE_SIZE = 50
 
@@ -60,14 +61,20 @@ export function useConversation(conversationId) {
     const trimmed = (content || '').trim()
     const hasImages = Array.isArray(inlineImages) && inlineImages.length > 0
     if (!trimmed && !hasImages) return false
-    const { error } = await supabase.from('dm_messages').insert({
-      conversation_id: cid,
-      author_id: profile.id,
-      kind: 'user',
-      content: trimmed,
-      inline_images: inlineImages.map(({ preview, ...rest }) => rest),
-    })
-    if (error) { showToast('Failed to send message', 'error'); return false }
+    const { data, error } = await supabase
+      .from('dm_messages')
+      .insert({
+        conversation_id: cid,
+        author_id: profile.id,
+        kind: 'user',
+        content: trimmed,
+        inline_images: inlineImages.map(({ preview, ...rest }) => rest),
+      })
+      .select(MSG_SELECT)
+      .single()
+    if (error || !data) { showToast('Failed to send message', 'error'); return false }
+    // Optimistic append — realtime echo is dedup'd by id below.
+    setMessages(prev => (prev.some(m => m.id === data.id) ? prev : [...prev, data]))
     return true
   }, [profile?.id])
 
@@ -102,6 +109,20 @@ export function useConversation(conversationId) {
     setMessages(prev => [...older, ...prev])
     setHasMore(older.length === PAGE_SIZE)
   }, [hasMore, messages, fetchPage])
+
+  // If the realtime socket was asleep while the tab was hidden, messages may
+  // have been missed. On tab-visible, pull anything newer than what we have.
+  const resync = useCallback(async () => {
+    if (!cidRef.current) return
+    const latest = await fetchPage()
+    setMessages(prev => {
+      if (prev.length === 0) return latest
+      const byId = new Map(prev.map(m => [m.id, m]))
+      for (const m of latest) if (!byId.has(m.id)) byId.set(m.id, m)
+      return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at))
+    })
+  }, [fetchPage])
+  useDocumentVisible(resync)
 
   return { messages, loading, hasMore, sendMessage, sendSystemMessage, deleteMessage, loadMore }
 }
