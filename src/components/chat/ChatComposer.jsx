@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { Send } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Send, X, CornerUpLeft } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { showToast } from '../ui'
 import ImageAttachments from './ImageAttachments'
+import { useReplyContext } from './ReplyContext'
 
 const MAX_LEN = 4000
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -26,18 +27,27 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [images, setImages] = useState([])
+  const { target: replyTarget, clearReply } = useReplyContext()
+  const textareaRef = useRef(null)
+
+  // Focus composer whenever a reply target is set, so the user can type
+  // immediately after clicking the reply button on a message.
+  useEffect(() => {
+    if (replyTarget) textareaRef.current?.focus()
+  }, [replyTarget])
 
   async function submit() {
     const trimmed = value.trim()
     if ((!trimmed && images.length === 0) || busy || disabled) return
     setBusy(true)
     const uploaded = images.length > 0 ? await uploadImages(conversationId, images) : []
-    const ok = await onSend(trimmed, uploaded)
+    const ok = await onSend(trimmed, uploaded, replyTarget)
     setBusy(false)
     if (ok) {
       setValue('')
       images.forEach(i => URL.revokeObjectURL(i.preview))
       setImages([])
+      clearReply()
     }
   }
 
@@ -45,6 +55,9 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       submit()
+    } else if (e.key === 'Escape' && replyTarget) {
+      e.preventDefault()
+      clearReply()
     }
   }
 
@@ -76,6 +89,28 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
 
   return (
     <div className="border-t border-slate-200 dark:border-dark-border">
+      {replyTarget && (
+        <div className="flex items-start gap-2 px-3 pt-2 pb-1 border-b border-slate-200/60 dark:border-dark-border/60 bg-slate-50 dark:bg-slate-800/40">
+          <CornerUpLeft className="w-3.5 h-3.5 text-brand-500 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0 text-[11px] leading-tight">
+            <div className="font-semibold text-slate-700 dark:text-slate-200">
+              Replying to {replyTarget.authorName}
+            </div>
+            <div className="truncate text-slate-500 dark:text-slate-400">
+              {replyTarget.preview}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={clearReply}
+            className="text-slate-400 hover:text-slate-600 shrink-0"
+            aria-label="Cancel reply"
+            title="Cancel reply (Esc)"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
       <ImageAttachments
         items={images}
         onAdd={item => setImages(s => [...s, item])}
@@ -83,6 +118,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
       />
       <div className="p-2 pt-0 flex items-end gap-2">
         <textarea
+          ref={textareaRef}
           value={value}
           onChange={e => {
             setValue(e.target.value.slice(0, MAX_LEN))
@@ -90,7 +126,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
           }}
           onKeyDown={handleKey}
           onPaste={handlePaste}
-          placeholder="Type a message…"
+          placeholder={replyTarget ? `Reply to ${replyTarget.authorName}…` : 'Type a message…'}
           rows={1}
           className="flex-1 resize-none rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-dark-border px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 max-h-32"
         />

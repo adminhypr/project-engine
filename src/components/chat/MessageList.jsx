@@ -3,7 +3,7 @@ import DmChatMessage from './DmChatMessage'
 import DateSeparator, { isSameDay } from '../ui/DateSeparator'
 
 export default function MessageList({
-  messages, myId, loading, hasMore, onLoadMore, onDelete, otherLastReadAt,
+  messages, myId, loading, hasMore, onLoadMore, onDelete, otherLastReadAt, scrollRootRef,
 }) {
   const bottomRef = useRef(null)
   useEffect(() => {
@@ -28,7 +28,7 @@ export default function MessageList({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-3 py-2">
+    <div ref={scrollRootRef} className="flex-1 overflow-y-auto px-3 py-2">
       {hasMore && (
         <div className="text-center mb-2">
           <button

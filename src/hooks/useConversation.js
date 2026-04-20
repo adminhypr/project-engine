@@ -8,7 +8,7 @@ import { useDocumentVisible } from '../lib/useDocumentVisible'
 const PAGE_SIZE = 50
 
 const MSG_SELECT =
-  '*, author:profiles!dm_messages_author_id_fkey(id, full_name, avatar_url)'
+  '*, author:profiles!dm_messages_author_id_fkey(id, full_name, avatar_url), reply_to_author:profiles!dm_messages_reply_to_author_id_fkey(id, full_name)'
 
 export function useConversation(conversationId) {
   const { profile } = useAuth()
@@ -55,7 +55,7 @@ export function useConversation(conversationId) {
     })
   }, [conversationId])
 
-  const sendMessage = useCallback(async (content, inlineImages = []) => {
+  const sendMessage = useCallback(async (content, inlineImages = [], replyTo = null) => {
     const cid = cidRef.current
     if (!cid || !profile?.id) return false
     const trimmed = (content || '').trim()
@@ -69,6 +69,9 @@ export function useConversation(conversationId) {
         kind: 'user',
         content: trimmed,
         inline_images: inlineImages.map(({ preview, ...rest }) => rest),
+        reply_to_id:        replyTo?.id        || null,
+        reply_to_author_id: replyTo?.author_id || null,
+        reply_to_preview:   replyTo?.preview   || null,
       })
       .select(MSG_SELECT)
       .single()

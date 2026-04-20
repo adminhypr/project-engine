@@ -105,6 +105,16 @@
   transform: translateX(0);
 }
 
+/* ── Reply click-to-jump highlight ────── */
+@keyframes pe-msg-pulse {
+  0%, 100% { background-color: transparent; }
+  20%, 60% { background-color: rgba(139, 127, 255, 0.22); }
+}
+.pe-msg-highlight {
+  animation: pe-msg-pulse 1.5s ease-out;
+  border-radius: 14px;
+}
+
 /* ── Scrollbar (thin, subtle) ──────────── */
 ::-webkit-scrollbar       { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }

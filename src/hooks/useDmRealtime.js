@@ -14,7 +14,7 @@ export function useDmRealtime(profileId) {
         async (payload) => {
           const { data, error } = await supabase
             .from('dm_messages')
-            .select('*, author:profiles!dm_messages_author_id_fkey(id, full_name, avatar_url)')
+            .select('*, author:profiles!dm_messages_author_id_fkey(id, full_name, avatar_url), reply_to_author:profiles!dm_messages_reply_to_author_id_fkey(id, full_name)')
             .eq('id', payload.new.id)
             .maybeSingle()
           if (error || !data) return
