@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { buildMentionSegments } from '../../lib/mentions'
+import { replaceEmoticons } from '../../lib/emoticons'
 import parse from 'html-react-parser'
 import DOMPurify from 'dompurify'
 import { isHtmlContent } from '../../lib/contentFormat'
@@ -215,7 +216,7 @@ export default function RichContentRenderer({ content, mentions = [], inlineImag
               {seg.value}
             </span>
           ) : (
-            <span key={i}>{renderInlineMarkdown(seg.value, `s${i}`)}</span>
+            <span key={i}>{renderInlineMarkdown(replaceEmoticons(seg.value), `s${i}`)}</span>
           )
         )}
       </p>
