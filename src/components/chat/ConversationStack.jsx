@@ -1,7 +1,37 @@
+import {
+  DndContext,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  useSortable,
+  horizontalListSortingStrategy,
+  sortableKeyboardCoordinates,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import ConversationPane from './ConversationPane'
 import PresenceDot from './PresenceDot'
 
 const VISIBLE_CAP = 3
+
+function SortablePane({ id, children }) {
+  const { setNodeRef, transform, transition, isDragging, attributes, listeners } = useSortable({ id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.85 : 1,
+  }
+  return (
+    <div ref={setNodeRef} style={style}>
+      {typeof children === 'function' ? children({ attributes, listeners }) : children}
+    </div>
+  )
+}
 
 export default function ConversationStack({
   openConversationIds,
@@ -13,6 +43,7 @@ export default function ConversationStack({
   onRestore,
   onMarkRead,
   onAssignTask,
+  onReorder,
 }) {
   const activeIds = openConversationIds.filter(id => !minimizedIds.includes(id))
   const visibleIds = activeIds.slice(-VISIBLE_CAP)
@@ -22,6 +53,18 @@ export default function ConversationStack({
   ]
 
   const byId = new Map(conversations.map(c => [c.id, c]))
+
+  const sensors = useSensors(
+    // 5px threshold so clicking header buttons (minimize/close) doesn't start a drag
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  function handleDragEnd(event) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    onReorder?.(active.id, over.id)
+  }
 
   function Tab({ id }) {
     const conv = byId.get(id)
@@ -56,21 +99,29 @@ export default function ConversationStack({
           {overflowIds.map(id => <Tab key={id} id={id} />)}
         </div>
       )}
-      {visibleIds.map(id => {
-        const conv = byId.get(id)
-        if (!conv) return null
-        return (
-          <ConversationPane
-            key={id}
-            conversation={conv}
-            online={presence.get(conv.other_user_id)?.online || false}
-            onClose={onClose}
-            onMinimize={onMinimize}
-            onMarkRead={onMarkRead}
-            onAssignTask={onAssignTask}
-          />
-        )
-      })}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={visibleIds} strategy={horizontalListSortingStrategy}>
+          {visibleIds.map(id => {
+            const conv = byId.get(id)
+            if (!conv) return null
+            return (
+              <SortablePane key={id} id={id}>
+                {({ attributes, listeners }) => (
+                  <ConversationPane
+                    conversation={conv}
+                    online={presence.get(conv.other_user_id)?.online || false}
+                    onClose={onClose}
+                    onMinimize={onMinimize}
+                    onMarkRead={onMarkRead}
+                    onAssignTask={onAssignTask}
+                    dragHandleProps={{ ...attributes, ...listeners }}
+                  />
+                )}
+              </SortablePane>
+            )
+          })}
+        </SortableContext>
+      </DndContext>
     </>
   )
 }

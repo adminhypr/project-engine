@@ -81,6 +81,19 @@ export default function ChatWidget() {
     }))
   }, [])
 
+  const reorderOpen = useCallback((fromId, toId) => {
+    if (!fromId || !toId || fromId === toId) return
+    setState(s => {
+      const from = s.openConversationIds.indexOf(fromId)
+      const to   = s.openConversationIds.indexOf(toId)
+      if (from < 0 || to < 0) return s
+      const next = s.openConversationIds.slice()
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return { ...s, openConversationIds: next }
+    })
+  }, [])
+
   const handleSystemMessagePost = useCallback(async (sysText) => {
     if (!assignForConversation || !profile?.id) return
     await supabase.from('dm_messages').insert({
@@ -106,6 +119,7 @@ export default function ChatWidget() {
           onRestore={restoreOne}
           onMarkRead={markRead}
           onAssignTask={conv => setAssignForConversation(conv)}
+          onReorder={reorderOpen}
         />
         {state.expanded && (
           <ChatPanel onClose={() => setState(s => ({ ...s, expanded: false }))}>

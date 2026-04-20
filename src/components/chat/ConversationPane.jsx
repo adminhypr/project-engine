@@ -12,6 +12,7 @@ export default function ConversationPane({
   onMinimize,
   onMarkRead,
   onAssignTask,
+  dragHandleProps,
 }) {
   const { profile } = useAuth()
   const { messages, loading, hasMore, sendMessage, deleteMessage, loadMore } =
@@ -30,6 +31,7 @@ export default function ConversationPane({
         onAssignTask={() => onAssignTask?.(conversation)}
         onMinimize={() => onMinimize?.(conversation.id)}
         onClose={() => onClose?.(conversation.id)}
+        dragHandleProps={dragHandleProps}
       />
       <MessageList
         messages={messages}

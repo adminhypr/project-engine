@@ -2,16 +2,23 @@ import { Minus, X, ClipboardList } from 'lucide-react'
 import PresenceDot from './PresenceDot'
 
 export default function ConversationHeader({
-  otherProfile, online, onMinimize, onClose, onAssignTask, canAssignTask,
+  otherProfile, online, onMinimize, onClose, onAssignTask, canAssignTask, dragHandleProps,
 }) {
   const name = otherProfile?.full_name || otherProfile?.email || 'Unknown'
   return (
     <header className="px-3 py-2 border-b border-slate-200 dark:border-dark-border flex items-center gap-2">
-      <PresenceDot online={online} />
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold text-slate-900 dark:text-white truncate">{name}</div>
-        <div className="text-[11px] text-slate-500 dark:text-slate-400">
-          {online ? 'Online' : 'Offline'}
+      {/* Drag handle: presence dot + name/status. Buttons stay clickable. */}
+      <div
+        {...(dragHandleProps || {})}
+        className="flex-1 min-w-0 flex items-center gap-2 cursor-grab active:cursor-grabbing select-none"
+        title="Drag to reorder"
+      >
+        <PresenceDot online={online} />
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-slate-900 dark:text-white truncate">{name}</div>
+          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+            {online ? 'Online' : 'Offline'}
+          </div>
         </div>
       </div>
       {canAssignTask && (
