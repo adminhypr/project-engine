@@ -10,12 +10,14 @@ import ContactSearch from './ContactSearch'
 import ContactList from './ContactList'
 import ConversationStack from './ConversationStack'
 import AssignFromChatModal from './AssignFromChatModal'
+import CreateGroupModal from './CreateGroupModal'
 
 export default function ChatWidget() {
   const { profile } = useAuth()
   const [state, setState] = useState(() => readWidgetState(profile?.id))
   const [query, setQuery] = useState('')
   const [assignForConversation, setAssignForConversation] = useState(null)
+  const [createGroupOpen, setCreateGroupOpen] = useState(false)
   // Maximize state is deliberately in-memory only — resets on reload.
   const [maximizedId, setMaximizedId] = useState(null)
 
@@ -39,11 +41,13 @@ export default function ChatWidget() {
     return () => window.removeEventListener('pe-chat-open', handler)
   }, [])
 
-  const { sections, conversations, presence, createOrOpen, markRead } = useContactList(query)
+  const { sections, groups, conversations, presence, createOrOpen, createGroup, markRead } =
+    useContactList(query)
   const total = sumUnread(conversations)
 
-  const openOne = useCallback(async (otherUserId) => {
-    const convId = await createOrOpen(otherUserId)
+  // Add a conversation id to the open list. Shared by DM-open, group-open,
+  // and post-create flows so they all behave identically.
+  const openConversationById = useCallback((convId) => {
     if (!convId) return
     setState(s => {
       const openIds = s.openConversationIds.includes(convId)
@@ -56,7 +60,13 @@ export default function ChatWidget() {
         minimizedIds: s.minimizedIds.filter(id => id !== convId),
       }
     })
-  }, [createOrOpen])
+  }, [])
+
+  const openOne = useCallback(async (otherUserId) => {
+    const convId = await createOrOpen(otherUserId)
+    if (!convId) return
+    openConversationById(convId)
+  }, [createOrOpen, openConversationById])
 
   const closeOne = useCallback((convId) => {
     setMaximizedId(m => (m === convId ? null : m))
@@ -138,8 +148,11 @@ export default function ChatWidget() {
             </div>
             <ContactList
               sections={sections}
+              groups={groups}
               presence={presence}
               onOpen={openOne}
+              onOpenGroup={openConversationById}
+              onCreateGroup={() => setCreateGroupOpen(true)}
             />
           </ChatPanel>
         )}
@@ -155,6 +168,15 @@ export default function ChatWidget() {
           onPosted={handleSystemMessagePost}
         />
       )}
+      <CreateGroupModal
+        isOpen={createGroupOpen}
+        onClose={() => setCreateGroupOpen(false)}
+        createGroup={createGroup}
+        onCreated={(convId) => {
+          setCreateGroupOpen(false)
+          openConversationById(convId)
+        }}
+      />
     </>
   )
 }

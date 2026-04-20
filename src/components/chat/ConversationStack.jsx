@@ -13,8 +13,10 @@ import {
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { Users } from 'lucide-react'
 import ConversationPane from './ConversationPane'
 import PresenceDot from './PresenceDot'
+import { groupDisplayName } from '../../lib/groupConversations'
 
 const VISIBLE_CAP = 3
 
@@ -78,20 +80,32 @@ export default function ConversationStack({
   function Tab({ id }) {
     const conv = byId.get(id)
     if (!conv) return null
+    const isGroup = conv.kind === 'group'
     const other = conv.other_profile
-    const online = presence.get(conv.other_user_id)?.online || false
+    const online = !isGroup && (presence.get(conv.other_user_id)?.online || false)
     const initial = (other?.full_name || '?').charAt(0).toUpperCase()
+    const ariaLabel = isGroup
+      ? `Restore group ${groupDisplayName(conv)}`
+      : `Restore conversation with ${other?.full_name || 'contact'}`
     return (
       <button
         type="button"
         onClick={() => onRestore(id)}
-        className="relative w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold flex items-center justify-center shadow-soft"
-        aria-label={`Restore conversation with ${other?.full_name || 'contact'}`}
+        className={`relative w-10 h-10 rounded-full font-semibold flex items-center justify-center shadow-soft ${
+          isGroup
+            ? 'bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-200'
+            : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
+        }`}
+        aria-label={ariaLabel}
       >
-        {other?.avatar_url
-          ? <img src={other.avatar_url} alt="" className="w-10 h-10 rounded-full object-cover" />
-          : <span>{initial}</span>}
-        <span className="absolute bottom-0 right-0"><PresenceDot online={online} /></span>
+        {isGroup
+          ? <Users className="w-4 h-4" />
+          : (other?.avatar_url
+              ? <img src={other.avatar_url} alt="" className="w-10 h-10 rounded-full object-cover" />
+              : <span>{initial}</span>)}
+        {!isGroup && (
+          <span className="absolute bottom-0 right-0"><PresenceDot online={online} /></span>
+        )}
         {conv.unread > 0 && (
           <span className="absolute -top-1 -right-1 min-w-[18px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center">
             {conv.unread > 9 ? '9+' : conv.unread}

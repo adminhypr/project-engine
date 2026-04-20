@@ -4,36 +4,49 @@ import { useAuth } from './useAuth'
 import { showToast } from '../components/ui'
 import { upsertConversation, sortByLastMessage } from '../lib/conversationOrdering'
 import { onMessage } from '../lib/dmEventBus'
+import { shapeConversationRow } from '../lib/groupConversations'
 
-// Row shape returned by this hook:
-//   { id, kind, last_message_at, last_message_preview,
-//     last_read_at, other_user_id, other_profile, unread }
+// Row shape returned by this hook (per conversation):
+//   Common: { id, kind, title, team_id, last_message_at, last_message_preview,
+//             last_read_at, muted, unread }
+//   DM:     + { other_user_id, other_profile, participants: null }
+//   Group:  + { other_user_id: null, other_profile: null, participants: [profile…] }
 
 async function fetchConversationsForUser(userId) {
   const { data: myRows, error: myErr } = await supabase
     .from('conversation_participants')
-    .select('conversation_id, last_read_at, muted, conversation:conversations!inner(id, kind, last_message_at, last_message_preview)')
+    .select('conversation_id, last_read_at, muted, conversation:conversations!inner(id, kind, title, team_id, last_message_at, last_message_preview)')
     .eq('user_id', userId)
   if (myErr) throw myErr
   if (!myRows || myRows.length === 0) return []
 
   const convIds = myRows.map(r => r.conversation_id)
 
+  // All participants (including myself) for every conversation. For DMs this
+  // lets us derive the single "other" user; for groups we expose the full
+  // participant list.
   const { data: allParts, error: partsErr } = await supabase
     .from('conversation_participants')
     .select('conversation_id, user_id')
     .in('conversation_id', convIds)
-    .neq('user_id', userId)
   if (partsErr) throw partsErr
 
-  const otherIds = [...new Set(allParts.map(p => p.user_id))]
+  const participantsByConv = new Map()
+  for (const p of allParts || []) {
+    const arr = participantsByConv.get(p.conversation_id) || []
+    arr.push(p.user_id)
+    participantsByConv.set(p.conversation_id, arr)
+  }
+
+  const allUserIds = [...new Set((allParts || []).map(p => p.user_id))]
   const { data: profiles } = await supabase
     .from('profiles')
     .select('id, full_name, avatar_url, email, team_id')
-    .in('id', otherIds)
+    .in('id', allUserIds)
   const profileById = new Map((profiles || []).map(p => [p.id, p]))
 
-  const unreadCounts = new Map()
+  // Unread counts: messages created after my last_read_at, by someone else.
+  const unreadByConv = new Map()
   await Promise.all(myRows.map(async (row) => {
     const { count } = await supabase
       .from('dm_messages')
@@ -41,24 +54,16 @@ async function fetchConversationsForUser(userId) {
       .eq('conversation_id', row.conversation_id)
       .neq('author_id', userId)
       .gt('created_at', row.last_read_at)
-    unreadCounts.set(row.conversation_id, count || 0)
+    unreadByConv.set(row.conversation_id, count || 0)
   }))
 
-  const out = myRows.map(row => {
-    const otherId = allParts.find(p => p.conversation_id === row.conversation_id)?.user_id
-    const otherProfile = otherId ? profileById.get(otherId) : null
-    return {
-      id: row.conversation_id,
-      kind: row.conversation.kind,
-      last_message_at: row.conversation.last_message_at,
-      last_message_preview: row.conversation.last_message_preview,
-      last_read_at: row.last_read_at,
-      muted: row.muted,
-      other_user_id: otherId,
-      other_profile: otherProfile,
-      unread: unreadCounts.get(row.conversation_id) || 0,
-    }
-  })
+  const out = myRows.map(row => shapeConversationRow({
+    row,
+    participantsByConv,
+    profileById,
+    unreadByConv,
+    myId: userId,
+  }))
 
   return sortByLastMessage(out)
 }
@@ -118,6 +123,17 @@ export function useConversations() {
     return data
   }, [profile?.id, refetch])
 
+  const createGroup = useCallback(async (title, memberIds) => {
+    if (!profile?.id) return null
+    const { data, error } = await supabase.rpc('create_custom_group', {
+      title: (title || '').trim(),
+      member_ids: memberIds || [],
+    })
+    if (error) { showToast('Failed to create group', 'error'); return null }
+    await refetch()
+    return data
+  }, [profile?.id, refetch])
+
   const markRead = useCallback(async (conversationId) => {
     const { error } = await supabase.rpc('mark_conversation_read', { cid: conversationId })
     if (error) return
@@ -128,5 +144,5 @@ export function useConversations() {
     ))
   }, [])
 
-  return { conversations, loading, refetch, createOrOpen, markRead }
+  return { conversations, loading, refetch, createOrOpen, createGroup, markRead }
 }

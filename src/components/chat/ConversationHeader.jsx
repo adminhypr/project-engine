@@ -1,24 +1,38 @@
-import { Minus, X, ClipboardList, Maximize2, Minimize2 } from 'lucide-react'
+import { Minus, X, ClipboardList, Maximize2, Minimize2, Users } from 'lucide-react'
 import PresenceDot from './PresenceDot'
+import { groupDisplayName, memberCountLabel } from '../../lib/groupConversations'
 
 export default function ConversationHeader({
-  otherProfile, online, onMinimize, onClose, onAssignTask, canAssignTask,
-  dragHandleProps, isMaximized, onToggleMaximize,
+  conversation, otherProfile, online, onMinimize, onClose, onAssignTask, canAssignTask,
+  dragHandleProps, isMaximized, onToggleMaximize, onOpenMembers,
 }) {
-  const name = otherProfile?.full_name || otherProfile?.email || 'Unknown'
+  const isGroup = conversation?.kind === 'group'
+  const name = isGroup
+    ? groupDisplayName(conversation)
+    : (otherProfile?.full_name || otherProfile?.email || 'Unknown')
+  const subtitle = isGroup
+    ? memberCountLabel(conversation?.participants)
+    : (online ? 'Online' : 'Offline')
+
   return (
     <header className="px-3 py-2 border-b border-slate-200 dark:border-dark-border flex items-center gap-2">
-      {/* Drag handle: presence dot + name/status. Buttons stay clickable. */}
+      {/* Drag handle: presence dot / group icon + name/status. Buttons stay clickable. */}
       <div
         {...(dragHandleProps || {})}
         className="flex-1 min-w-0 flex items-center gap-2 cursor-grab active:cursor-grabbing select-none"
         title="Drag to reorder"
       >
-        <PresenceDot online={online} />
+        {isGroup ? (
+          <div className="w-5 h-5 rounded-full bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-200 flex items-center justify-center">
+            <Users className="w-3 h-3" />
+          </div>
+        ) : (
+          <PresenceDot online={online} />
+        )}
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-slate-900 dark:text-white truncate">{name}</div>
           <div className="text-[11px] text-slate-500 dark:text-slate-400">
-            {online ? 'Online' : 'Offline'}
+            {subtitle}
           </div>
         </div>
       </div>
@@ -31,6 +45,17 @@ export default function ConversationHeader({
         >
           <ClipboardList className="w-3.5 h-3.5" />
           Assign task
+        </button>
+      )}
+      {isGroup && onOpenMembers && (
+        <button
+          type="button"
+          onClick={onOpenMembers}
+          className="text-slate-400 hover:text-slate-600"
+          aria-label="Group members"
+          title="Group members"
+        >
+          <Users className="w-4 h-4" />
         </button>
       )}
       {onToggleMaximize && (

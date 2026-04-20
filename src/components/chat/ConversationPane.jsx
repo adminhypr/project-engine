@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { useConversation } from '../../hooks/useConversation'
 import { useDmTyping } from '../../hooks/useDmTyping'
@@ -7,7 +7,9 @@ import ConversationHeader from './ConversationHeader'
 import MessageList from './MessageList'
 import ChatComposer from './ChatComposer'
 import TypingIndicator from './TypingIndicator'
+import GroupMembersModal from './GroupMembersModal'
 import { ReplyProvider } from './ReplyContext'
+import { groupDisplayName } from '../../lib/groupConversations'
 
 export default function ConversationPane({
   conversation,
@@ -19,17 +21,34 @@ export default function ConversationPane({
   dragHandleProps,
   isMaximized,
   onToggleMaximize,
+  onGroupChanged,
 }) {
   const { profile } = useAuth()
   const { messages, loading, hasMore, sendMessage, deleteMessage, loadMore } =
     useConversation(conversation.id)
-  const { otherTyping, emitTyping } = useDmTyping(conversation.id, profile?.id)
-  const otherLastReadAt = useOtherReadState(conversation.id, conversation.other_user_id)
+  const isGroup = conversation.kind === 'group'
+  // Typing + read receipts are DM-only for this pass. In groups they'd need
+  // multi-user reasoning; we disable them cleanly via null IDs so the hooks
+  // short-circuit on the first line of their effects.
+  const { otherTyping, emitTyping } = useDmTyping(
+    isGroup ? null : conversation.id,
+    isGroup ? null : profile?.id,
+  )
+  const otherLastReadAt = useOtherReadState(
+    isGroup ? null : conversation.id,
+    isGroup ? null : conversation.other_user_id,
+  )
+
+  const [membersOpen, setMembersOpen] = useState(false)
 
   useEffect(() => {
     onMarkRead?.(conversation.id)
   }, [conversation.id, messages.length, onMarkRead])
 
+  // Jump-to-message: used by quoted replies. Try DOM first (fast path).
+  // If the target isn't in the currently rendered window, keep paging back
+  // until it shows up or we exhaust history. The scrollRoot ref scopes the
+  // smooth scroll to THIS pane's message list.
   const scrollRootRef = useRef(null)
   const hasMoreRef = useRef(hasMore)
   hasMoreRef.current = hasMore
@@ -46,6 +65,7 @@ export default function ConversationPane({
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' })
         el.classList.remove('pe-msg-highlight')
+        // Re-trigger animation on next frame.
         requestAnimationFrame(() => el.classList.add('pe-msg-highlight'))
         setTimeout(() => el.classList.remove('pe-msg-highlight'), 1600)
         return
@@ -59,9 +79,11 @@ export default function ConversationPane({
     tick()
   }, [])
 
-  const otherName = conversation.other_profile?.full_name
-    || conversation.other_profile?.email
-    || 'Contact'
+  const typingName = isGroup
+    ? groupDisplayName(conversation)
+    : (conversation.other_profile?.full_name
+      || conversation.other_profile?.email
+      || 'Contact')
 
   return (
     <ReplyProvider scrollToMessage={scrollToMessage}>
@@ -70,6 +92,7 @@ export default function ConversationPane({
           : 'w-[320px] h-[440px]'
         } bg-white dark:bg-dark-card rounded-2xl border border-slate-200 dark:border-dark-border shadow-elevated flex flex-col overflow-hidden transition-[width,height] duration-200`}>
         <ConversationHeader
+          conversation={conversation}
           otherProfile={conversation.other_profile}
           online={online}
           canAssignTask={conversation.kind === 'dm'}
@@ -79,6 +102,7 @@ export default function ConversationPane({
           dragHandleProps={dragHandleProps}
           isMaximized={isMaximized}
           onToggleMaximize={onToggleMaximize ? () => onToggleMaximize(conversation.id) : undefined}
+          onOpenMembers={isGroup ? () => setMembersOpen(true) : undefined}
         />
         <MessageList
           messages={messages}
@@ -91,13 +115,22 @@ export default function ConversationPane({
           scrollRootRef={scrollRootRef}
           conversationId={conversation.id}
         />
-        {otherTyping && <TypingIndicator name={otherName} />}
+        {otherTyping && <TypingIndicator name={typingName} />}
         <ChatComposer
           conversationId={conversation.id}
           onSend={sendMessage}
-          onTyping={emitTyping}
+          onTyping={isGroup ? undefined : emitTyping}
         />
       </div>
+      {isGroup && (
+        <GroupMembersModal
+          isOpen={membersOpen}
+          onClose={() => setMembersOpen(false)}
+          conversation={conversation}
+          onLeft={(cid) => onClose?.(cid)}
+          onChanged={() => onGroupChanged?.()}
+        />
+      )}
     </ReplyProvider>
   )
 }
