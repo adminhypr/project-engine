@@ -6,6 +6,8 @@ import ImageAttachments from './ImageAttachments'
 import { useReplyContext } from './ReplyContext'
 import MentionPopover from './MentionPopover'
 import { parseMentionQuery, insertMention } from '../../lib/mentions'
+import { useAuth } from '../../hooks/useAuth'
+import { readDraft, writeDraft, clearDraft } from '../../lib/draftStorage'
 
 const MAX_LEN = 4000
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -31,18 +33,63 @@ const MAX_H = 260
 const MAX_MENTION_MATCHES = 6
 
 export default function ChatComposer({ conversationId, onSend, onTyping, disabled, mentionablePeople = [] }) {
+  const { profile } = useAuth()
+  const profileId = profile?.id
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [images, setImages] = useState([])
   const [textareaHeight, setTextareaHeight] = useState(DEFAULT_H)
-  // Parsed mention selections accumulated as the user picks them. We store
-  // the full set and dedupe by user_id on send, so re-mentioning the same
-  // person doesn't double up the row in the DB column.
   const [pickedMentions, setPickedMentions] = useState([])
   const [mentionQuery, setMentionQuery] = useState(null) // { query, startIndex } | null
   const [mentionIdx, setMentionIdx] = useState(0)
-  const { target: replyTarget, clearReply } = useReplyContext()
+  const { target: replyTarget, clearReply, requestReply } = useReplyContext()
   const textareaRef = useRef(null)
+  // Draft restore guard — we only hydrate once per conversation so in-flight
+  // edits don't get stomped by a later draft read.
+  const hydratedKeyRef = useRef(null)
+
+  // Load any saved draft when the conversation changes. Also restores the
+  // previously-attached reply target if there was one.
+  useEffect(() => {
+    if (!profileId || !conversationId) return
+    const hydrateKey = `${profileId}:${conversationId}`
+    if (hydratedKeyRef.current === hydrateKey) return
+    hydratedKeyRef.current = hydrateKey
+    const draft = readDraft(profileId, conversationId)
+    if (draft) {
+      if (draft.text) setValue(draft.text)
+      if (Array.isArray(draft.mentions) && draft.mentions.length > 0) {
+        setPickedMentions(draft.mentions)
+      }
+      // Re-arm the reply banner if the draft was mid-reply.
+      if (draft.replyTo?.id && !replyTarget) {
+        requestReply(
+          { id: draft.replyTo.id, author_id: draft.replyTo.author_id, content: draft.replyTo.preview },
+          draft.replyTo.authorName || 'them',
+        )
+      }
+    }
+    // Intentionally not depending on replyTarget/requestReply — we only want
+    // to run on (profileId, conversationId) change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileId, conversationId])
+
+  // Persist the current draft whenever it changes (value, mentions, reply).
+  useEffect(() => {
+    if (!profileId || !conversationId) return
+    writeDraft(profileId, conversationId, {
+      text: value,
+      replyTo: replyTarget
+        ? {
+            id: replyTarget.id,
+            author_id: replyTarget.author_id,
+            authorName: replyTarget.authorName,
+            preview: replyTarget.preview,
+          }
+        : null,
+      mentions: pickedMentions,
+    })
+  }, [profileId, conversationId, value, replyTarget, pickedMentions])
 
   // Filter + limit candidates whenever the query changes.
   const mentionCandidates = useMemo(() => {
@@ -129,6 +176,15 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
       setPickedMentions([])
       setMentionQuery(null)
       clearReply()
+      // The value/mentions/replyTarget effects will write an empty draft,
+      // but calling clearDraft explicitly is cheaper and avoids a race
+      // where the next typed character arrives before the cleared state
+      // has flushed.
+      if (profileId && conversationId) clearDraft(profileId, conversationId)
+    } else {
+      // Send failed — keep the text, surface the reason so the user knows
+      // nothing was lost and they can retry.
+      showToast('Message not sent — saved as draft', 'error')
     }
   }
 
