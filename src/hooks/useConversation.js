@@ -55,7 +55,7 @@ export function useConversation(conversationId) {
     })
   }, [conversationId])
 
-  const sendMessage = useCallback(async (content, inlineImages = [], replyTo = null) => {
+  const sendMessage = useCallback(async (content, inlineImages = [], replyTo = null, mentions = []) => {
     const cid = cidRef.current
     if (!cid || !profile?.id) return false
     const trimmed = (content || '').trim()
@@ -69,6 +69,7 @@ export function useConversation(conversationId) {
         kind: 'user',
         content: trimmed,
         inline_images: inlineImages.map(({ preview, ...rest }) => rest),
+        mentions: Array.isArray(mentions) ? mentions : [],
         reply_to_id:        replyTo?.id        || null,
         reply_to_author_id: replyTo?.author_id || null,
         reply_to_preview:   replyTo?.preview   || null,

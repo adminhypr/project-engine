@@ -120,6 +120,11 @@ export default function ConversationPane({
           conversationId={conversation.id}
           onSend={sendMessage}
           onTyping={isGroup ? undefined : emitTyping}
+          mentionablePeople={isGroup
+            ? (conversation.participants || [])
+                .filter(p => p.id && p.id !== profile?.id)
+                .map(p => ({ id: p.id, full_name: p.full_name, avatar_url: p.avatar_url }))
+            : []}
         />
       </div>
       {isGroup && (
