@@ -6,16 +6,14 @@ import { supabase } from '../lib/supabase'
 //
 //   emitTyping()    — call on every keystroke; throttled internally
 //   typingUserIds   — array of user ids currently typing, excluding self
-//   otherTyping     — convenience boolean (typingUserIds.length > 0) so
-//                     existing DM callsites can stay as-is
+//   otherTyping     — convenience boolean (typingUserIds.length > 0)
 //
 // Protocol:
 //   broadcast event "typing" payload { userId, typing: boolean }
 //   - "typing:true" repeats every 2s while typing continues
 //   - "typing:false" is sent on pause (3s idle) or on unmount
-// Each user id carries its own expiry; an interval sweep clears entries
-// older than STALE_MS (covers client drops / tab closes without clean
-// "typing:false").
+// Each user id carries its own expiry; a 500ms sweep clears entries older
+// than STALE_MS (covers clients that drop without a clean "typing:false").
 
 const REPEAT_MS = 2000
 const IDLE_MS   = 3000
@@ -23,19 +21,21 @@ const STALE_MS  = 4000
 const SWEEP_MS  = 500
 
 export function useDmTyping(conversationId, myId) {
-  // Map<userId, expireAt> stored in a ref so the broadcast handler can
-  // mutate without forcing a re-render on every echo. We only setState
-  // when the set of keys changes (user started/stopped typing).
-  const typingMapRef = useRef(new Map())
+  const typingMapRef = useRef(new Map()) // userId → expireAt
   const [typingUserIds, setTypingUserIds] = useState([])
 
   const channelRef = useRef(null)
+  const readyRef = useRef(false)
+  // If a typing event is requested before subscribe() resolves, stash the
+  // latest desired state and flush it on SUBSCRIBED. This matters for the
+  // very first keystroke after opening a pane — without it, the first 1-2
+  // seconds of typing never reach the other side.
+  const pendingTypingRef = useRef(null)
   const lastSentRef = useRef(0)
   const idleTimerRef = useRef(null)
 
   function publishIds() {
     const ids = [...typingMapRef.current.keys()]
-    // Cheap reference-stable comparison to avoid needless re-renders.
     setTypingUserIds(prev =>
       prev.length === ids.length && prev.every((id, i) => id === ids[i])
         ? prev
@@ -47,6 +47,8 @@ export function useDmTyping(conversationId, myId) {
     if (!conversationId || !myId) return
     typingMapRef.current = new Map()
     setTypingUserIds([])
+    readyRef.current = false
+    pendingTypingRef.current = null
 
     const channel = supabase.channel(`pe-dm-typing-${conversationId}`, {
       config: { broadcast: { self: false } },
@@ -60,10 +62,26 @@ export function useDmTyping(conversationId, myId) {
       }
       publishIds()
     })
-    channel.subscribe()
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        readyRef.current = true
+        // Flush any pending "typing:true" that was requested pre-subscribe.
+        if (pendingTypingRef.current !== null) {
+          try {
+            channel.send({
+              type: 'broadcast',
+              event: 'typing',
+              payload: { userId: myId, typing: pendingTypingRef.current },
+            })
+          } catch { /* noop */ }
+          pendingTypingRef.current = null
+        }
+      } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        readyRef.current = false
+      }
+    })
     channelRef.current = channel
 
-    // Sweep expired entries — cheap, one interval for the whole channel.
     const sweep = setInterval(() => {
       const now = Date.now()
       let changed = false
@@ -74,10 +92,15 @@ export function useDmTyping(conversationId, myId) {
     }, SWEEP_MS)
 
     return () => {
-      // Best-effort "stopped typing" on unmount so the other side clears fast.
-      try { channel.send({ type: 'broadcast', event: 'typing', payload: { userId: myId, typing: false } }) } catch { /* noop */ }
+      try {
+        if (readyRef.current) {
+          channel.send({ type: 'broadcast', event: 'typing', payload: { userId: myId, typing: false } })
+        }
+      } catch { /* noop */ }
       supabase.removeChannel(channel)
       channelRef.current = null
+      readyRef.current = false
+      pendingTypingRef.current = null
       clearInterval(sweep)
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
       typingMapRef.current = new Map()
@@ -86,8 +109,13 @@ export function useDmTyping(conversationId, myId) {
   }, [conversationId, myId])
 
   const sendTyping = useCallback((typing) => {
+    if (!myId) return
+    if (!readyRef.current) {
+      pendingTypingRef.current = typing
+      return
+    }
     const ch = channelRef.current
-    if (!ch || !myId) return
+    if (!ch) return
     try {
       ch.send({ type: 'broadcast', event: 'typing', payload: { userId: myId, typing } })
     } catch { /* noop */ }
