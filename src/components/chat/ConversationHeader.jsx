@@ -1,8 +1,9 @@
-import { Minus, X, ClipboardList } from 'lucide-react'
+import { Minus, X, ClipboardList, Maximize2, Minimize2 } from 'lucide-react'
 import PresenceDot from './PresenceDot'
 
 export default function ConversationHeader({
-  otherProfile, online, onMinimize, onClose, onAssignTask, canAssignTask, dragHandleProps,
+  otherProfile, online, onMinimize, onClose, onAssignTask, canAssignTask,
+  dragHandleProps, isMaximized, onToggleMaximize,
 }) {
   const name = otherProfile?.full_name || otherProfile?.email || 'Unknown'
   return (
@@ -30,6 +31,19 @@ export default function ConversationHeader({
         >
           <ClipboardList className="w-3.5 h-3.5" />
           Assign task
+        </button>
+      )}
+      {onToggleMaximize && (
+        <button
+          type="button"
+          onClick={onToggleMaximize}
+          className="text-slate-400 hover:text-slate-600"
+          aria-label={isMaximized ? 'Restore size' : 'Expand'}
+          title={isMaximized ? 'Restore size' : 'Expand'}
+        >
+          {isMaximized
+            ? <Minimize2 className="w-4 h-4" />
+            : <Maximize2 className="w-4 h-4" />}
         </button>
       )}
       <button type="button" onClick={onMinimize} className="text-slate-400 hover:text-slate-600" aria-label="Minimize">

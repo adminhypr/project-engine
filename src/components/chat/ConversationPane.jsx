@@ -16,6 +16,8 @@ export default function ConversationPane({
   onMarkRead,
   onAssignTask,
   dragHandleProps,
+  isMaximized,
+  onToggleMaximize,
 }) {
   const { profile } = useAuth()
   const { messages, loading, hasMore, sendMessage, deleteMessage, loadMore } =
@@ -32,7 +34,10 @@ export default function ConversationPane({
     || 'Contact'
 
   return (
-    <div className="w-[320px] h-[440px] bg-white dark:bg-dark-card rounded-2xl border border-slate-200 dark:border-dark-border shadow-elevated flex flex-col overflow-hidden">
+    <div className={`${isMaximized
+        ? 'w-[min(720px,92vw)] h-[min(720px,82vh)]'
+        : 'w-[320px] h-[440px]'
+      } bg-white dark:bg-dark-card rounded-2xl border border-slate-200 dark:border-dark-border shadow-elevated flex flex-col overflow-hidden transition-[width,height] duration-200`}>
       <ConversationHeader
         otherProfile={conversation.other_profile}
         online={online}
@@ -41,6 +46,8 @@ export default function ConversationPane({
         onMinimize={() => onMinimize?.(conversation.id)}
         onClose={() => onClose?.(conversation.id)}
         dragHandleProps={dragHandleProps}
+        isMaximized={isMaximized}
+        onToggleMaximize={onToggleMaximize ? () => onToggleMaximize(conversation.id) : undefined}
       />
       <MessageList
         messages={messages}

@@ -38,19 +38,28 @@ export default function ConversationStack({
   minimizedIds,
   conversations,
   presence,
+  maximizedId,
   onClose,
   onMinimize,
   onRestore,
   onMarkRead,
   onAssignTask,
   onReorder,
+  onToggleMaximize,
 }) {
   const activeIds = openConversationIds.filter(id => !minimizedIds.includes(id))
-  const visibleIds = activeIds.slice(-VISIBLE_CAP)
-  const overflowIds = [
-    ...activeIds.slice(0, Math.max(0, activeIds.length - VISIBLE_CAP)),
-    ...minimizedIds,
-  ]
+  // When one pane is maximized, it's the only visible pane; everything else
+  // (active or minimized) is pushed to the avatar strip.
+  const maxIsActive = maximizedId && activeIds.includes(maximizedId)
+  const visibleIds = maxIsActive
+    ? [maximizedId]
+    : activeIds.slice(-VISIBLE_CAP)
+  const overflowIds = maxIsActive
+    ? [...activeIds.filter(id => id !== maximizedId), ...minimizedIds]
+    : [
+        ...activeIds.slice(0, Math.max(0, activeIds.length - VISIBLE_CAP)),
+        ...minimizedIds,
+      ]
 
   const byId = new Map(conversations.map(c => [c.id, c]))
 
@@ -99,29 +108,51 @@ export default function ConversationStack({
           {overflowIds.map(id => <Tab key={id} id={id} />)}
         </div>
       )}
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={visibleIds} strategy={horizontalListSortingStrategy}>
-          {visibleIds.map(id => {
-            const conv = byId.get(id)
-            if (!conv) return null
-            return (
-              <SortablePane key={id} id={id}>
-                {({ attributes, listeners }) => (
-                  <ConversationPane
-                    conversation={conv}
-                    online={presence.get(conv.other_user_id)?.online || false}
-                    onClose={onClose}
-                    onMinimize={onMinimize}
-                    onMarkRead={onMarkRead}
-                    onAssignTask={onAssignTask}
-                    dragHandleProps={{ ...attributes, ...listeners }}
-                  />
-                )}
-              </SortablePane>
-            )
-          })}
-        </SortableContext>
-      </DndContext>
+      {maxIsActive ? (
+        // Maximized pane is rendered outside the sortable context — there's
+        // only one visible, so drag-to-reorder doesn't apply.
+        (() => {
+          const conv = byId.get(maximizedId)
+          if (!conv) return null
+          return (
+            <ConversationPane
+              conversation={conv}
+              online={presence.get(conv.other_user_id)?.online || false}
+              onClose={onClose}
+              onMinimize={onMinimize}
+              onMarkRead={onMarkRead}
+              onAssignTask={onAssignTask}
+              isMaximized
+              onToggleMaximize={onToggleMaximize}
+            />
+          )
+        })()
+      ) : (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={visibleIds} strategy={horizontalListSortingStrategy}>
+            {visibleIds.map(id => {
+              const conv = byId.get(id)
+              if (!conv) return null
+              return (
+                <SortablePane key={id} id={id}>
+                  {({ attributes, listeners }) => (
+                    <ConversationPane
+                      conversation={conv}
+                      online={presence.get(conv.other_user_id)?.online || false}
+                      onClose={onClose}
+                      onMinimize={onMinimize}
+                      onMarkRead={onMarkRead}
+                      onAssignTask={onAssignTask}
+                      dragHandleProps={{ ...attributes, ...listeners }}
+                      onToggleMaximize={onToggleMaximize}
+                    />
+                  )}
+                </SortablePane>
+              )
+            })}
+          </SortableContext>
+        </DndContext>
+      )}
     </>
   )
 }

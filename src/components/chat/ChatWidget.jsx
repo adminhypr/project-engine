@@ -16,6 +16,8 @@ export default function ChatWidget() {
   const [state, setState] = useState(() => readWidgetState(profile?.id))
   const [query, setQuery] = useState('')
   const [assignForConversation, setAssignForConversation] = useState(null)
+  // Maximize state is deliberately in-memory only — resets on reload.
+  const [maximizedId, setMaximizedId] = useState(null)
 
   useEffect(() => { setState(readWidgetState(profile?.id)) }, [profile?.id])
   useEffect(() => { writeWidgetState(profile?.id, state) }, [profile?.id, state])
@@ -57,6 +59,7 @@ export default function ChatWidget() {
   }, [createOrOpen])
 
   const closeOne = useCallback((convId) => {
+    setMaximizedId(m => (m === convId ? null : m))
     setState(s => ({
       ...s,
       openConversationIds: s.openConversationIds.filter(id => id !== convId),
@@ -65,10 +68,15 @@ export default function ChatWidget() {
   }, [])
 
   const minimizeOne = useCallback((convId) => {
+    setMaximizedId(m => (m === convId ? null : m))
     setState(s => ({
       ...s,
       minimizedIds: s.minimizedIds.includes(convId) ? s.minimizedIds : [...s.minimizedIds, convId],
     }))
+  }, [])
+
+  const toggleMaximize = useCallback((convId) => {
+    setMaximizedId(m => (m === convId ? null : convId))
   }, [])
 
   const restoreOne = useCallback((convId) => {
@@ -114,12 +122,14 @@ export default function ChatWidget() {
           minimizedIds={state.minimizedIds}
           conversations={conversations}
           presence={presence}
+          maximizedId={maximizedId}
           onClose={closeOne}
           onMinimize={minimizeOne}
           onRestore={restoreOne}
           onMarkRead={markRead}
           onAssignTask={conv => setAssignForConversation(conv)}
           onReorder={reorderOpen}
+          onToggleMaximize={toggleMaximize}
         />
         {state.expanded && (
           <ChatPanel onClose={() => setState(s => ({ ...s, expanded: false }))}>
