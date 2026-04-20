@@ -7,6 +7,27 @@ import { useAuth } from './useAuth'
 import { useDocumentVisible } from '../lib/useDocumentVisible'
 import { playTaskSound } from '../lib/notificationSounds'
 
+// Sender-side realtime "poke": nudge an assignee's task list to refetch
+// immediately, bypassing any RLS/filter edge cases on postgres_changes for
+// the tasks + task_assignees tables. Each assignee's useTasks hook
+// subscribes to user:{theirId}:task-poke; this function sends one
+// broadcast on that channel and tears the channel down.
+async function pokeAssignee(userId) {
+  const topic = `user:${userId}:task-poke`
+  const ch = supabase.channel(topic, { config: { broadcast: { self: false } } })
+  await new Promise((resolve) => {
+    ch.subscribe((status) => { if (status === 'SUBSCRIBED') resolve() })
+    // Safety timeout so we don't hang if the socket is down.
+    setTimeout(resolve, 1500)
+  })
+  try {
+    await ch.send({ type: 'broadcast', event: 'task-changed', payload: {} })
+  } finally {
+    // Leave a short beat for the broker to flush before removing.
+    setTimeout(() => { try { supabase.removeChannel(ch) } catch { /* noop */ } }, 250)
+  }
+}
+
 const TASK_SELECT_FULL = `
   *,
   assignee:profiles!tasks_assigned_to_fkey(id, full_name, email, role, team_id, reports_to, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
@@ -143,6 +164,23 @@ export function useTasks() {
   // reporting.
   useEffect(() => {
     if (!profileId) return
+
+    // Reconnect-aware status tracking: the first SUBSCRIBED is the initial
+    // connect (no refetch — we've just fetched). Each subsequent transition
+    // from a non-SUBSCRIBED state back to SUBSCRIBED means we reconnected,
+    // and we refetch to catch anything missed during the outage.
+    let everConnected = false
+    function onStatus(status) {
+      if (status === 'SUBSCRIBED') {
+        if (everConnected) fetchTasks(true)
+        everConnected = true
+      } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        everConnected = false
+      }
+    }
+
+    // Tasks channel — primary assignees / task creators / managers see events
+    // directly through RLS.
     const tasksChannel = supabase
       .channel('tasks-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' },
@@ -155,55 +193,74 @@ export function useTasks() {
             }
           }
         })
-      .subscribe()
+      .subscribe(onStatus)
 
+    // Task-assignees channel — secondary assignees land here (tasks INSERT is
+    // suppressed by RLS until their junction row exists).
+    //
+    // Deliberately UNFILTERED on profile_id. Server-side realtime filters on
+    // composite-PK tables are known to drop events under some conditions; a
+    // client-side filter is unconditionally reliable and the volume is
+    // negligible (a handful of rows per assignment in the whole company).
     const assigneesChannel = supabase
       .channel('task-assignees-realtime')
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'task_assignees',
-          filter: `profile_id=eq.${profileId}`,
-        },
+        { event: '*', schema: 'public', table: 'task_assignees' },
         (payload) => {
-          // Secondary assignees (is_primary=false) can't see the tasks
-          // INSERT through RLS, so this is their path. For the primary
-          // assignee the tasks-channel handler already played the sound
-          // and refetched — skip both here to avoid a double beep.
-          const row = payload.new
-          if (row?.is_primary) return
-          playTaskSound()
+          const row = payload.new || payload.old
+          if (!row || row.profile_id !== profileId) return
+          if (payload.eventType === 'INSERT' && !row.is_primary) {
+            playTaskSound()
+          }
           fetchTasks(true)
         }
       )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'task_assignees',
-          filter: `profile_id=eq.${profileId}`,
-        },
-        () => fetchTasks(true)
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'task_assignees',
-          filter: `profile_id=eq.${profileId}`,
-        },
-        () => fetchTasks(true)
-      )
+      .subscribe()
+
+    // User-scoped broadcast channel — the sender-side "poke" from
+    // assignTask fires here. This is RLS-free and filter-free, so it's the
+    // single most reliable signal we have. If WebSocket is up at all, this
+    // path works.
+    const pokeChannel = supabase
+      .channel(`user:${profileId}:task-poke`, { config: { broadcast: { self: false } } })
+      .on('broadcast', { event: 'task-changed' }, () => {
+        playTaskSound()
+        fetchTasks(true)
+      })
       .subscribe()
 
     return () => {
       supabase.removeChannel(tasksChannel)
       supabase.removeChannel(assigneesChannel)
+      supabase.removeChannel(pokeChannel)
     }
+  }, [profileId, fetchTasks])
+
+  // Polling safety net — one silent refetch every 30s while the tab is in
+  // the foreground. If realtime works, this is a cheap no-op; if ANY event
+  // is dropped for any reason (stale socket, filter quirk, RLS edge case),
+  // the next tick corrects within 30s. Stopped when the tab is hidden so
+  // we don't hammer the DB on idle backgrounds.
+  useEffect(() => {
+    if (!profileId) return
+    let interval = null
+    function start() {
+      if (interval) return
+      interval = setInterval(() => {
+        if (document.visibilityState === 'visible') fetchTasks(true)
+      }, 30000)
+    }
+    function stop() {
+      if (interval) { clearInterval(interval); interval = null }
+    }
+    function handle() {
+      if (document.visibilityState === 'visible') start()
+      else stop()
+    }
+    handle()
+    document.addEventListener('visibilitychange', handle)
+    return () => { document.removeEventListener('visibilitychange', handle); stop() }
   }, [profileId, fetchTasks])
 
   // Silent refetch on tab-visible — catches task inserts/updates that happened
@@ -276,6 +333,17 @@ export function useTaskActions() {
       }))
       const { error: jErr } = await supabase.from('task_assignees').insert(rows)
       if (jErr) console.warn('task_assignees insert failed:', jErr.message)
+
+      // Sender-side "poke": broadcast a task-changed event to each assignee's
+      // private channel. This is the most reliable path for the recipient —
+      // it bypasses the tasks+task_assignees RLS/replica-identity maze that
+      // can cause postgres_changes events to be dropped for secondary
+      // assignees. Fire-and-forget; each assignee's useTasks hook is
+      // subscribed to user:{id}:task-poke.
+      for (const id of ids) {
+        if (id === profile?.id) continue // no need to poke self
+        pokeAssignee(id).catch(() => { /* noop */ })
+      }
     }
 
     // Log assigner override to audit log
