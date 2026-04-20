@@ -6,7 +6,7 @@ import { computeSeenByMessage } from '../../lib/groupSeenBy'
 
 export default function MessageList({
   messages, myId, loading, hasMore, onLoadMore, onDelete, otherLastReadAt, scrollRootRef,
-  conversationId, groupReaders,
+  conversationId, groupReaders, profileLookup,
 }) {
   const { byMessageId, toggle } = useMessageReactions(conversationId)
   const bottomRef = useRef(null)
@@ -70,6 +70,8 @@ export default function MessageList({
               receipt={showReceipt ? (seen ? 'seen' : 'delivered') : null}
               reactions={byMessageId[m.id]}
               onToggleReaction={toggle}
+              reactionProfileLookup={profileLookup}
+              myId={myId}
               seenBy={seenByMessage.get(m.id)}
             />
           </Fragment>

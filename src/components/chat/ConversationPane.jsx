@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { useConversation } from '../../hooks/useConversation'
 import { useDmTyping } from '../../hooks/useDmTyping'
@@ -85,6 +85,22 @@ export default function ConversationPane({
     tick()
   }, [])
 
+  // Profile lookup covers everyone who could appear as a reactor, mentioner,
+  // or typer — group participants, the DM other party, and me. Consumed by
+  // MessageReactions to show "Alice, Bob, You" on pill hover.
+  const profileLookup = useMemo(() => {
+    const map = new Map()
+    if (isGroup) {
+      for (const p of conversation.participants || []) {
+        if (p?.id) map.set(p.id, p)
+      }
+    } else if (conversation.other_profile?.id) {
+      map.set(conversation.other_profile.id, conversation.other_profile)
+    }
+    if (profile?.id) map.set(profile.id, profile)
+    return map
+  }, [isGroup, conversation.participants, conversation.other_profile, profile])
+
   // Resolve typing user ids → display names. In a DM, the single "other"
   // profile is the only candidate. In a group, we look each id up in the
   // participants list.
@@ -134,6 +150,7 @@ export default function ConversationPane({
           groupReaders={isGroup ? groupReaders : null}
           scrollRootRef={scrollRootRef}
           conversationId={conversation.id}
+          profileLookup={profileLookup}
         />
         {otherTyping && <TypingIndicator names={typingNames} />}
         <ChatComposer

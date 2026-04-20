@@ -37,7 +37,7 @@ function QuotedReply({ message, isMine, onJump }) {
   )
 }
 
-export default function DmChatMessage({ message, isMine, onDelete, receipt, reactions, onToggleReaction, seenBy }) {
+export default function DmChatMessage({ message, isMine, onDelete, receipt, reactions, onToggleReaction, reactionProfileLookup, myId, seenBy }) {
   const { requestReply, scrollToMessage } = useReplyContext()
   const [pickerOpen, setPickerOpen] = useState(false)
   const isSystem = message.kind === 'system'
@@ -155,6 +155,8 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt, reac
             <MessageReactions
               reactions={reactions}
               onToggle={(emoji) => onToggleReaction?.(message.id, emoji)}
+              profileLookup={reactionProfileLookup}
+              myUserId={myId}
             />
           </div>
         )}
