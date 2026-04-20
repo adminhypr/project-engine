@@ -5,6 +5,7 @@ import { getAssignmentType } from '../lib/assignmentType'
 import { generateTaskId } from '../lib/helpers'
 import { useAuth } from './useAuth'
 import { useDocumentVisible } from '../lib/useDocumentVisible'
+import { playTaskSound } from '../lib/notificationSounds'
 
 const TASK_SELECT_FULL = `
   *,
@@ -131,7 +132,17 @@ export function useTasks() {
     const channel = supabase
       .channel('tasks-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' },
-        () => fetchTasks(true))
+        (payload) => {
+          fetchTasks(true)
+          // Sound on INSERT when the new row targets me as assignee and
+          // I'm not the one who assigned it (skip self-created tasks).
+          if (payload.eventType === 'INSERT') {
+            const row = payload.new
+            if (row && row.assigned_to === profileId && row.assigned_by !== profileId) {
+              playTaskSound()
+            }
+          }
+        })
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [profileId, fetchTasks])
