@@ -1,35 +1,152 @@
 // Synthesized notification sounds — no audio assets to bundle or host.
-// Uses the Web Audio API directly. Each sound is a short enveloped tone
-// pair so it reads as a distinct chime but is quiet enough not to annoy.
+// Uses the Web Audio API directly. Users can pick between several curated
+// presets per channel and set a shared volume level (soft/medium/loud).
 //
 // Preferences live in localStorage:
-//   pe-sound-task      "1" | "0"   (default: enabled)
-//   pe-sound-message   "1" | "0"   (default: enabled)
+//   pe-sound-task            "1" | "0"      (default enabled)
+//   pe-sound-message         "1" | "0"      (default enabled)
+//   pe-sound-task-preset     preset id       (default "chime")
+//   pe-sound-message-preset  preset id       (default "pop")
+//   pe-sound-volume          "soft"|"medium"|"loud"  (default "medium")
 
-const KEY_TASK    = 'pe-sound-task'
-const KEY_MESSAGE = 'pe-sound-message'
+const KEY_TASK            = 'pe-sound-task'
+const KEY_MESSAGE         = 'pe-sound-message'
+const KEY_TASK_PRESET     = 'pe-sound-task-preset'
+const KEY_MESSAGE_PRESET  = 'pe-sound-message-preset'
+const KEY_VOLUME          = 'pe-sound-volume'
 
-export const SOUND_PREF_KEYS = { task: KEY_TASK, message: KEY_MESSAGE }
-
-function readPref(key) {
-  try {
-    const v = localStorage.getItem(key)
-    // Default to enabled when unset.
-    return v === null ? true : v === '1'
-  } catch { return true }
+export const SOUND_PREF_KEYS = {
+  task: KEY_TASK,
+  message: KEY_MESSAGE,
+  taskPreset: KEY_TASK_PRESET,
+  messagePreset: KEY_MESSAGE_PRESET,
+  volume: KEY_VOLUME,
 }
 
-export function writePref(key, enabled) {
-  try { localStorage.setItem(key, enabled ? '1' : '0') } catch { /* noop */ }
+// ── Presets ──────────────────────────────────────────────────────────────
+// Each preset is a sequence of tones with relative start offsets (seconds).
+// `peak` is the 0-1 gain of the envelope apex before the volume multiplier
+// is applied. Defaults: peak 0.18, type 'sine', dur inferred per entry.
+
+const TASK_PRESETS = {
+  chime: {
+    label: 'Chime',
+    tones: [
+      { freq: 660, start: 0.00, dur: 0.09, peak: 0.18 },
+      { freq: 880, start: 0.09, dur: 0.13, peak: 0.18 },
+    ],
+  },
+  ding: {
+    label: 'Ding',
+    tones: [
+      { freq: 1040, start: 0.00, dur: 0.22, peak: 0.20, type: 'triangle' },
+    ],
+  },
+  alert: {
+    label: 'Alert',
+    tones: [
+      { freq: 880, start: 0.00, dur: 0.08, peak: 0.22 },
+      { freq: 740, start: 0.10, dur: 0.08, peak: 0.22 },
+      { freq: 620, start: 0.20, dur: 0.14, peak: 0.22 },
+    ],
+  },
+  bell: {
+    label: 'Bell',
+    tones: [
+      { freq: 784, start: 0.00, dur: 0.42, peak: 0.20, type: 'triangle' },
+      { freq: 1568, start: 0.00, dur: 0.20, peak: 0.08, type: 'sine' },
+    ],
+  },
+  klaxon: {
+    label: 'Klaxon (loud)',
+    tones: [
+      { freq: 520, start: 0.00, dur: 0.14, peak: 0.30, type: 'square' },
+      { freq: 720, start: 0.14, dur: 0.14, peak: 0.30, type: 'square' },
+      { freq: 520, start: 0.28, dur: 0.14, peak: 0.30, type: 'square' },
+    ],
+  },
 }
 
-export function isTaskSoundEnabled()    { return readPref(KEY_TASK) }
-export function isMessageSoundEnabled() { return readPref(KEY_MESSAGE) }
+const MESSAGE_PRESETS = {
+  pop: {
+    label: 'Pop',
+    tones: [
+      { freq: 520, start: 0.00, dur: 0.14, peak: 0.14 },
+    ],
+  },
+  blip: {
+    label: 'Blip',
+    tones: [
+      { freq: 1000, start: 0.00, dur: 0.07, peak: 0.16 },
+    ],
+  },
+  tap: {
+    label: 'Double tap',
+    tones: [
+      { freq: 380, start: 0.00, dur: 0.05, peak: 0.14 },
+      { freq: 380, start: 0.09, dur: 0.05, peak: 0.14 },
+    ],
+  },
+  ping: {
+    label: 'Ping',
+    tones: [
+      { freq: 1320, start: 0.00, dur: 0.18, peak: 0.14, type: 'sine' },
+    ],
+  },
+  whistle: {
+    label: 'Whistle (loud)',
+    tones: [
+      { freq: 880, start: 0.00, dur: 0.09, peak: 0.26 },
+      { freq: 1320, start: 0.09, dur: 0.12, peak: 0.26 },
+    ],
+  },
+}
 
-// Lazy-initialize AudioContext — many browsers require it be created after a
-// user gesture; we do it on first play. If the page is in the background
-// when the first tone would play, the context may be in 'suspended' state
-// and the tone is silently dropped (acceptable).
+export const TASK_PRESET_OPTIONS = Object.entries(TASK_PRESETS)
+  .map(([id, p]) => ({ id, label: p.label }))
+export const MESSAGE_PRESET_OPTIONS = Object.entries(MESSAGE_PRESETS)
+  .map(([id, p]) => ({ id, label: p.label }))
+
+const VOLUME_MULTIPLIERS = { soft: 0.55, medium: 1.0, loud: 1.7 }
+export const VOLUME_OPTIONS = [
+  { id: 'soft',   label: 'Soft' },
+  { id: 'medium', label: 'Medium' },
+  { id: 'loud',   label: 'Loud' },
+]
+
+// ── Prefs ────────────────────────────────────────────────────────────────
+function readRaw(key) {
+  try { return localStorage.getItem(key) } catch { return null }
+}
+export function writePref(key, value) {
+  try { localStorage.setItem(key, value) } catch { /* noop */ }
+}
+
+function readBoolPref(key) {
+  const v = readRaw(key)
+  return v === null ? true : v === '1'
+}
+export function writeBoolPref(key, enabled) {
+  writePref(key, enabled ? '1' : '0')
+}
+
+export function isTaskSoundEnabled()    { return readBoolPref(KEY_TASK) }
+export function isMessageSoundEnabled() { return readBoolPref(KEY_MESSAGE) }
+
+export function getTaskPreset() {
+  const v = readRaw(KEY_TASK_PRESET)
+  return v && TASK_PRESETS[v] ? v : 'chime'
+}
+export function getMessagePreset() {
+  const v = readRaw(KEY_MESSAGE_PRESET)
+  return v && MESSAGE_PRESETS[v] ? v : 'pop'
+}
+export function getVolume() {
+  const v = readRaw(KEY_VOLUME)
+  return v && VOLUME_MULTIPLIERS[v] != null ? v : 'medium'
+}
+
+// ── Playback ─────────────────────────────────────────────────────────────
 let ctx = null
 function getCtx() {
   if (ctx) return ctx
@@ -41,45 +158,48 @@ function getCtx() {
   return ctx
 }
 
-// Play one short enveloped tone. Caller schedules sequences with offsets.
-function tone({ freq, start = 0, dur = 0.12, peak = 0.18, type = 'sine' }) {
+function playTone({ freq, start = 0, dur = 0.12, peak = 0.18, type = 'sine' }, volumeMul = 1) {
   const ac = getCtx()
   if (!ac) return
-  // Resume on demand — interactive apps often land here after user input.
   if (ac.state === 'suspended') ac.resume().catch(() => {})
   const now = ac.currentTime + start
   const osc = ac.createOscillator()
   const gain = ac.createGain()
   osc.type = type
   osc.frequency.setValueAtTime(freq, now)
-  // ADSR-ish envelope: quick attack, medium decay, silent tail.
+  const p = Math.max(0, Math.min(1, peak * volumeMul))
   gain.gain.setValueAtTime(0, now)
-  gain.gain.linearRampToValueAtTime(peak, now + 0.015)
+  gain.gain.linearRampToValueAtTime(p, now + 0.015)
   gain.gain.exponentialRampToValueAtTime(0.0001, now + dur)
   osc.connect(gain).connect(ac.destination)
   osc.start(now)
   osc.stop(now + dur + 0.02)
 }
 
+function playPreset(preset, volumeMul) {
+  if (!preset) return
+  for (const tone of preset.tones) playTone(tone, volumeMul)
+}
+
+function volumeMul(volId) {
+  return VOLUME_MULTIPLIERS[volId] ?? 1
+}
+
+// ── Public API ───────────────────────────────────────────────────────────
 export function playTaskSound() {
   if (!isTaskSoundEnabled()) return
-  // Two-note ascending chime — reads as "new task".
-  tone({ freq: 660, start: 0.00, dur: 0.09, peak: 0.16 })
-  tone({ freq: 880, start: 0.09, dur: 0.13, peak: 0.16 })
+  playPreset(TASK_PRESETS[getTaskPreset()], volumeMul(getVolume()))
 }
-
 export function playMessageSound() {
   if (!isMessageSoundEnabled()) return
-  // Single softer tone — reads as "new message".
-  tone({ freq: 520, start: 0.00, dur: 0.14, peak: 0.12 })
+  playPreset(MESSAGE_PRESETS[getMessagePreset()], volumeMul(getVolume()))
 }
 
-// Test helpers so the Settings card can preview a sound when the user
-// toggles it on (bypasses the enabled check).
-export function previewTaskSound() {
-  tone({ freq: 660, start: 0.00, dur: 0.09, peak: 0.16 })
-  tone({ freq: 880, start: 0.09, dur: 0.13, peak: 0.16 })
+// Previews bypass the enabled flag. Callers may pass overrides so the
+// Settings UI can demo a preset/volume before the user commits to it.
+export function previewTaskSound(presetId = getTaskPreset(), volumeId = getVolume()) {
+  playPreset(TASK_PRESETS[presetId] || TASK_PRESETS.chime, volumeMul(volumeId))
 }
-export function previewMessageSound() {
-  tone({ freq: 520, start: 0.00, dur: 0.14, peak: 0.12 })
+export function previewMessageSound(presetId = getMessagePreset(), volumeId = getVolume()) {
+  playPreset(MESSAGE_PRESETS[presetId] || MESSAGE_PRESETS.pop, volumeMul(volumeId))
 }
