@@ -1,53 +1,87 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
-// Broadcast-only typing presence per DM conversation. Nothing hits the DB.
-//   emitTyping()   — call on every keystroke; throttled internally
-//   otherTyping    — boolean reflecting the OTHER participant's typing state
+// Broadcast-only typing presence for DMs and group conversations. Nothing
+// hits the DB — pure Supabase realtime broadcast.
+//
+//   emitTyping()    — call on every keystroke; throttled internally
+//   typingUserIds   — array of user ids currently typing, excluding self
+//   otherTyping     — convenience boolean (typingUserIds.length > 0) so
+//                     existing DM callsites can stay as-is
 //
 // Protocol:
 //   broadcast event "typing" payload { userId, typing: boolean }
 //   - "typing:true" repeats every 2s while typing continues
 //   - "typing:false" is sent on pause (3s idle) or on unmount
-// Receiver auto-clears the indicator if no refresh for 4s (covers client drops).
+// Each user id carries its own expiry; an interval sweep clears entries
+// older than STALE_MS (covers client drops / tab closes without clean
+// "typing:false").
 
 const REPEAT_MS = 2000
 const IDLE_MS   = 3000
 const STALE_MS  = 4000
+const SWEEP_MS  = 500
 
 export function useDmTyping(conversationId, myId) {
-  const [otherTyping, setOtherTyping] = useState(false)
+  // Map<userId, expireAt> stored in a ref so the broadcast handler can
+  // mutate without forcing a re-render on every echo. We only setState
+  // when the set of keys changes (user started/stopped typing).
+  const typingMapRef = useRef(new Map())
+  const [typingUserIds, setTypingUserIds] = useState([])
+
   const channelRef = useRef(null)
   const lastSentRef = useRef(0)
   const idleTimerRef = useRef(null)
-  const staleTimerRef = useRef(null)
+
+  function publishIds() {
+    const ids = [...typingMapRef.current.keys()]
+    // Cheap reference-stable comparison to avoid needless re-renders.
+    setTypingUserIds(prev =>
+      prev.length === ids.length && prev.every((id, i) => id === ids[i])
+        ? prev
+        : ids
+    )
+  }
 
   useEffect(() => {
     if (!conversationId || !myId) return
+    typingMapRef.current = new Map()
+    setTypingUserIds([])
+
     const channel = supabase.channel(`pe-dm-typing-${conversationId}`, {
       config: { broadcast: { self: false } },
     })
     channel.on('broadcast', { event: 'typing' }, ({ payload }) => {
       if (!payload || payload.userId === myId) return
       if (payload.typing) {
-        setOtherTyping(true)
-        if (staleTimerRef.current) clearTimeout(staleTimerRef.current)
-        staleTimerRef.current = setTimeout(() => setOtherTyping(false), STALE_MS)
+        typingMapRef.current.set(payload.userId, Date.now() + STALE_MS)
       } else {
-        setOtherTyping(false)
-        if (staleTimerRef.current) clearTimeout(staleTimerRef.current)
+        typingMapRef.current.delete(payload.userId)
       }
+      publishIds()
     })
     channel.subscribe()
     channelRef.current = channel
+
+    // Sweep expired entries — cheap, one interval for the whole channel.
+    const sweep = setInterval(() => {
+      const now = Date.now()
+      let changed = false
+      for (const [id, exp] of typingMapRef.current) {
+        if (exp <= now) { typingMapRef.current.delete(id); changed = true }
+      }
+      if (changed) publishIds()
+    }, SWEEP_MS)
+
     return () => {
       // Best-effort "stopped typing" on unmount so the other side clears fast.
       try { channel.send({ type: 'broadcast', event: 'typing', payload: { userId: myId, typing: false } }) } catch { /* noop */ }
       supabase.removeChannel(channel)
       channelRef.current = null
+      clearInterval(sweep)
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
-      if (staleTimerRef.current) clearTimeout(staleTimerRef.current)
-      setOtherTyping(false)
+      typingMapRef.current = new Map()
+      setTypingUserIds([])
     }
   }, [conversationId, myId])
 
@@ -72,5 +106,9 @@ export function useDmTyping(conversationId, myId) {
     }, IDLE_MS)
   }, [sendTyping])
 
-  return { otherTyping, emitTyping }
+  return {
+    typingUserIds,
+    otherTyping: typingUserIds.length > 0,
+    emitTyping,
+  }
 }

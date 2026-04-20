@@ -10,7 +10,6 @@ import ChatComposer from './ChatComposer'
 import TypingIndicator from './TypingIndicator'
 import GroupMembersModal from './GroupMembersModal'
 import { ReplyProvider } from './ReplyContext'
-import { groupDisplayName } from '../../lib/groupConversations'
 
 export default function ConversationPane({
   conversation,
@@ -31,9 +30,11 @@ export default function ConversationPane({
   // Typing + read receipts are DM-only for this pass. In groups they'd need
   // multi-user reasoning; we disable them cleanly via null IDs so the hooks
   // short-circuit on the first line of their effects.
-  const { otherTyping, emitTyping } = useDmTyping(
-    isGroup ? null : conversation.id,
-    isGroup ? null : profile?.id,
+  // Typing works in both DMs and groups now. useDmTyping tracks per-user
+  // typing state internally; we resolve the ids to names below.
+  const { typingUserIds, otherTyping, emitTyping } = useDmTyping(
+    conversation.id,
+    profile?.id,
   )
   const otherLastReadAt = useOtherReadState(
     isGroup ? null : conversation.id,
@@ -84,11 +85,24 @@ export default function ConversationPane({
     tick()
   }, [])
 
-  const typingName = isGroup
-    ? groupDisplayName(conversation)
-    : (conversation.other_profile?.full_name
-      || conversation.other_profile?.email
-      || 'Contact')
+  // Resolve typing user ids → display names. In a DM, the single "other"
+  // profile is the only candidate. In a group, we look each id up in the
+  // participants list.
+  let typingNames = []
+  if (typingUserIds.length > 0) {
+    if (isGroup) {
+      const byId = new Map((conversation.participants || []).map(p => [p.id, p]))
+      typingNames = typingUserIds
+        .map(id => byId.get(id)?.full_name)
+        .filter(Boolean)
+    } else {
+      typingNames = [
+        conversation.other_profile?.full_name
+          || conversation.other_profile?.email
+          || 'Contact',
+      ]
+    }
+  }
 
   return (
     <ReplyProvider scrollToMessage={scrollToMessage}>
@@ -121,11 +135,11 @@ export default function ConversationPane({
           scrollRootRef={scrollRootRef}
           conversationId={conversation.id}
         />
-        {otherTyping && <TypingIndicator name={typingName} />}
+        {otherTyping && <TypingIndicator names={typingNames} />}
         <ChatComposer
           conversationId={conversation.id}
           onSend={sendMessage}
-          onTyping={isGroup ? undefined : emitTyping}
+          onTyping={emitTyping}
           mentionablePeople={isGroup
             ? (conversation.participants || [])
                 .filter(p => p.id && p.id !== profile?.id)
