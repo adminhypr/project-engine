@@ -126,16 +126,28 @@ export function useTasks() {
   const profileId = profile?.id
   useEffect(() => { fetchTasks() }, [profileId, fetchTasks])
 
-  // Real-time subscription — stable deps so the channel isn't torn down/re-created
+  // Real-time subscriptions.
+  //
+  // Two channels are needed:
+  //   1. tasks — primary assignees (assigned_to = me) or tasks I created see
+  //      INSERT/UPDATE/DELETE directly. Their RLS SELECT check passes on
+  //      those columns at the moment the row is written.
+  //   2. task_assignees — **secondary** assignees (everyone past the first in
+  //      a multi-owner assignment) can't see the tasks INSERT yet: the
+  //      junction row that grants them RLS access is written in a second
+  //      insert right after. So we listen to the junction and refetch when
+  //      a row mentions me.
+  //
+  // Without (2), the recipient of a multi-owner assignment had to refresh
+  // the page before the new task appeared — which is what users were
+  // reporting.
   useEffect(() => {
     if (!profileId) return
-    const channel = supabase
+    const tasksChannel = supabase
       .channel('tasks-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' },
         (payload) => {
           fetchTasks(true)
-          // Sound on INSERT when the new row targets me as assignee and
-          // I'm not the one who assigned it (skip self-created tasks).
           if (payload.eventType === 'INSERT') {
             const row = payload.new
             if (row && row.assigned_to === profileId && row.assigned_by !== profileId) {
@@ -144,7 +156,54 @@ export function useTasks() {
           }
         })
       .subscribe()
-    return () => supabase.removeChannel(channel)
+
+    const assigneesChannel = supabase
+      .channel('task-assignees-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'task_assignees',
+          filter: `profile_id=eq.${profileId}`,
+        },
+        (payload) => {
+          // Secondary assignees (is_primary=false) can't see the tasks
+          // INSERT through RLS, so this is their path. For the primary
+          // assignee the tasks-channel handler already played the sound
+          // and refetched — skip both here to avoid a double beep.
+          const row = payload.new
+          if (row?.is_primary) return
+          playTaskSound()
+          fetchTasks(true)
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'task_assignees',
+          filter: `profile_id=eq.${profileId}`,
+        },
+        () => fetchTasks(true)
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'task_assignees',
+          filter: `profile_id=eq.${profileId}`,
+        },
+        () => fetchTasks(true)
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(tasksChannel)
+      supabase.removeChannel(assigneesChannel)
+    }
   }, [profileId, fetchTasks])
 
   // Silent refetch on tab-visible — catches task inserts/updates that happened
