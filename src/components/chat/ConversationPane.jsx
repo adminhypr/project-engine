@@ -95,7 +95,7 @@ export default function ConversationPane({
           conversation={conversation}
           otherProfile={conversation.other_profile}
           online={online}
-          canAssignTask={conversation.kind === 'dm'}
+          canAssignTask={conversation.kind === 'dm' || conversation.kind === 'group'}
           onAssignTask={() => onAssignTask?.(conversation)}
           onMinimize={() => onMinimize?.(conversation.id)}
           onClose={() => onClose?.(conversation.id)}
