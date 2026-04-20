@@ -6,6 +6,7 @@ import ChatTaskCard from './ChatTaskCard'
 import { useReplyContext } from './ReplyContext'
 import ReactionPicker from './ReactionPicker'
 import MessageReactions from './MessageReactions'
+import SeenByAvatars from './SeenByAvatars'
 
 function formatTime(iso) {
   try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
@@ -36,7 +37,7 @@ function QuotedReply({ message, isMine, onJump }) {
   )
 }
 
-export default function DmChatMessage({ message, isMine, onDelete, receipt, reactions, onToggleReaction }) {
+export default function DmChatMessage({ message, isMine, onDelete, receipt, reactions, onToggleReaction, seenBy }) {
   const { requestReply, scrollToMessage } = useReplyContext()
   const [pickerOpen, setPickerOpen] = useState(false)
   const isSystem = message.kind === 'system'
@@ -182,6 +183,9 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt, reac
             </button>
           )}
         </div>
+        {seenBy && seenBy.length > 0 && (
+          <SeenByAvatars readers={seenBy} align={isMine ? 'end' : 'start'} />
+        )}
       </div>
     </div>
   )

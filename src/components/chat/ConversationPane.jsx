@@ -3,6 +3,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useConversation } from '../../hooks/useConversation'
 import { useDmTyping } from '../../hooks/useDmTyping'
 import { useOtherReadState } from '../../hooks/useOtherReadState'
+import { useGroupReadState } from '../../hooks/useGroupReadState'
 import ConversationHeader from './ConversationHeader'
 import MessageList from './MessageList'
 import ChatComposer from './ChatComposer'
@@ -37,6 +38,10 @@ export default function ConversationPane({
   const otherLastReadAt = useOtherReadState(
     isGroup ? null : conversation.id,
     isGroup ? null : conversation.other_user_id,
+  )
+  const groupReaders = useGroupReadState(
+    isGroup ? conversation.id : null,
+    isGroup ? conversation.participants : null,
   )
 
   const [membersOpen, setMembersOpen] = useState(false)
@@ -112,6 +117,7 @@ export default function ConversationPane({
           onLoadMore={loadMore}
           onDelete={deleteMessage}
           otherLastReadAt={otherLastReadAt}
+          groupReaders={isGroup ? groupReaders : null}
           scrollRootRef={scrollRootRef}
           conversationId={conversation.id}
         />

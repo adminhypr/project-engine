@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, Fragment } from 'react'
 import DmChatMessage from './DmChatMessage'
 import DateSeparator, { isSameDay } from '../ui/DateSeparator'
 import { useMessageReactions } from '../../hooks/useMessageReactions'
+import { computeSeenByMessage } from '../../lib/groupSeenBy'
 
 export default function MessageList({
   messages, myId, loading, hasMore, onLoadMore, onDelete, otherLastReadAt, scrollRootRef,
-  conversationId,
+  conversationId, groupReaders,
 }) {
   const { byMessageId, toggle } = useMessageReactions(conversationId)
   const bottomRef = useRef(null)
@@ -22,6 +23,13 @@ export default function MessageList({
     }
     return null
   }, [messages, myId])
+
+  // Per-message "seen by" map for group conversations. For 1:1 we rely on the
+  // single-checkmark receipt above; this stays an empty Map there.
+  const seenByMessage = useMemo(
+    () => computeSeenByMessage(messages, groupReaders || [], myId),
+    [messages, groupReaders, myId]
+  )
 
   if (loading) {
     return <div className="p-4 text-center text-sm text-slate-500">Loading…</div>
@@ -47,8 +55,11 @@ export default function MessageList({
         const prev = messages[i - 1]
         const showSeparator = !prev || !isSameDay(prev.created_at, m.created_at)
         const isMine = m.author_id === myId
-        const showReceipt = isMine && m.id === latestMineId
-        const seen = showReceipt && otherLastReadAt && m.created_at <= otherLastReadAt
+        // Only show receipts in 1:1 DMs, where otherLastReadAt is populated
+        // by useOtherReadState. In groups the hook is intentionally skipped
+        // (single "Delivered" label makes no sense across N participants).
+        const showReceipt = isMine && m.id === latestMineId && !!otherLastReadAt
+        const seen = showReceipt && m.created_at <= otherLastReadAt
         return (
           <Fragment key={m.id}>
             {showSeparator && <DateSeparator iso={m.created_at} />}
@@ -59,6 +70,7 @@ export default function MessageList({
               receipt={showReceipt ? (seen ? 'seen' : 'delivered') : null}
               reactions={byMessageId[m.id]}
               onToggleReaction={toggle}
+              seenBy={seenByMessage.get(m.id)}
             />
           </Fragment>
         )
