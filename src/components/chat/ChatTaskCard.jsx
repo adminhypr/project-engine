@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Calendar, AlertCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { getPriority } from '../../lib/priority'
@@ -40,6 +40,7 @@ const PRIORITY_BAR = {
 }
 
 export default function ChatTaskCard({ taskId }) {
+  const navigate = useNavigate()
   const [task, setTask] = useState(() => {
     const c = cache.get(taskId)
     return c && typeof c.then !== 'function' ? c : null
@@ -83,17 +84,26 @@ export default function ChatTaskCard({ taskId }) {
   const priority = getPriority(task)
   const assignee = task.assignee
 
+  function openTask(e) {
+    // Explicit navigate + stopPropagation so any ancestor event handler
+    // (drag sensors, chat widget overlays) can't swallow the click.
+    e.preventDefault()
+    e.stopPropagation()
+    navigate(`/my-tasks?task=${task.id}`)
+  }
+
   return (
-    <Link
-      to={`/my-tasks?task=${task.id}`}
-      className="mt-1 mx-auto block max-w-[260px] text-left rounded-xl border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card hover:border-brand-300 dark:hover:border-brand-500/40 hover:shadow-md transition-all relative overflow-hidden"
+    <button
+      type="button"
+      onClick={openTask}
+      onPointerDown={e => e.stopPropagation()}
+      className="mt-1 mx-auto block w-full max-w-[260px] text-left rounded-xl border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card hover:border-brand-300 dark:hover:border-brand-500/40 hover:shadow-md transition-all relative overflow-hidden cursor-pointer"
     >
       <span className={`absolute left-0 top-2 bottom-2 w-1 rounded-full ${PRIORITY_BAR[priority] || PRIORITY_BAR.none}`} />
       <div className="pl-3 pr-3 py-2">
         <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="text-[10px] font-mono text-slate-400 dark:text-slate-500 mb-0.5">{task.task_id}</div>
-            <div className="text-[13px] font-semibold text-slate-900 dark:text-white leading-snug line-clamp-2">{task.title}</div>
+          <div className="text-[13px] font-semibold text-slate-900 dark:text-white leading-snug line-clamp-2 flex-1 min-w-0">
+            {task.title}
           </div>
           <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${URGENCY_STYLES[task.urgency] || 'bg-slate-100 text-slate-500'}`}>
             {task.urgency}
@@ -118,6 +128,6 @@ export default function ChatTaskCard({ taskId }) {
           )}
         </div>
       </div>
-    </Link>
+    </button>
   )
 }
