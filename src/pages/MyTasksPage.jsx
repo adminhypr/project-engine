@@ -47,13 +47,17 @@ export default function MyTasksPage() {
   // Open task panel from notification click or ?task= query param.
   // Accept either the DB uuid (tasks.id) or the human-readable task_id,
   // so links from chat system messages work in both forms.
+  // Only clear the URL once we've actually found and opened the task —
+  // otherwise we'd wipe the search param before a fresh task has had time
+  // to propagate into the tasks array (via realtime refetch), which made
+  // the chat "Assigned a task" link appear to do nothing.
   useEffect(() => {
     const openTaskId = location.state?.openTaskId || new URLSearchParams(location.search).get('task')
-    if (openTaskId && tasks.length > 0) {
-      const task = tasks.find(t => t.id === openTaskId || t.task_id === openTaskId)
-      if (task) setActiveTask(task)
-      navigate(location.pathname, { replace: true, state: {} })
-    }
+    if (!openTaskId || tasks.length === 0) return
+    const task = tasks.find(t => t.id === openTaskId || t.task_id === openTaskId)
+    if (!task) return
+    setActiveTask(task)
+    navigate(location.pathname, { replace: true, state: {} })
   }, [location.state?.openTaskId, location.search, tasks])
 
   // Clear selection on tab change
