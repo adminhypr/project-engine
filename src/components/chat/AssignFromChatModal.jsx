@@ -54,10 +54,13 @@ export default function AssignFromChatModal({ conversation, onClose, onPosted })
       return
     }
     const titleTrim = form.title.trim()
-    const taskLink = result.taskId ? `[${titleTrim}](/my-tasks?task=${result.taskId})` : `**${titleTrim}**`
+    // MyTasksPage resolves ?task= against the DB uuid (task.id), not the
+    // human-readable task_id string returned alongside it as result.taskId.
+    const taskUuid = result.task?.id
+    const taskLink = taskUuid ? `[${titleTrim}](/my-tasks?task=${taskUuid})` : `**${titleTrim}**`
     const sysMsg = `${profile.full_name} assigned a task: ${taskLink}` +
       (form.dueDate ? ` (due ${form.dueDate})` : '')
-    await onPosted?.(sysMsg, result.taskId)
+    await onPosted?.(sysMsg, taskUuid)
     showToast('Task assigned', 'success')
     onClose()
   }

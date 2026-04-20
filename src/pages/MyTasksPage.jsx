@@ -44,11 +44,13 @@ export default function MyTasksPage() {
   const assignedByMe = tasks.filter(t => t.assigned_by === profile?.id && t.assigned_to !== profile?.id)
   const activeTasks = tab === 'mine' ? myTasks : assignedByMe
 
-  // Open task panel from notification click or ?task= query param
+  // Open task panel from notification click or ?task= query param.
+  // Accept either the DB uuid (tasks.id) or the human-readable task_id,
+  // so links from chat system messages work in both forms.
   useEffect(() => {
     const openTaskId = location.state?.openTaskId || new URLSearchParams(location.search).get('task')
     if (openTaskId && tasks.length > 0) {
-      const task = tasks.find(t => t.id === openTaskId)
+      const task = tasks.find(t => t.id === openTaskId || t.task_id === openTaskId)
       if (task) setActiveTask(task)
       navigate(location.pathname, { replace: true, state: {} })
     }
