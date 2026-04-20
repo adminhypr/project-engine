@@ -22,7 +22,7 @@ async function uploadImages(conversationId, items) {
   return uploaded
 }
 
-export default function ChatComposer({ conversationId, onSend, disabled }) {
+export default function ChatComposer({ conversationId, onSend, onTyping, disabled }) {
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [images, setImages] = useState([])
@@ -84,7 +84,10 @@ export default function ChatComposer({ conversationId, onSend, disabled }) {
       <div className="p-2 pt-0 flex items-end gap-2">
         <textarea
           value={value}
-          onChange={e => setValue(e.target.value.slice(0, MAX_LEN))}
+          onChange={e => {
+            setValue(e.target.value.slice(0, MAX_LEN))
+            if (e.target.value.length > 0) onTyping?.()
+          }}
           onKeyDown={handleKey}
           onPaste={handlePaste}
           placeholder="Type a message…"

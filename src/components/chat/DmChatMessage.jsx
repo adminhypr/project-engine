@@ -1,4 +1,4 @@
-import { Trash2 } from 'lucide-react'
+import { Trash2, Check, CheckCheck } from 'lucide-react'
 import RichContentRenderer from '../ui/RichContentRenderer'
 import { renderChatInlineMarkdown } from '../../lib/chatInlineMarkdown'
 
@@ -7,7 +7,7 @@ function formatTime(iso) {
   catch { return '' }
 }
 
-export default function DmChatMessage({ message, isMine, onDelete }) {
+export default function DmChatMessage({ message, isMine, onDelete, receipt }) {
   const isSystem = message.kind === 'system'
   const isDeleted = !!message.deleted_at
 
@@ -47,6 +47,18 @@ export default function DmChatMessage({ message, isMine, onDelete }) {
         </div>
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-[10px] text-slate-400">{formatTime(message.created_at)}</span>
+          {isMine && !isDeleted && receipt === 'seen' && (
+            <span className="flex items-center gap-0.5 text-[10px] text-brand-500" title="Seen">
+              <CheckCheck className="w-3 h-3" />
+              Seen
+            </span>
+          )}
+          {isMine && !isDeleted && receipt === 'delivered' && (
+            <span className="flex items-center gap-0.5 text-[10px] text-slate-400" title="Delivered">
+              <Check className="w-3 h-3" />
+              Delivered
+            </span>
+          )}
           {isMine && !isDeleted && (
             <button
               type="button"
