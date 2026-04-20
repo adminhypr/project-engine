@@ -11,7 +11,7 @@ export default function SeenByAvatars({ readers, align = 'end' }) {
   const joinedNames = readers.map(r => r.profile?.full_name || 'Someone').join(', ')
   return (
     <div
-      className={`flex items-center -space-x-1.5 mt-0.5 ${align === 'end' ? 'justify-end' : 'justify-start'}`}
+      className={`flex items-center -space-x-1 mt-1 ${align === 'end' ? 'justify-end' : 'justify-start'}`}
       title={`Seen by ${joinedNames}`}
     >
       {visible.map(r => (
@@ -20,19 +20,19 @@ export default function SeenByAvatars({ readers, align = 'end' }) {
             key={r.user_id}
             src={r.profile.avatar_url}
             alt=""
-            className="w-3.5 h-3.5 rounded-full ring-1 ring-white dark:ring-dark-card"
+            className="w-5 h-5 rounded-full ring-1 ring-white dark:ring-dark-card"
           />
         ) : (
           <span
             key={r.user_id}
-            className="w-3.5 h-3.5 rounded-full bg-brand-500 text-white text-[8px] font-bold flex items-center justify-center ring-1 ring-white dark:ring-dark-card"
+            className="w-5 h-5 rounded-full bg-brand-500 text-white text-[10px] font-bold flex items-center justify-center ring-1 ring-white dark:ring-dark-card"
           >
             {r.profile?.full_name?.[0] || '?'}
           </span>
         )
       ))}
       {overflow > 0 && (
-        <span className="w-3.5 h-3.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-200 text-[8px] font-bold flex items-center justify-center ring-1 ring-white dark:ring-dark-card">
+        <span className="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-200 text-[10px] font-bold flex items-center justify-center ring-1 ring-white dark:ring-dark-card">
           +{overflow}
         </span>
       )}
