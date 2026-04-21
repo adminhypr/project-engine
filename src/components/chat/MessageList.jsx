@@ -2,13 +2,19 @@ import { useEffect, useMemo, useRef, Fragment } from 'react'
 import DmChatMessage from './DmChatMessage'
 import DateSeparator, { isSameDay } from '../ui/DateSeparator'
 import { useMessageReactions } from '../../hooks/useMessageReactions'
+import { useThreadCounts } from '../../hooks/useThreadCounts'
 import { computeSeenByMessage } from '../../lib/groupSeenBy'
 
 export default function MessageList({
   messages, myId, loading, hasMore, onLoadMore, onDelete, otherLastReadAt, scrollRootRef,
-  conversationId, groupReaders, profileLookup,
+  conversationId, groupReaders, profileLookup, onOpenThread,
 }) {
   const { byMessageId, toggle } = useMessageReactions(conversationId)
+  const messageIds = useMemo(
+    () => messages.filter(m => m.kind !== 'system' && !m.deleted_at).map(m => m.id),
+    [messages]
+  )
+  const threadCounts = useThreadCounts(conversationId, messageIds)
   const bottomRef = useRef(null)
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'auto' })
@@ -73,6 +79,8 @@ export default function MessageList({
               reactionProfileLookup={profileLookup}
               myId={myId}
               seenBy={seenByMessage.get(m.id)}
+              threadInfo={threadCounts.get(m.id)}
+              onOpenThread={onOpenThread}
             />
           </Fragment>
         )

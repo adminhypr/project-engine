@@ -9,6 +9,7 @@ import MessageList from './MessageList'
 import ChatComposer from './ChatComposer'
 import TypingIndicator from './TypingIndicator'
 import GroupMembersModal from './GroupMembersModal'
+import ThreadPanel from './ThreadPanel'
 import { ReplyProvider } from './ReplyContext'
 
 export default function ConversationPane({
@@ -46,6 +47,15 @@ export default function ConversationPane({
   )
 
   const [membersOpen, setMembersOpen] = useState(false)
+  // Open-thread state: the root message whose thread panel is currently
+  // shown. Null hides the panel. Closing or minimizing the pane also
+  // clears this via the effects further below.
+  const [threadRoot, setThreadRoot] = useState(null)
+  const openThread = useCallback((message) => {
+    if (!message) return
+    setThreadRoot(message)
+  }, [])
+  const closeThread = useCallback(() => setThreadRoot(null), [])
 
   useEffect(() => {
     onMarkRead?.(conversation.id)
@@ -120,8 +130,24 @@ export default function ConversationPane({
     }
   }
 
+  const mentionablePeople = isGroup
+    ? (conversation.participants || [])
+        .filter(p => p.id && p.id !== profile?.id)
+        .map(p => ({ id: p.id, full_name: p.full_name, avatar_url: p.avatar_url }))
+    : []
+
   return (
     <ReplyProvider scrollToMessage={scrollToMessage}>
+      <div className="flex items-end gap-3">
+      {threadRoot && (
+        <ThreadPanel
+          conversation={conversation}
+          rootMessage={threadRoot}
+          onClose={closeThread}
+          mentionablePeople={mentionablePeople}
+          profileLookup={profileLookup}
+        />
+      )}
       <div className={`${isMaximized
           ? 'w-[min(720px,92vw)] h-[min(720px,82vh)]'
           : 'w-[320px] h-[440px]'
@@ -151,18 +177,16 @@ export default function ConversationPane({
           scrollRootRef={scrollRootRef}
           conversationId={conversation.id}
           profileLookup={profileLookup}
+          onOpenThread={openThread}
         />
         {otherTyping && <TypingIndicator names={typingNames} />}
         <ChatComposer
           conversationId={conversation.id}
           onSend={sendMessage}
           onTyping={emitTyping}
-          mentionablePeople={isGroup
-            ? (conversation.participants || [])
-                .filter(p => p.id && p.id !== profile?.id)
-                .map(p => ({ id: p.id, full_name: p.full_name, avatar_url: p.avatar_url }))
-            : []}
+          mentionablePeople={mentionablePeople}
         />
+      </div>
       </div>
       {isGroup && (
         <GroupMembersModal

@@ -32,7 +32,7 @@ const DEFAULT_H = 40
 const MAX_H = 260
 const MAX_MENTION_MATCHES = 6
 
-export default function ChatComposer({ conversationId, onSend, onTyping, disabled, mentionablePeople = [] }) {
+export default function ChatComposer({ conversationId, onSend, onTyping, disabled, mentionablePeople = [], threadRootId = null }) {
   const { profile } = useAuth()
   const profileId = profile?.id
   const [value, setValue] = useState('')
@@ -52,10 +52,10 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
   // previously-attached reply target if there was one.
   useEffect(() => {
     if (!profileId || !conversationId) return
-    const hydrateKey = `${profileId}:${conversationId}`
+    const hydrateKey = `${profileId}:${conversationId}:${threadRootId || ''}`
     if (hydratedKeyRef.current === hydrateKey) return
     hydratedKeyRef.current = hydrateKey
-    const draft = readDraft(profileId, conversationId)
+    const draft = readDraft(profileId, conversationId, threadRootId)
     if (draft) {
       if (draft.text) setValue(draft.text)
       if (Array.isArray(draft.mentions) && draft.mentions.length > 0) {
@@ -70,9 +70,9 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
       }
     }
     // Intentionally not depending on replyTarget/requestReply — we only want
-    // to run on (profileId, conversationId) change.
+    // to run on (profileId, conversationId, threadRootId) change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profileId, conversationId])
+  }, [profileId, conversationId, threadRootId])
 
   // Persist the current draft whenever it changes (value, mentions, reply).
   useEffect(() => {
@@ -88,8 +88,8 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
           }
         : null,
       mentions: pickedMentions,
-    })
-  }, [profileId, conversationId, value, replyTarget, pickedMentions])
+    }, threadRootId)
+  }, [profileId, conversationId, threadRootId, value, replyTarget, pickedMentions])
 
   // Filter + limit candidates whenever the query changes.
   const mentionCandidates = useMemo(() => {
@@ -180,7 +180,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
       // but calling clearDraft explicitly is cheaper and avoids a race
       // where the next typed character arrives before the cleared state
       // has flushed.
-      if (profileId && conversationId) clearDraft(profileId, conversationId)
+      if (profileId && conversationId) clearDraft(profileId, conversationId, threadRootId)
     } else {
       // Send failed — keep the text, surface the reason so the user knows
       // nothing was lost and they can retry.

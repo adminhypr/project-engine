@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Trash2, Check, CheckCheck, CornerUpLeft, SmilePlus } from 'lucide-react'
+import { Trash2, Check, CheckCheck, CornerUpLeft, SmilePlus, MessageSquare } from 'lucide-react'
 import RichContentRenderer from '../ui/RichContentRenderer'
 import { renderChatInlineMarkdown, extractTaskIdFromMessage } from '../../lib/chatInlineMarkdown'
 import ChatTaskCard from './ChatTaskCard'
@@ -37,7 +37,7 @@ function QuotedReply({ message, isMine, onJump }) {
   )
 }
 
-export default function DmChatMessage({ message, isMine, onDelete, receipt, reactions, onToggleReaction, reactionProfileLookup, myId, seenBy }) {
+export default function DmChatMessage({ message, isMine, onDelete, receipt, reactions, onToggleReaction, reactionProfileLookup, myId, seenBy, threadInfo, onOpenThread }) {
   const { requestReply, scrollToMessage } = useReplyContext()
   const [pickerOpen, setPickerOpen] = useState(false)
   const isSystem = message.kind === 'system'
@@ -93,6 +93,17 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt, reac
               >
                 <SmilePlus className="w-3.5 h-3.5" />
               </button>
+              {onOpenThread && (
+                <button
+                  type="button"
+                  onClick={() => onOpenThread(message)}
+                  className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-brand-500"
+                  aria-label="Reply in thread"
+                  title="Reply in thread"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                </button>
+              )}
               {pickerOpen && (
                 <div className="absolute bottom-full left-0 mb-1 z-20">
                   <ReactionPicker
@@ -139,6 +150,17 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt, reac
               >
                 <CornerUpLeft className="w-3.5 h-3.5" />
               </button>
+              {onOpenThread && (
+                <button
+                  type="button"
+                  onClick={() => onOpenThread(message)}
+                  className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-brand-500"
+                  aria-label="Reply in thread"
+                  title="Reply in thread"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                </button>
+              )}
               {pickerOpen && (
                 <div className="absolute bottom-full right-0 mb-1 z-20">
                   <ReactionPicker
@@ -159,6 +181,18 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt, reac
               myUserId={myId}
             />
           </div>
+        )}
+        {threadInfo && threadInfo.count > 0 && !isDeleted && (
+          <button
+            type="button"
+            onClick={() => onOpenThread?.(message)}
+            className={`mt-1 flex items-center gap-1.5 text-[11px] font-medium text-brand-600 dark:text-brand-300 hover:underline ${
+              isMine ? 'self-end' : 'self-start'
+            }`}
+          >
+            <MessageSquare className="w-3 h-3" />
+            {threadInfo.count} repl{threadInfo.count === 1 ? 'y' : 'ies'}
+          </button>
         )}
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-[10px] text-slate-400">{formatTime(message.created_at)}</span>

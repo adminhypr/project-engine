@@ -24,6 +24,10 @@ export function useConversation(conversationId) {
       .from('dm_messages')
       .select(MSG_SELECT)
       .eq('conversation_id', cidRef.current)
+      // Exclude thread replies — they render in the ThreadPanel only,
+      // never in the main stream. Root messages (thread_root_id is null)
+      // stay visible and display a "N replies" footer.
+      .is('thread_root_id', null)
       .order('created_at', { ascending: false })
       .limit(PAGE_SIZE)
     if (cursor) q = q.lt('created_at', cursor)
@@ -48,6 +52,8 @@ export function useConversation(conversationId) {
     if (!conversationId) return
     return onMessage(({ conversationId: cid, message }) => {
       if (cid !== conversationId) return
+      // Thread replies never surface in the main stream.
+      if (message.thread_root_id) return
       setMessages(prev => {
         if (prev.some(m => m.id === message.id)) return prev
         return [...prev, message]
