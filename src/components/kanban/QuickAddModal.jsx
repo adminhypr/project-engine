@@ -40,7 +40,7 @@ export default function QuickAddModal({ isOpen, onClose, status, profile, profil
     }
 
     showToast(`Task added to ${status}`)
-    refetch()
+    refetch(true)
     setSubmitting(false)
 
     // Reset and close

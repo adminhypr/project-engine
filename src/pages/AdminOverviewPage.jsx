@@ -96,19 +96,19 @@ export default function AdminOverviewPage() {
 
   async function handleBulkStatusChange(status) {
     const result = await updateTasks([...selectedIds], { status })
-    if (result.ok) { showToast(`${selectedIds.size} task(s) updated`); setSelectedIds(new Set()); refetch() }
+    if (result.ok) { showToast(`${selectedIds.size} task(s) updated`); setSelectedIds(new Set()); refetch(true) }
     else showToast(result.msg, 'error')
   }
 
   async function handleBulkUrgencyChange(urgency) {
     const result = await updateTasks([...selectedIds], { urgency })
-    if (result.ok) { showToast(`${selectedIds.size} task(s) updated`); setSelectedIds(new Set()); refetch() }
+    if (result.ok) { showToast(`${selectedIds.size} task(s) updated`); setSelectedIds(new Set()); refetch(true) }
     else showToast(result.msg, 'error')
   }
 
   async function handleBulkDelete() {
     const result = await deleteTasks([...selectedIds])
-    if (result.ok) { showToast(`${selectedIds.size} task(s) deleted`); setSelectedIds(new Set()); refetch() }
+    if (result.ok) { showToast(`${selectedIds.size} task(s) deleted`); setSelectedIds(new Set()); refetch(true) }
     else showToast(result.msg, 'error')
   }
 
@@ -296,7 +296,7 @@ export default function AdminOverviewPage() {
           <TaskDetailPanel
             task={activeTask}
             onClose={() => setActiveTask(null)}
-            onUpdated={() => { refetch(); setActiveTask(null) }}
+            onUpdated={() => { refetch(true); setActiveTask(null) }}
           />
         )}
 

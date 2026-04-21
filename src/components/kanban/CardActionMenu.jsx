@@ -45,21 +45,21 @@ export default function CardActionMenu({ task, onUpdateTask, onDeleteTask, onRef
   async function handleStatusChange(status) {
     setOpen(false)
     const result = await onUpdateTask(task.id, { status })
-    if (result.ok) { showToast(`Status → ${status}`); onRefetch() }
+    if (result.ok) { showToast(`Status → ${status}`); onRefetch(true) }
     else showToast(result.msg || 'Failed', 'error')
   }
 
   async function handleUrgencyChange(urgency) {
     setOpen(false)
     const result = await onUpdateTask(task.id, { urgency })
-    if (result.ok) { showToast(`Urgency → ${urgency}`); onRefetch() }
+    if (result.ok) { showToast(`Urgency → ${urgency}`); onRefetch(true) }
     else showToast(result.msg || 'Failed', 'error')
   }
 
   async function handleDelete() {
     setOpen(false)
     const result = await onDeleteTask(task.id)
-    if (result.ok) { showToast('Task deleted'); onRefetch() }
+    if (result.ok) { showToast('Task deleted'); onRefetch(true) }
     else showToast(result.msg || 'Failed to delete', 'error')
   }
 

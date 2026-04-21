@@ -100,7 +100,7 @@ export default function KanbanBoard({ tasks, updateTask, deleteTask, refetch, on
         showToast(result.msg || 'Failed to update', 'error')
         setOptimisticMoves(prev => { const n = { ...prev }; delete n[taskId]; return n })
       }
-      refetch()
+      refetch(true)
       setTimeout(() => {
         setOptimisticMoves(prev => { const n = { ...prev }; delete n[taskId]; return n })
       }, 1500)

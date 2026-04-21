@@ -47,7 +47,7 @@ export default function KanbanCard({ task, onClick, isDragOverlay = false, onUpd
     if (!onUpdateTask) return
     const next = URGENCY_CYCLE[task.urgency] || 'Med'
     const result = await onUpdateTask(task.id, { urgency: next })
-    if (result.ok) { showToast(`Urgency → ${next}`); onRefetch?.() }
+    if (result.ok) { showToast(`Urgency → ${next}`); onRefetch?.(true) }
     else showToast(result.msg || 'Failed', 'error')
   }
 
@@ -56,7 +56,7 @@ export default function KanbanCard({ task, onClick, isDragOverlay = false, onUpd
     setEditingDueDate(false)
     if (!val || !onUpdateTask) return
     const result = await onUpdateTask(task.id, { due_date: new Date(val).toISOString() })
-    if (result.ok) { showToast('Due date updated'); onRefetch?.() }
+    if (result.ok) { showToast('Due date updated'); onRefetch?.(true) }
     else showToast(result.msg || 'Failed', 'error')
   }
 
