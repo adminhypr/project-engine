@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useCallback, useMemo, u
 import { supabase } from '../lib/supabase'
 import { useGlobalPresence } from './useGlobalPresence'
 import { useDmRealtime } from './useDmRealtime'
+import { isAgent, isClient, isExternal } from '../lib/roleHelpers'
 
 const AuthContext = createContext(null)
 
@@ -261,9 +262,12 @@ export function AuthProvider({ children }) {
     loading,
     refreshProfile,
     presence,
-    isAdmin:   profile?.role === 'Admin',
-    isManager: profile?.role === 'Manager' || profile?.role === 'Admin',
-    isStaff:   profile?.role === 'Staff',
+    isAdmin:    profile?.role === 'Admin',
+    isManager:  profile?.role === 'Manager' || profile?.role === 'Admin',
+    isStaff:    profile?.role === 'Staff',
+    isAgent:    isAgent(profile),
+    isClient:   isClient(profile),
+    isExternal: isExternal(profile),
     isManagerForTeam
   }
 
