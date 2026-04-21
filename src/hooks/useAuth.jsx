@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useGlobalPresence } from './useGlobalPresence'
 import { useDmRealtime } from './useDmRealtime'
 import { isAgent, isClient, isExternal } from '../lib/roleHelpers'
+import { getStoredActiveTeamId, setStoredActiveTeamId, pickDefaultTeam } from '../lib/activeTeamStorage'
 
 const AuthContext = createContext(null)
 
@@ -101,6 +102,7 @@ export function AuthProvider({ children }) {
   const [session,  setSession]  = useState(null)
   const [profile,  setProfile]  = useState(null)
   const [loading,  setLoading]  = useState(true)
+  const [activeTeamId, setActiveTeamIdState] = useState(null)
   const initDone = useRef(false)
 
   const loadProfile = useCallback(async (sess) => {
@@ -253,6 +255,21 @@ export function AuthProvider({ children }) {
     return profile?.team_roles?.[teamId] === 'Manager'
   }, [profile])
 
+  // Sync activeTeamId after profile loads — prefer stored valid team, else default.
+  useEffect(() => {
+    if (!profile?.id) return
+    const stored = getStoredActiveTeamId(profile.id)
+    const validStored = stored && (profile.team_ids || []).includes(stored) ? stored : null
+    const next = validStored || pickDefaultTeam(profile)
+    setActiveTeamIdState(next)
+    if (next && next !== stored) setStoredActiveTeamId(profile.id, next)
+  }, [profile])
+
+  const setActiveTeamId = useCallback((teamId) => {
+    setActiveTeamIdState(teamId)
+    if (profile?.id) setStoredActiveTeamId(profile.id, teamId)
+  }, [profile?.id])
+
   const presence = useGlobalPresence(profile)
   useDmRealtime(profile?.id)
 
@@ -268,7 +285,9 @@ export function AuthProvider({ children }) {
     isAgent:    isAgent(profile),
     isClient:   isClient(profile),
     isExternal: isExternal(profile),
-    isManagerForTeam
+    isManagerForTeam,
+    activeTeamId,
+    setActiveTeamId
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
