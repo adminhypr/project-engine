@@ -1,14 +1,15 @@
-import { X } from 'lucide-react'
+import { X, MessagesSquare } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { useThread } from '../../hooks/useThread'
 import DmChatMessage from './DmChatMessage'
 import ChatComposer from './ChatComposer'
 import { ReplyProvider } from './ReplyContext'
 
-// Renders the thread column INSIDE the ConversationPane card (Slack-style
-// split layout). The parent owns the outer shell (rounded border, shadow,
-// height); this component just fills its column and paints the divider on
-// its left edge.
+// Thread column rendered INSIDE the ConversationPane card (Slack-style
+// split layout). Styled distinctly from the main chat — subtle tinted
+// background, brand-colored top accent bar, prominent left divider, and
+// a "Thread" label — so it's immediately recognizable as a side view of
+// one specific message rather than a second regular chat.
 export default function ThreadPanel({
   conversation,
   rootMessage,
@@ -22,14 +23,21 @@ export default function ThreadPanel({
     rootMessage,
   })
 
+  const contextLabel = conversation.title
+    || conversation.other_profile?.full_name
+    || 'Conversation'
+
   return (
     <ReplyProvider scrollToMessage={() => {}}>
-      <div className="flex-1 min-w-0 flex flex-col border-l border-slate-200 dark:border-dark-border">
+      <div className="flex-1 min-w-0 flex flex-col border-l-2 border-brand-500/40 bg-slate-50 dark:bg-slate-800/40 relative">
+        {/* Brand accent bar — a clear visual marker that this column is a thread. */}
+        <div className="absolute inset-x-0 top-0 h-0.5 bg-brand-500/70" aria-hidden="true" />
         <header className="px-3 py-2 border-b border-slate-200 dark:border-dark-border flex items-center gap-2">
+          <MessagesSquare className="w-4 h-4 text-brand-500 shrink-0" />
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold text-slate-900 dark:text-white">Thread</div>
+            <div className="text-sm font-semibold text-brand-600 dark:text-brand-300">Thread</div>
             <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-              {conversation.title || conversation.other_profile?.full_name || 'Conversation'}
+              in {contextLabel}
             </div>
           </div>
           <button
@@ -60,10 +68,14 @@ export default function ThreadPanel({
                   />
                 </div>
               )}
-              <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-400 dark:text-slate-500 mb-1">
-                {replies.length === 0
-                  ? 'No replies yet'
-                  : `${replies.length} repl${replies.length === 1 ? 'y' : 'ies'}`}
+              <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-slate-400 dark:text-slate-500 mb-1">
+                <span className="flex-1 h-px bg-slate-200 dark:bg-dark-border" />
+                <span>
+                  {replies.length === 0
+                    ? 'No replies yet'
+                    : `${replies.length} repl${replies.length === 1 ? 'y' : 'ies'}`}
+                </span>
+                <span className="flex-1 h-px bg-slate-200 dark:bg-dark-border" />
               </div>
               {replies.map(m => (
                 <DmChatMessage
@@ -86,6 +98,7 @@ export default function ThreadPanel({
           onSend={sendMessage}
           mentionablePeople={mentionablePeople}
           threadRootId={effectiveRootId}
+          placeholder="Reply to thread…"
         />
       </div>
     </ReplyProvider>
