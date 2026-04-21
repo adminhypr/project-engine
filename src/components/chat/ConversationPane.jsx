@@ -26,6 +26,7 @@ export default function ConversationPane({
   threadRoot,
   onOpenThread,
   onCloseThread,
+  fullPage = false,
 }) {
   const { profile } = useAuth()
   const { messages, loading, hasMore, sendMessage, deleteMessage, loadMore } =
@@ -146,14 +147,18 @@ export default function ConversationPane({
         RIGHT, one outer shell (border + shadow + rounded corners).
       */}
       <div className={`${
-        isMaximized
-          ? (threadRoot
-              ? 'w-[min(1100px,96vw)] h-[min(720px,82vh)]'
-              : 'w-[min(720px,92vw)] h-[min(720px,82vh)]')
-          : (threadRoot
-              ? 'w-[640px] h-[440px]'
-              : 'w-[320px] h-[440px]')
-        } bg-white dark:bg-dark-card rounded-2xl border border-slate-200 dark:border-dark-border shadow-elevated flex overflow-hidden transition-[width,height] duration-200`}
+        fullPage
+          ? 'w-full h-full rounded-none border-0 shadow-none'
+          : `${
+              isMaximized
+                ? (threadRoot
+                    ? 'w-[min(1100px,96vw)] h-[min(720px,82vh)]'
+                    : 'w-[min(720px,92vw)] h-[min(720px,82vh)]')
+                : (threadRoot
+                    ? 'w-[640px] h-[440px]'
+                    : 'w-[320px] h-[440px]')
+            } rounded-2xl border border-slate-200 dark:border-dark-border shadow-elevated`
+        } bg-white dark:bg-dark-card flex overflow-hidden transition-[width,height] duration-200`}
       >
         {/* Main conversation column */}
         <div className="flex-1 min-w-0 flex flex-col">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useConversations } from '../hooks/useConversations'
@@ -45,12 +45,16 @@ export default function TeamChatPage() {
   }, [activeTeamId])
 
   // If the resolved id isn't in the local conversations list yet (fresh
-  // group just created server-side), trigger a refetch.
+  // group just created server-side), trigger a refetch — but only ONCE per
+  // id. If RLS hides the row (e.g., orphaned user not in
+  // conversation_participants), we'd otherwise loop forever.
+  const triedRef = useRef(new Set())
   useEffect(() => {
     if (!conversationId) return
-    if (!conversations.some(c => c.id === conversationId)) {
-      refetch()
-    }
+    if (conversations.some(c => c.id === conversationId)) return
+    if (triedRef.current.has(conversationId)) return
+    triedRef.current.add(conversationId)
+    refetch()
   }, [conversationId, conversations, refetch])
 
   const conversation = conversationId
@@ -82,12 +86,12 @@ export default function TeamChatPage() {
   }
 
   return (
-    <div className="h-full flex items-stretch justify-center p-4 sm:p-6">
+    <div className="h-full flex items-stretch justify-center">
       <ConversationPane
         conversation={conversation}
         online={false}
         onMarkRead={markRead}
-        isMaximized={true}
+        fullPage={true}
       />
     </div>
   )

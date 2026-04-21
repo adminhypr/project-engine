@@ -85,7 +85,7 @@ function AppRoutes() {
           </AnimatePresence>
         </ErrorBoundary>
       </Layout>
-      <ChatWidget />
+      {!isExternal && <ChatWidget />}
     </>
   )
 }
