@@ -46,6 +46,7 @@ create or replace function public.sync_effective_role()
 returns trigger
 language plpgsql
 security definer
+set search_path = public
 as $$
 declare
   target_id uuid;
