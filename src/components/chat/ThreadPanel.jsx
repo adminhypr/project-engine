@@ -5,9 +5,10 @@ import DmChatMessage from './DmChatMessage'
 import ChatComposer from './ChatComposer'
 import { ReplyProvider } from './ReplyContext'
 
-// Slack-style thread panel. Renders the root message at the top, followed
-// by a scrollable list of replies, and a composer pinned to the bottom.
-// Sits next to the ConversationPane in the bottom-right widget column.
+// Renders the thread column INSIDE the ConversationPane card (Slack-style
+// split layout). The parent owns the outer shell (rounded border, shadow,
+// height); this component just fills its column and paints the divider on
+// its left edge.
 export default function ThreadPanel({
   conversation,
   rootMessage,
@@ -23,7 +24,7 @@ export default function ThreadPanel({
 
   return (
     <ReplyProvider scrollToMessage={() => {}}>
-      <div className="w-[340px] h-[440px] bg-white dark:bg-dark-card rounded-2xl border border-slate-200 dark:border-dark-border shadow-elevated flex flex-col overflow-hidden">
+      <div className="flex-1 min-w-0 flex flex-col border-l border-slate-200 dark:border-dark-border">
         <header className="px-3 py-2 border-b border-slate-200 dark:border-dark-border flex items-center gap-2">
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold text-slate-900 dark:text-white">Thread</div>

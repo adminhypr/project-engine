@@ -138,55 +138,68 @@ export default function ConversationPane({
 
   return (
     <ReplyProvider scrollToMessage={scrollToMessage}>
-      <div className="flex items-end gap-3">
-      {threadRoot && (
-        <ThreadPanel
-          conversation={conversation}
-          rootMessage={threadRoot}
-          onClose={closeThread}
-          mentionablePeople={mentionablePeople}
-          profileLookup={profileLookup}
-        />
-      )}
-      <div className={`${isMaximized
-          ? 'w-[min(720px,92vw)] h-[min(720px,82vh)]'
-          : 'w-[320px] h-[440px]'
-        } bg-white dark:bg-dark-card rounded-2xl border border-slate-200 dark:border-dark-border shadow-elevated flex flex-col overflow-hidden transition-[width,height] duration-200`}>
-        <ConversationHeader
-          conversation={conversation}
-          otherProfile={conversation.other_profile}
-          online={online}
-          canAssignTask={conversation.kind === 'dm' || conversation.kind === 'group'}
-          onAssignTask={() => onAssignTask?.(conversation)}
-          onMinimize={() => onMinimize?.(conversation.id)}
-          onClose={() => onClose?.(conversation.id)}
-          dragHandleProps={dragHandleProps}
-          isMaximized={isMaximized}
-          onToggleMaximize={onToggleMaximize ? () => onToggleMaximize(conversation.id) : undefined}
-          onOpenMembers={isGroup ? () => setMembersOpen(true) : undefined}
-        />
-        <MessageList
-          messages={messages}
-          myId={profile?.id}
-          loading={loading}
-          hasMore={hasMore}
-          onLoadMore={loadMore}
-          onDelete={deleteMessage}
-          otherLastReadAt={otherLastReadAt}
-          groupReaders={isGroup ? groupReaders : null}
-          scrollRootRef={scrollRootRef}
-          conversationId={conversation.id}
-          profileLookup={profileLookup}
-          onOpenThread={openThread}
-        />
-        {otherTyping && <TypingIndicator names={typingNames} />}
-        <ChatComposer
-          conversationId={conversation.id}
-          onSend={sendMessage}
-          onTyping={emitTyping}
-          mentionablePeople={mentionablePeople}
-        />
-      </div>
+      {/*
+        Single card that grows horizontally when a thread is open — matches
+        Slack's split layout. Main conversation on the LEFT, thread on the
+        RIGHT, one outer shell (border + shadow + rounded corners).
+      */}
+      <div className={`${
+        isMaximized
+          ? (threadRoot
+              ? 'w-[min(1100px,96vw)] h-[min(720px,82vh)]'
+              : 'w-[min(720px,92vw)] h-[min(720px,82vh)]')
+          : (threadRoot
+              ? 'w-[640px] h-[440px]'
+              : 'w-[320px] h-[440px]')
+        } bg-white dark:bg-dark-card rounded-2xl border border-slate-200 dark:border-dark-border shadow-elevated flex overflow-hidden transition-[width,height] duration-200`}
+      >
+        {/* Main conversation column */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          <ConversationHeader
+            conversation={conversation}
+            otherProfile={conversation.other_profile}
+            online={online}
+            canAssignTask={conversation.kind === 'dm' || conversation.kind === 'group'}
+            onAssignTask={() => onAssignTask?.(conversation)}
+            onMinimize={() => onMinimize?.(conversation.id)}
+            onClose={() => onClose?.(conversation.id)}
+            dragHandleProps={dragHandleProps}
+            isMaximized={isMaximized}
+            onToggleMaximize={onToggleMaximize ? () => onToggleMaximize(conversation.id) : undefined}
+            onOpenMembers={isGroup ? () => setMembersOpen(true) : undefined}
+          />
+          <MessageList
+            messages={messages}
+            myId={profile?.id}
+            loading={loading}
+            hasMore={hasMore}
+            onLoadMore={loadMore}
+            onDelete={deleteMessage}
+            otherLastReadAt={otherLastReadAt}
+            groupReaders={isGroup ? groupReaders : null}
+            scrollRootRef={scrollRootRef}
+            conversationId={conversation.id}
+            profileLookup={profileLookup}
+            onOpenThread={openThread}
+          />
+          {otherTyping && <TypingIndicator names={typingNames} />}
+          <ChatComposer
+            conversationId={conversation.id}
+            onSend={sendMessage}
+            onTyping={emitTyping}
+            mentionablePeople={mentionablePeople}
+          />
+        </div>
+        {/* Thread column — slides in on the right when open */}
+        {threadRoot && (
+          <ThreadPanel
+            conversation={conversation}
+            rootMessage={threadRoot}
+            onClose={closeThread}
+            mentionablePeople={mentionablePeople}
+            profileLookup={profileLookup}
+          />
+        )}
       </div>
       {isGroup && (
         <GroupMembersModal
