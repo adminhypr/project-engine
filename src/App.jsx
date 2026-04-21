@@ -11,12 +11,13 @@ import ReportsPage from './pages/reports/ReportsPage'
 import SettingsPage from './pages/SettingsPage'
 import HubPage from './pages/HubPage'
 import HubTodosPage from './pages/HubTodosPage'
+import ToDoPage from './pages/ToDoPage'
 import ErrorBoundary from './components/ErrorBoundary'
 import { ThemeProvider } from './hooks/useTheme'
 import ChatWidget from './components/chat/ChatWidget'
 
 function AppRoutes() {
-  const { session, loading, profile, refreshProfile } = useAuth()
+  const { session, loading, profile, refreshProfile, isExternal } = useAuth()
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg">
@@ -53,23 +54,31 @@ function AppRoutes() {
     </div>
   )
 
+  const rootTarget = isExternal ? '/to-do' : '/my-tasks'
+
+  function InternalOnly({ children }) {
+    if (isExternal) return <Navigate to="/to-do" replace />
+    return children
+  }
+
   return (
     <>
       <Layout>
         <ErrorBoundary>
           <AnimatePresence mode="wait">
             <Routes>
-              <Route path="/"        element={<Navigate to="/my-tasks" replace />} />
-              <Route path="/my-tasks" element={<MyTasksPage />} />
-              <Route path="/assign"   element={<AssignTaskPage />} />
+              <Route path="/"         element={<Navigate to={rootTarget} replace />} />
+              <Route path="/my-tasks" element={<InternalOnly><MyTasksPage /></InternalOnly>} />
+              <Route path="/assign"   element={<InternalOnly><AssignTaskPage /></InternalOnly>} />
+              <Route path="/to-do"    element={<ToDoPage />} />
               <Route path="/hub"        element={<HubPage />} />
               <Route path="/hub/:hubId" element={<HubPage />} />
               <Route path="/hub/:hubId/todos/*" element={<HubTodosPage />} />
-              <Route path="/team"     element={<TeamViewPage />} />
-              <Route path="/admin"    element={<AdminOverviewPage />} />
-              <Route path="/reports"  element={<ReportsPage />} />
+              <Route path="/team"     element={<InternalOnly><TeamViewPage /></InternalOnly>} />
+              <Route path="/admin"    element={<InternalOnly><AdminOverviewPage /></InternalOnly>} />
+              <Route path="/reports"  element={<InternalOnly><ReportsPage /></InternalOnly>} />
               <Route path="/settings" element={<SettingsPage />} />
-              <Route path="*"         element={<Navigate to="/my-tasks" replace />} />
+              <Route path="*"         element={<Navigate to={rootTarget} replace />} />
             </Routes>
           </AnimatePresence>
         </ErrorBoundary>
