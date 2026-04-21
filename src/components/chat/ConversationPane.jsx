@@ -23,6 +23,9 @@ export default function ConversationPane({
   isMaximized,
   onToggleMaximize,
   onGroupChanged,
+  threadRoot,
+  onOpenThread,
+  onCloseThread,
 }) {
   const { profile } = useAuth()
   const { messages, loading, hasMore, sendMessage, deleteMessage, loadMore } =
@@ -47,15 +50,14 @@ export default function ConversationPane({
   )
 
   const [membersOpen, setMembersOpen] = useState(false)
-  // Open-thread state: the root message whose thread panel is currently
-  // shown. Null hides the panel. Closing or minimizing the pane also
-  // clears this via the effects further below.
-  const [threadRoot, setThreadRoot] = useState(null)
+  // Thread state is lifted to ChatWidget so only one thread can be open
+  // across the whole widget, and the stack can focus that pane (same
+  // idea as maximize) to avoid overflowing the right-anchored row.
   const openThread = useCallback((message) => {
-    if (!message) return
-    setThreadRoot(message)
-  }, [])
-  const closeThread = useCallback(() => setThreadRoot(null), [])
+    if (!message || !onOpenThread) return
+    onOpenThread(message)
+  }, [onOpenThread])
+  const closeThread = onCloseThread || (() => {})
 
   useEffect(() => {
     onMarkRead?.(conversation.id)

@@ -20,6 +20,11 @@ export default function ChatWidget() {
   const [createGroupOpen, setCreateGroupOpen] = useState(false)
   // Maximize state is deliberately in-memory only — resets on reload.
   const [maximizedId, setMaximizedId] = useState(null)
+  // Single global thread state — only one thread can be open across the
+  // whole widget. Keyed { convId, rootMessage }. Lifted up here so the
+  // ConversationStack can focus this pane (same as maximize) and the
+  // adjacent panes that wouldn't fit collapse to avatar tabs.
+  const [threadState, setThreadState] = useState(null)
 
   useEffect(() => { setState(readWidgetState(profile?.id)) }, [profile?.id])
   useEffect(() => { writeWidgetState(profile?.id, state) }, [profile?.id, state])
@@ -70,6 +75,7 @@ export default function ChatWidget() {
 
   const closeOne = useCallback((convId) => {
     setMaximizedId(m => (m === convId ? null : m))
+    setThreadState(t => (t?.convId === convId ? null : t))
     setState(s => ({
       ...s,
       openConversationIds: s.openConversationIds.filter(id => id !== convId),
@@ -79,6 +85,7 @@ export default function ChatWidget() {
 
   const minimizeOne = useCallback((convId) => {
     setMaximizedId(m => (m === convId ? null : m))
+    setThreadState(t => (t?.convId === convId ? null : t))
     setState(s => ({
       ...s,
       minimizedIds: s.minimizedIds.includes(convId) ? s.minimizedIds : [...s.minimizedIds, convId],
@@ -88,6 +95,13 @@ export default function ChatWidget() {
   const toggleMaximize = useCallback((convId) => {
     setMaximizedId(m => (m === convId ? null : convId))
   }, [])
+
+  const openThread = useCallback((convId, rootMessage) => {
+    if (!convId || !rootMessage) return
+    setThreadState({ convId, rootMessage })
+  }, [])
+
+  const closeThread = useCallback(() => setThreadState(null), [])
 
   const restoreOne = useCallback((convId) => {
     setState(s => ({
@@ -133,6 +147,7 @@ export default function ChatWidget() {
           conversations={conversations}
           presence={presence}
           maximizedId={maximizedId}
+          threadState={threadState}
           onClose={closeOne}
           onMinimize={minimizeOne}
           onRestore={restoreOne}
@@ -140,6 +155,8 @@ export default function ChatWidget() {
           onAssignTask={conv => setAssignForConversation(conv)}
           onReorder={reorderOpen}
           onToggleMaximize={toggleMaximize}
+          onOpenThread={openThread}
+          onCloseThread={closeThread}
         />
         {state.expanded && (
           <ChatPanel onClose={() => setState(s => ({ ...s, expanded: false }))}>

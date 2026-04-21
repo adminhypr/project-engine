@@ -41,6 +41,7 @@ export default function ConversationStack({
   conversations,
   presence,
   maximizedId,
+  threadState,
   onClose,
   onMinimize,
   onRestore,
@@ -48,16 +49,26 @@ export default function ConversationStack({
   onAssignTask,
   onReorder,
   onToggleMaximize,
+  onOpenThread,
+  onCloseThread,
 }) {
   const activeIds = openConversationIds.filter(id => !minimizedIds.includes(id))
-  // When one pane is maximized, it's the only visible pane; everything else
-  // (active or minimized) is pushed to the avatar strip.
-  const maxIsActive = maximizedId && activeIds.includes(maximizedId)
-  const visibleIds = maxIsActive
-    ? [maximizedId]
+  // When a pane is maximized OR has a thread open it takes the single
+  // visible slot (otherwise a 640px thread + a 320px neighbour + the
+  // contact panel + launcher overflow the right-anchored widget row
+  // off-screen). Non-focused active conversations drop to avatar tabs
+  // so they're still one click away.
+  const threadConvId = threadState?.convId || null
+  const focusedId = (maximizedId && activeIds.includes(maximizedId))
+    ? maximizedId
+    : (threadConvId && activeIds.includes(threadConvId))
+      ? threadConvId
+      : null
+  const visibleIds = focusedId
+    ? [focusedId]
     : activeIds.slice(-VISIBLE_CAP)
-  const overflowIds = maxIsActive
-    ? [...activeIds.filter(id => id !== maximizedId), ...minimizedIds]
+  const overflowIds = focusedId
+    ? [...activeIds.filter(id => id !== focusedId), ...minimizedIds]
     : [
         ...activeIds.slice(0, Math.max(0, activeIds.length - VISIBLE_CAP)),
         ...minimizedIds,
@@ -122,12 +133,15 @@ export default function ConversationStack({
           {overflowIds.map(id => <Tab key={id} id={id} />)}
         </div>
       )}
-      {maxIsActive ? (
-        // Maximized pane is rendered outside the sortable context — there's
-        // only one visible, so drag-to-reorder doesn't apply.
+      {focusedId ? (
+        // Focused pane (maximized or thread-open) is rendered outside the
+        // sortable context — drag-to-reorder doesn't apply when only one
+        // pane is visible.
         (() => {
-          const conv = byId.get(maximizedId)
+          const conv = byId.get(focusedId)
           if (!conv) return null
+          const isFocusedMaximized = focusedId === maximizedId
+          const threadRoot = threadState?.convId === focusedId ? threadState.rootMessage : null
           return (
             <ConversationPane
               conversation={conv}
@@ -136,8 +150,11 @@ export default function ConversationStack({
               onMinimize={onMinimize}
               onMarkRead={onMarkRead}
               onAssignTask={onAssignTask}
-              isMaximized
+              isMaximized={isFocusedMaximized}
               onToggleMaximize={onToggleMaximize}
+              threadRoot={threadRoot}
+              onOpenThread={(message) => onOpenThread?.(conv.id, message)}
+              onCloseThread={onCloseThread}
             />
           )
         })()
@@ -147,6 +164,7 @@ export default function ConversationStack({
             {visibleIds.map(id => {
               const conv = byId.get(id)
               if (!conv) return null
+              const threadRoot = threadState?.convId === id ? threadState.rootMessage : null
               return (
                 <SortablePane key={id} id={id}>
                   {({ attributes, listeners }) => (
@@ -159,6 +177,9 @@ export default function ConversationStack({
                       onAssignTask={onAssignTask}
                       dragHandleProps={{ ...attributes, ...listeners }}
                       onToggleMaximize={onToggleMaximize}
+                      threadRoot={threadRoot}
+                      onOpenThread={(message) => onOpenThread?.(conv.id, message)}
+                      onCloseThread={onCloseThread}
                     />
                   )}
                 </SortablePane>
