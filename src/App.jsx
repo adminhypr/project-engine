@@ -12,6 +12,7 @@ import SettingsPage from './pages/SettingsPage'
 import HubPage from './pages/HubPage'
 import HubTodosPage from './pages/HubTodosPage'
 import ToDoPage from './pages/ToDoPage'
+import TeamChatPage from './pages/TeamChatPage'
 import ErrorBoundary from './components/ErrorBoundary'
 import { ThemeProvider } from './hooks/useTheme'
 import ChatWidget from './components/chat/ChatWidget'
@@ -71,6 +72,7 @@ function AppRoutes() {
               <Route path="/my-tasks" element={<InternalOnly><MyTasksPage /></InternalOnly>} />
               <Route path="/assign"   element={<InternalOnly><AssignTaskPage /></InternalOnly>} />
               <Route path="/to-do"    element={<ToDoPage />} />
+              <Route path="/team-chat" element={<TeamChatPage />} />
               <Route path="/hub"        element={<HubPage />} />
               <Route path="/hub/:hubId" element={<HubPage />} />
               <Route path="/hub/:hubId/todos/*" element={<HubTodosPage />} />

@@ -5,13 +5,15 @@ import { useAuth } from '../../hooks/useAuth'
 import { signOut } from '../../lib/auth'
 import {
   CheckSquare, Plus, Users, LayoutDashboard, Boxes,
-  BarChart2, Settings, LogOut, Menu, X, ChevronRight, Moon, Sun
+  BarChart2, Settings, LogOut, Menu, X, ChevronRight, Moon, Sun,
+  ListChecks, MessageCircle
 } from 'lucide-react'
 import { useTheme } from '../../hooks/useTheme'
 import NotificationBell from '../notifications/NotificationBell'
+import WorkspaceSwitcher from './WorkspaceSwitcher'
 
 export default function Layout({ children }) {
-  const { profile, isAdmin, isManager } = useAuth()
+  const { profile, isAdmin, isManager, isExternal } = useAuth()
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { dark, toggle } = useTheme()
@@ -21,15 +23,22 @@ export default function Layout({ children }) {
     navigate('/')
   }
 
-  const navItems = [
-    { to: '/my-tasks', icon: CheckSquare, label: 'My Tasks',       show: true },
-    { to: '/assign',   icon: Plus,         label: 'Assign a Task',  show: true },
-    { to: '/hub',      icon: Boxes,        label: 'Project Hub',    show: true, badge: 'BETA' },
-    { to: '/team',     icon: Users,        label: 'Team View',      show: isManager },
-    { to: '/admin',    icon: LayoutDashboard, label: 'Admin Overview', show: isAdmin },
-    { to: '/reports',  icon: BarChart2,    label: 'Reports',        show: isManager },
-    { to: '/settings', icon: Settings,     label: 'Settings',       show: isManager },
-  ]
+  const navItems = isExternal
+    ? [
+        { to: '/to-do',     icon: ListChecks,    label: 'To-Do',     show: true },
+        { to: '/hub',       icon: Boxes,         label: 'Hubs',      show: true },
+        { to: '/team-chat', icon: MessageCircle, label: 'Team Chat', show: true },
+        { to: '/settings',  icon: Settings,      label: 'Settings',  show: true },
+      ]
+    : [
+        { to: '/my-tasks', icon: CheckSquare,     label: 'My Tasks',        show: true },
+        { to: '/assign',   icon: Plus,            label: 'Assign a Task',   show: true },
+        { to: '/hub',      icon: Boxes,           label: 'Project Hub',     show: true, badge: 'BETA' },
+        { to: '/team',     icon: Users,           label: 'Team View',       show: isManager },
+        { to: '/admin',    icon: LayoutDashboard, label: 'Admin Overview',  show: isAdmin },
+        { to: '/reports',  icon: BarChart2,       label: 'Reports',         show: isManager },
+        { to: '/settings', icon: Settings,        label: 'Settings',        show: isManager },
+      ]
 
   const sidebarContent = (
     <>
@@ -76,6 +85,8 @@ export default function Layout({ children }) {
           )}
         </div>
       </div>
+
+      {isExternal && <WorkspaceSwitcher />}
 
       {/* Nav */}
       <nav className="flex-1 py-3 px-3 overflow-y-auto space-y-0.5">
