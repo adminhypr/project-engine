@@ -33,6 +33,7 @@ export default function ChatWidget() {
     function handler(e) {
       const convId = e.detail?.conversationId
       if (!convId) return
+      setThreadState(null)
       setState(s => ({
         ...s,
         expanded: true,
@@ -52,8 +53,15 @@ export default function ChatWidget() {
 
   // Add a conversation id to the open list. Shared by DM-open, group-open,
   // and post-create flows so they all behave identically.
+  //
+  // Opening any new chat closes any open thread: the user's explicit
+  // "show me this other chat" intent outweighs staying in a thread. If the
+  // new chat IS the thread's host conversation, closing the thread also
+  // makes room for it to render at normal width. The thread itself is
+  // easy to reopen via the "N replies" footer on its root message.
   const openConversationById = useCallback((convId) => {
     if (!convId) return
+    setThreadState(null)
     setState(s => {
       const openIds = s.openConversationIds.includes(convId)
         ? s.openConversationIds
@@ -104,6 +112,10 @@ export default function ChatWidget() {
   const closeThread = useCallback(() => setThreadState(null), [])
 
   const restoreOne = useCallback((convId) => {
+    // Clicking an overflow/minimized avatar is the user asking to see
+    // that pane — same signal as opening a new chat, so close any open
+    // thread to make the expected layout fit.
+    setThreadState(t => (t?.convId === convId ? t : null))
     setState(s => ({
       ...s,
       minimizedIds: s.minimizedIds.filter(id => id !== convId),
