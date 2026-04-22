@@ -1,7 +1,23 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { signInWithGoogle } from '../lib/auth'
+import { signInWithGoogle, signInWithPassword } from '../lib/auth'
 
 export default function LoginPage() {
+  const [devOpen, setDevOpen] = useState(false)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  async function onDevSubmit(e) {
+    e.preventDefault()
+    setSubmitting(true)
+    setError(null)
+    const { error: err } = await signInWithPassword(email.trim(), password)
+    setSubmitting(false)
+    if (err) setError(err.message || 'Sign-in failed')
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-dark-bg flex items-center justify-center p-4 sm:p-6">
 
@@ -45,6 +61,48 @@ export default function LoginPage() {
         <p className="mt-6 text-xs text-slate-400 dark:text-slate-500">
           By signing in you agree to your organization's terms of use.
         </p>
+
+        {import.meta.env.DEV && (
+          <div className="mt-6 pt-6 border-t border-slate-100 dark:border-dark-border text-left">
+            <button
+              type="button"
+              onClick={() => setDevOpen(o => !o)}
+              className="w-full text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+            >
+              {devOpen ? '− Hide dev login' : '+ Dev login (email/password)'}
+            </button>
+            {devOpen && (
+              <form onSubmit={onDevSubmit} className="mt-3 space-y-2">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="email"
+                  autoComplete="email"
+                  required
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-surface"
+                />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="password"
+                  autoComplete="current-password"
+                  required
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-surface"
+                />
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full px-3 py-2 text-sm font-semibold rounded-lg bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white"
+                >
+                  {submitting ? 'Signing in…' : 'Sign in'}
+                </button>
+                {error && <p className="text-xs text-red-500">{error}</p>}
+              </form>
+            )}
+          </div>
+        )}
       </motion.div>
     </div>
   )
