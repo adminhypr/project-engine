@@ -10,7 +10,7 @@ import { memberCountLabel, groupDisplayName } from '../../lib/groupConversations
 export default function GroupMembersModal({
   isOpen, onClose, conversation, onLeft, onChanged,
 }) {
-  const { profile } = useAuth()
+  const { profile, isExternal } = useAuth()
   const { profiles } = useProfiles()
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState(false)
@@ -102,6 +102,7 @@ export default function GroupMembersModal({
             </div>
           </section>
 
+          {!isExternal && (
           <section>
             <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
               Add people
@@ -150,18 +151,21 @@ export default function GroupMembersModal({
               })}
             </div>
           </section>
+          )}
         </div>
 
         <footer className="px-4 py-3 border-t border-slate-200 dark:border-dark-border flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={leave}
-            disabled={busy}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
-          >
-            <LogOut className="w-4 h-4" />
-            Leave group
-          </button>
+          {!isExternal ? (
+            <button
+              type="button"
+              onClick={leave}
+              disabled={busy}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+            >
+              <LogOut className="w-4 h-4" />
+              Leave group
+            </button>
+          ) : <span />}
           <button
             type="button"
             onClick={onClose}
