@@ -28,7 +28,7 @@ export default function ConversationPane({
   onCloseThread,
   fullPage = false,
 }) {
-  const { profile } = useAuth()
+  const { profile, isExternal } = useAuth()
   const { messages, loading, hasMore, sendMessage, deleteMessage, loadMore } =
     useConversation(conversation.id)
   const isGroup = conversation.kind === 'group'
@@ -166,7 +166,7 @@ export default function ConversationPane({
             conversation={conversation}
             otherProfile={conversation.other_profile}
             online={online}
-            canAssignTask={conversation.kind === 'dm' || conversation.kind === 'group'}
+            canAssignTask={!isExternal && (conversation.kind === 'dm' || conversation.kind === 'group')}
             onAssignTask={() => onAssignTask?.(conversation)}
             onMinimize={() => onMinimize?.(conversation.id)}
             onClose={() => onClose?.(conversation.id)}
