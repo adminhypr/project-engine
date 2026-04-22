@@ -160,8 +160,19 @@ function getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInv
     })
   })
 
+  // External users (Agent / Client) only see hub invites, hub @mentions, and DMs.
+  // Task-related entries (comment, pending, overdue, urgent, new) and the
+  // admin "users-need-setup" card are filtered out so externals don't see
+  // internal-only noise. Keep this list in sync with any new hub/to-do
+  // notification types added above.
+  const isExternal = profile?.role === 'Agent' || profile?.role === 'Client'
+  const externalAllowedTypes = new Set(['hub-invite', 'hub-mention', 'dm'])
+  const filtered = isExternal
+    ? notifications.filter(n => externalAllowedTypes.has(n.type))
+    : notifications
+
   // Sort by priority then by time
-  return notifications.sort((a, b) => a.priority - b.priority || new Date(b.time) - new Date(a.time))
+  return filtered.sort((a, b) => a.priority - b.priority || new Date(b.time) - new Date(a.time))
 }
 
 function timeAgo(dateStr) {
@@ -177,6 +188,11 @@ function timeAgo(dateStr) {
 }
 
 export default function NotificationBell({ onTaskClick }) {
+  // Perf TODO: for external users (Agent/Client) this still runs the full task
+  // fetch even though task-related notifications get filtered out in
+  // getNotifications(). useTasks() doesn't currently support a `skip` option;
+  // if/when it does, pass { skip: profile?.role === 'Agent' || profile?.role === 'Client' }
+  // here to avoid the wasted query.
   const { myTasks, tasks } = useTasks()
   const { profile, isAdmin, isManager } = useAuth()
   const navigate = useNavigate()
