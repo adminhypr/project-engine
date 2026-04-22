@@ -8,6 +8,7 @@ import { Star, X, Plus, Send, Mail, Pencil, Trash2, Check, AlertTriangle, Shield
 import { ModalWrapper } from '../components/ui/animations'
 import AvatarCard from '../components/settings/AvatarCard'
 import NotificationSoundCard from '../components/settings/NotificationSoundCard'
+import { setPendingInvite, getPendingInvite, clearPendingInvite } from '../lib/pendingInvites'
 
 export default function SettingsPage() {
   const { profile, isAdmin } = useAuth()
@@ -17,6 +18,8 @@ export default function SettingsPage() {
   const [newTeam,  setNewTeam]  = useState('')
   const [saving,   setSaving]   = useState({})
   const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole,  setInviteRole]  = useState('Staff')
+  const [inviteTeamId, setInviteTeamId] = useState('')
   const [inviting,    setInviting]    = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting,     setDeleting]     = useState(false)
@@ -64,13 +67,26 @@ export default function SettingsPage() {
   async function sendInvite() {
     const email = inviteEmail.trim().toLowerCase()
     if (!email) return
+    if (!inviteTeamId) { showToast('Pick a team for the invite', 'error'); return }
     setInviting(true)
+    // Record intended role + team so the first team-assignment in the Users
+    // table (post sign-in) can apply them. Stored per-browser in localStorage.
+    setPendingInvite(email, {
+      role: inviteRole,
+      teamId: inviteTeamId,
+      inviterName: profile?.full_name || 'A team member'
+    })
     const { error } = await supabase.functions.invoke('user-notify', {
       body: { type: 'invite', email, inviterName: profile?.full_name || 'A team member' }
     })
     setInviting(false)
     if (error) showToast('Failed to send invite', 'error')
-    else { showToast('Invite sent to ' + email); setInviteEmail('') }
+    else {
+      showToast('Invite sent to ' + email)
+      setInviteEmail('')
+      setInviteRole('Staff')
+      // Keep inviteTeamId so repeat invites to the same team are quick
+    }
   }
 
   async function deleteProfile() {
@@ -93,6 +109,25 @@ export default function SettingsPage() {
     ? mgrTeamIds
     : (profile?.team_ids || (profile?.team_id ? [profile.team_id] : []))
   const managerTeams = isAdmin ? teams : teams.filter(t => myTeamIds.includes(t.id))
+
+  // Role options for the invite form.
+  //   Admin can create Manager accounts; Manager cannot (no Manager option).
+  //   Both can create Agent / Client externals.
+  const inviteRoleOptions = isAdmin
+    ? ['Staff', 'Manager', 'Agent', 'Client']
+    : ['Staff', 'Agent', 'Client']
+
+  // Default inviteTeamId to the first eligible team once data loads.
+  useEffect(() => {
+    if (!loading && !inviteTeamId && managerTeams.length > 0) {
+      setInviteTeamId(managerTeams[0].id)
+    }
+  }, [loading, managerTeams, inviteTeamId])
+
+  // Keep inviteRole valid when role options change (e.g. Manager→Admin).
+  useEffect(() => {
+    if (!inviteRoleOptions.includes(inviteRole)) setInviteRole('Staff')
+  }, [inviteRoleOptions, inviteRole])
 
   // Manager: only show unassigned users + themselves (for context)
   const visibleProfiles = isAdmin
@@ -167,23 +202,46 @@ export default function SettingsPage() {
             <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Invite User</p>
             <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
               Send an email invitation to a new user. They'll sign in with their Google account.
+              Their role and team will be applied the first time you grant them team access after they sign in.
             </p>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
+            <div className="flex flex-wrap gap-2">
+              <div className="relative flex-1 min-w-[16rem]">
                 <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
                 <input
                   type="email"
                   value={inviteEmail}
                   onChange={e => setInviteEmail(e.target.value)}
                   placeholder="email@example.com"
-                  className="form-input pl-9 flex-1 w-full"
+                  className="form-input pl-9 w-full"
                   onKeyDown={e => e.key === 'Enter' && sendInvite()}
                 />
               </div>
+              <select
+                value={inviteRole}
+                onChange={e => setInviteRole(e.target.value)}
+                className="form-input text-sm min-w-[7rem]"
+                aria-label="Role"
+              >
+                {inviteRoleOptions.map(r => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+              <select
+                value={inviteTeamId}
+                onChange={e => setInviteTeamId(e.target.value)}
+                className="form-input text-sm min-w-[10rem]"
+                aria-label="Team"
+                disabled={managerTeams.length === 0}
+              >
+                {managerTeams.length === 0 && <option value="">No teams available</option>}
+                {managerTeams.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
               <button
                 className="btn-primary inline-flex items-center gap-2"
                 onClick={sendInvite}
-                disabled={inviting || !inviteEmail.trim()}
+                disabled={inviting || !inviteEmail.trim() || !inviteTeamId}
               >
                 <Send size={14} />
                 {inviting ? 'Sending...' : 'Send Invite'}
@@ -317,21 +375,39 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
 
   async function addTeamToUser(teamId) {
     const isPrimary = userTeams.length === 0 // First team = primary
-    const { error } = await supabase.from('profile_teams').insert({
+
+    // If this is the user's first team and they have a pending invite that
+    // specified a role (Agent/Client/Manager/Staff), apply that role to the
+    // new profile_teams row. Otherwise default to 'Staff' per the DB default.
+    const pending = isPrimary ? getPendingInvite(user.email) : null
+    const invitedRole = pending?.role
+    const insertBody = {
       profile_id: user.id,
       team_id: teamId,
       is_primary: isPrimary
-    })
+    }
+    if (invitedRole) insertBody.role = invitedRole
+
+    const { error } = await supabase.from('profile_teams').insert(insertBody)
     if (error) { showToast(error.message, 'error'); return }
 
     // Sync profiles.team_id to primary team
     if (isPrimary) {
-      await supabase.from('profiles').update({ team_id: teamId }).eq('id', user.id)
+      const profileUpdates = { team_id: teamId }
+      // Sticky roles: set profiles.role directly for Agent/Client so the
+      // role-sync trigger (migration 038) leaves it untouched on future
+      // per-team changes. 'Manager'/'Staff' are left to the trigger.
+      if (invitedRole === 'Agent' || invitedRole === 'Client') {
+        profileUpdates.role = invitedRole
+      }
+      await supabase.from('profiles').update(profileUpdates).eq('id', user.id)
 
       // First team = user approved — send approval notification email
       supabase.functions.invoke('user-notify', {
         body: { type: 'approved', userId: user.id, approverName: approverName || 'An administrator' }
       }).catch(() => {}) // Non-blocking — don't fail the team assignment if email fails
+
+      if (pending) clearPendingInvite(user.email)
     }
 
     showToast(isPrimary ? 'Team added — approval email sent' : 'Team added')
@@ -391,6 +467,22 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
       .eq('profile_id', user.id)
       .eq('team_id', teamId)
     if (error) { showToast(error.message, 'error'); return }
+
+    // Sticky global roles: Agent/Client must also be set on profiles.role
+    // (the role-sync trigger treats them as sticky and will NEVER write
+    // those values itself — it only syncs Staff/Manager). Admin is
+    // preserved as-is and is set via the Admin toggle elsewhere.
+    if (newRole === 'Agent' || newRole === 'Client') {
+      if (user.role !== newRole && user.role !== 'Admin') {
+        await supabase.from('profiles').update({ role: newRole }).eq('id', user.id)
+      }
+    } else if ((newRole === 'Staff' || newRole === 'Manager') &&
+               (user.role === 'Agent' || user.role === 'Client')) {
+      // Converting an external back to an internal: clear sticky role so
+      // the trigger can resume syncing from per-team rows.
+      await supabase.from('profiles').update({ role: newRole }).eq('id', user.id)
+    }
+
     showToast(`Role updated to ${newRole}`)
     onTeamsChange()
   }
@@ -467,21 +559,49 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
                   <Star size={10} className="text-brand-500 dark:text-brand-400 fill-current" />
                 )}
                 {t.name}
-                {isAdmin && !isSelf && (
-                  <button
-                    onClick={() => updateTeamRole(t.team_id, t.role === 'Manager' ? 'Staff' : 'Manager')}
-                    className={`text-[10px] font-semibold px-1 py-px rounded transition-colors ml-0.5
-                      ${t.role === 'Manager'
-                        ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:hover:bg-amber-500/30'
-                        : 'bg-slate-100 text-slate-400 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-500 dark:hover:bg-slate-600'
-                      }`}
-                    title={`Click to change to ${t.role === 'Manager' ? 'Staff' : 'Manager'}`}
-                  >
-                    {t.role === 'Manager' ? 'Mgr' : 'Staff'}
-                  </button>
-                )}
-                {!(isAdmin && !isSelf) && t.role === 'Manager' && (
-                  <span className="text-[10px] font-semibold px-1 py-px rounded bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 ml-0.5">Mgr</span>
+                {canEdit && !isSelf ? (() => {
+                  // Admin: Staff / Manager / Agent / Client
+                  // Manager: Staff / Agent / Client (no Manager option)
+                  const roleChoices = isAdmin
+                    ? ['Staff', 'Manager', 'Agent', 'Client']
+                    : ['Staff', 'Agent', 'Client']
+                  const current = roleChoices.includes(t.role) ? t.role : 'Staff'
+                  const labelClass =
+                    t.role === 'Manager'
+                      ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:hover:bg-amber-500/30'
+                    : t.role === 'Agent'
+                      ? 'bg-sky-100 text-sky-700 hover:bg-sky-200 dark:bg-sky-500/20 dark:text-sky-300 dark:hover:bg-sky-500/30'
+                    : t.role === 'Client'
+                      ? 'bg-violet-100 text-violet-700 hover:bg-violet-200 dark:bg-violet-500/20 dark:text-violet-300 dark:hover:bg-violet-500/30'
+                      : 'bg-slate-100 text-slate-400 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-500 dark:hover:bg-slate-600'
+                  return (
+                    <select
+                      value={current}
+                      onChange={e => updateTeamRole(t.team_id, e.target.value)}
+                      className={`text-[10px] font-semibold px-1 py-px rounded transition-colors ml-0.5 border-0 focus:outline-none focus:ring-1 focus:ring-brand-400 ${labelClass}`}
+                      title="Change role"
+                    >
+                      {roleChoices.map(r => (
+                        <option key={r} value={r}>
+                          {r === 'Manager' ? 'Mgr' : r}
+                        </option>
+                      ))}
+                    </select>
+                  )
+                })() : (
+                  (t.role && t.role !== 'Staff') && (
+                    <span className={`text-[10px] font-semibold px-1 py-px rounded ml-0.5 ${
+                      t.role === 'Manager'
+                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'
+                      : t.role === 'Agent'
+                        ? 'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300'
+                      : t.role === 'Client'
+                        ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300'
+                        : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+                    }`}>
+                      {t.role === 'Manager' ? 'Mgr' : t.role}
+                    </span>
+                  )
                 )}
                 {canEdit && (
                   <button
