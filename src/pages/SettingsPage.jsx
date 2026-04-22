@@ -7,6 +7,7 @@ import { PageTransition } from '../components/ui/animations'
 import { Star, X, Plus, Send, Mail, Pencil, Trash2, Check, AlertTriangle, Shield } from 'lucide-react'
 import { ModalWrapper } from '../components/ui/animations'
 import AvatarCard from '../components/settings/AvatarCard'
+import DisplayNameCard from '../components/settings/DisplayNameCard'
 import NotificationSoundCard from '../components/settings/NotificationSoundCard'
 import { setPendingInvite, getPendingInvite, clearPendingInvite } from '../lib/pendingInvites'
 
@@ -152,6 +153,7 @@ export default function SettingsPage() {
         <div className="p-4 sm:p-6 space-y-6 max-w-7xl">
 
           <AvatarCard />
+          <DisplayNameCard />
           <NotificationSoundCard />
 
           {/* Teams — admin only */}
