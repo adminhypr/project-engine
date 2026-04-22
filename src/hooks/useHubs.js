@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
+import { isExternal } from '../lib/roleHelpers'
 import { showToast } from '../components/ui/index'
 
 export function useHubs() {
@@ -37,6 +38,10 @@ export function useHubs() {
 
   const createHub = useCallback(async ({ name, description, icon, color }) => {
     if (!profile?.id || !name.trim()) return null
+    if (isExternal(profile)) {
+      showToast('Agents and clients cannot create hubs', 'error')
+      return null
+    }
     // Create hub
     const { data: hub, error } = await supabase
       .from('hubs')

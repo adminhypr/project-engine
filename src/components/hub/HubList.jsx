@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useHubs } from '../../hooks/useHubs'
+import { useAuth } from '../../hooks/useAuth'
 import { PageTransition, FadeIn, StaggerChildren, StaggerItem } from '../ui/animations'
 import { LoadingScreen } from '../ui/index'
 import HubCard from './HubCard'
@@ -8,7 +9,9 @@ import { Plus, Boxes } from 'lucide-react'
 
 export default function HubList({ onSelectHub }) {
   const { hubs, loading, createHub } = useHubs()
+  const { isExternal } = useAuth()
   const [showCreate, setShowCreate] = useState(false)
+  const canCreateHub = !isExternal
 
   if (loading) return <LoadingScreen />
 
@@ -33,13 +36,15 @@ export default function HubList({ onSelectHub }) {
             <p className="text-xs text-slate-500 dark:text-slate-400">Team spaces and group channels</p>
           </div>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="btn btn-primary text-sm flex items-center gap-1.5 shrink-0"
-        >
-          <Plus size={15} />
-          New Hub
-        </button>
+        {canCreateHub && (
+          <button
+            onClick={() => setShowCreate(true)}
+            className="btn btn-primary text-sm flex items-center gap-1.5 shrink-0"
+          >
+            <Plus size={15} />
+            New Hub
+          </button>
+        )}
       </div>
 
       <div className="p-4 sm:p-6">
@@ -51,11 +56,15 @@ export default function HubList({ onSelectHub }) {
               </div>
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">No hubs yet</h3>
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-5">
-                Create a hub to start collaborating with your team.
+                {canCreateHub
+                  ? 'Create a hub to start collaborating with your team.'
+                  : "You haven't been added to any hubs yet. Ask your Team Leader for an invite."}
               </p>
-              <button onClick={() => setShowCreate(true)} className="btn btn-primary text-sm">
-                Create your first hub
-              </button>
+              {canCreateHub && (
+                <button onClick={() => setShowCreate(true)} className="btn btn-primary text-sm">
+                  Create your first hub
+                </button>
+              )}
             </div>
           </FadeIn>
         ) : (
