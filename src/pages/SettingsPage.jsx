@@ -12,7 +12,7 @@ import NotificationSoundCard from '../components/settings/NotificationSoundCard'
 import { setPendingInvite, getPendingInvite, clearPendingInvite } from '../lib/pendingInvites'
 
 export default function SettingsPage() {
-  const { profile, isAdmin } = useAuth()
+  const { profile, isAdmin, isExternal } = useAuth()
   const [profiles, setProfiles] = useState([])
   const [teams,    setTeams]    = useState([])
   const [loading,  setLoading]  = useState(true)
@@ -194,7 +194,8 @@ export default function SettingsPage() {
             </motion.div>
           )}
 
-          {/* Invite User */}
+          {/* Invite User — hidden for external account types (Agent/Client) */}
+          {!isExternal && (
           <motion.div
             className="card"
             initial={{ opacity: 0, y: 12 }}
@@ -250,8 +251,10 @@ export default function SettingsPage() {
               </button>
             </div>
           </motion.div>
+          )}
 
-          {/* Users */}
+          {/* Users — hidden for external account types (Agent/Client) */}
+          {!isExternal && (
           <motion.div
             className="card"
             initial={{ opacity: 0, y: 12 }}
@@ -302,6 +305,7 @@ export default function SettingsPage() {
               </div>
             )}
           </motion.div>
+          )}
 
         </div>
 
