@@ -9,6 +9,7 @@ import MessageList from './MessageList'
 import ChatComposer from './ChatComposer'
 import TypingIndicator from './TypingIndicator'
 import GroupMembersModal from './GroupMembersModal'
+import AssignTodoFromChatModal from './AssignTodoFromChatModal'
 import ThreadPanel from './ThreadPanel'
 import { ReplyProvider } from './ReplyContext'
 
@@ -51,6 +52,7 @@ export default function ConversationPane({
   )
 
   const [membersOpen, setMembersOpen] = useState(false)
+  const [todoOpen, setTodoOpen] = useState(false)
   // Thread state is lifted to ChatWidget so only one thread can be open
   // across the whole widget, and the stack can focus that pane (same
   // idea as maximize) to avoid overflowing the right-anchored row.
@@ -168,6 +170,8 @@ export default function ConversationPane({
             online={online}
             canAssignTask={!isExternal && (conversation.kind === 'dm' || conversation.kind === 'group')}
             onAssignTask={() => onAssignTask?.(conversation)}
+            canAddTodo={isExternal && (conversation.kind === 'dm' || conversation.kind === 'group')}
+            onAddTodo={() => setTodoOpen(true)}
             onMinimize={() => onMinimize?.(conversation.id)}
             onClose={() => onClose?.(conversation.id)}
             dragHandleProps={dragHandleProps}
@@ -215,6 +219,12 @@ export default function ConversationPane({
           conversation={conversation}
           onLeft={(cid) => onClose?.(cid)}
           onChanged={() => onGroupChanged?.()}
+        />
+      )}
+      {todoOpen && (
+        <AssignTodoFromChatModal
+          conversation={conversation}
+          onClose={() => setTodoOpen(false)}
         />
       )}
     </ReplyProvider>

@@ -1,9 +1,11 @@
-import { Minus, X, ClipboardList, Maximize2, Minimize2, Users } from 'lucide-react'
+import { Minus, X, ClipboardList, CheckSquare, Maximize2, Minimize2, Users } from 'lucide-react'
 import PresenceDot from './PresenceDot'
 import { groupDisplayName, memberCountLabel } from '../../lib/groupConversations'
 
 export default function ConversationHeader({
-  conversation, otherProfile, online, onMinimize, onClose, onAssignTask, canAssignTask,
+  conversation, otherProfile, online, onMinimize, onClose,
+  onAssignTask, canAssignTask,
+  onAddTodo, canAddTodo,
   dragHandleProps, isMaximized, onToggleMaximize, onOpenMembers,
 }) {
   const isGroup = conversation?.kind === 'group'
@@ -45,6 +47,17 @@ export default function ConversationHeader({
         >
           <ClipboardList className="w-3.5 h-3.5" />
           Assign task
+        </button>
+      )}
+      {canAddTodo && (
+        <button
+          type="button"
+          onClick={onAddTodo}
+          className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md bg-brand-50 text-brand-700 hover:bg-brand-100 dark:bg-brand-900/30 dark:text-brand-200 dark:hover:bg-brand-900/50"
+          title="Add to-do"
+        >
+          <CheckSquare className="w-3.5 h-3.5" />
+          Add to-do
         </button>
       )}
       {isGroup && onOpenMembers && (
