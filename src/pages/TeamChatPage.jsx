@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useConversations } from '../hooks/useConversations'
@@ -61,6 +61,20 @@ export default function TeamChatPage() {
     ? conversations.find(c => c.id === conversationId)
     : null
 
+  // Thread state is scoped to this page. The floating ChatWidget has its
+  // own global threadState, but it's never mounted for externals (they only
+  // see this page), so we manage thread locally here.
+  const [threadRoot, setThreadRoot] = useState(null)
+  const openThread = useCallback((message) => {
+    if (!message) return
+    setThreadRoot(message)
+  }, [])
+  const closeThread = useCallback(() => setThreadRoot(null), [])
+
+  // Close any open thread if the active workspace changes — keeps the
+  // "thread belongs to this conversation" invariant true.
+  useEffect(() => { setThreadRoot(null) }, [conversationId])
+
   if (!activeTeamId) {
     return (
       <div className="p-6 text-sm text-slate-500 dark:text-slate-400">
@@ -92,6 +106,9 @@ export default function TeamChatPage() {
         online={false}
         onMarkRead={markRead}
         fullPage={true}
+        threadRoot={threadRoot}
+        onOpenThread={openThread}
+        onCloseThread={closeThread}
       />
     </div>
   )
