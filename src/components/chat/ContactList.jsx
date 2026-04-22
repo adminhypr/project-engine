@@ -1,6 +1,7 @@
 import { Plus, Users } from 'lucide-react'
 import ContactRow from './ContactRow'
 import { groupDisplayName, memberCountLabel } from '../../lib/groupConversations'
+import { useAuth } from '../../hooks/useAuth'
 
 function Section({ title, rows, presence, onOpen }) {
   if (!rows || rows.length === 0) return null
@@ -71,6 +72,8 @@ function GroupsSection({ groups, onOpenGroup }) {
 export default function ContactList({
   sections, groups = [], presence, onOpen, onOpenGroup, onCreateGroup,
 }) {
+  const { isExternal } = useAuth()
+
   const empty =
     sections.recent.length === 0 &&
     sections.teammates.length === 0 &&
@@ -79,7 +82,7 @@ export default function ContactList({
 
   return (
     <div className="py-1">
-      {onCreateGroup && (
+      {onCreateGroup && !isExternal && (
         <div className="px-3 pt-2 pb-1">
           <button
             type="button"
@@ -98,9 +101,13 @@ export default function ContactList({
       ) : (
         <>
           <GroupsSection groups={groups} onOpenGroup={onOpenGroup} />
-          <Section title="Recent"    rows={sections.recent}    presence={presence} onOpen={onOpen} />
-          <Section title="Teammates" rows={sections.teammates} presence={presence} onOpen={onOpen} />
-          <Section title="Company"   rows={sections.company}   presence={presence} onOpen={onOpen} />
+          {!isExternal && (
+            <>
+              <Section title="Recent"    rows={sections.recent}    presence={presence} onOpen={onOpen} />
+              <Section title="Teammates" rows={sections.teammates} presence={presence} onOpen={onOpen} />
+              <Section title="Company"   rows={sections.company}   presence={presence} onOpen={onOpen} />
+            </>
+          )}
         </>
       )}
     </div>

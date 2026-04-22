@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { showToast } from '../components/ui'
 import { upsertConversation, sortByLastMessage } from '../lib/conversationOrdering'
 import { onMessage } from '../lib/dmEventBus'
 import { shapeConversationRow } from '../lib/groupConversations'
+import { isExternal } from '../lib/roleHelpers'
 
 // Row shape returned by this hook (per conversation):
 //   Common: { id, kind, title, team_id, last_message_at, last_message_preview,
@@ -144,5 +145,21 @@ export function useConversations() {
     ))
   }, [])
 
-  return { conversations, loading, refetch, createOrOpen, createGroup, markRead }
+  // Externals (Agent/Client) only ever see their team group conversations
+  // in the chat widget — no DMs, no custom groups. This is defense-in-depth:
+  // the widget itself is already gated on !isExternal in App.jsx, but this
+  // filter ensures any future caller of the hook honors the same rule.
+  const visibleConversations = useMemo(() => {
+    if (!isExternal(profile)) return conversations
+    return conversations.filter(c => c.kind === 'group' && c.team_id)
+  }, [conversations, profile])
+
+  return {
+    conversations: visibleConversations,
+    loading,
+    refetch,
+    createOrOpen,
+    createGroup,
+    markRead,
+  }
 }

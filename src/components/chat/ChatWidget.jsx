@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useAuth } from '../../hooks/useAuth'
+import { isExternal } from '../../lib/roleHelpers'
 import { useContactList } from '../../hooks/useContactList'
 import { totalUnread as sumUnread } from '../../lib/dmUnread'
 import { readWidgetState, writeWidgetState } from '../../lib/dmWidgetStorage'
@@ -149,6 +150,10 @@ export default function ChatWidget() {
   }, [assignForConversation, profile?.id])
 
   if (!profile?.id) return null
+  // Defense in depth: App.jsx already guards the mount, but if the widget is
+  // ever re-mounted for an external user, render nothing so no launcher,
+  // contact list, or persisted-expanded panel ever appears.
+  if (isExternal(profile)) return null
 
   return (
     <>
