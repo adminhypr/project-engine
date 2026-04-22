@@ -4,7 +4,7 @@ import { ModalWrapper } from '../ui/animations'
 import { useProfiles } from '../../hooks/useTasks'
 
 export default function ReassignModal({ isOpen, onClose, onConfirm, task }) {
-  const { profiles } = useProfiles()
+  const { profiles } = useProfiles({ excludeExternals: true })
   const [assigneeId, setAssigneeId] = useState('')
   const [submitting, setSubmitting] = useState(false)
 

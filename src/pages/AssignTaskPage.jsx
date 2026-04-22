@@ -16,7 +16,7 @@ import { parsePrefillParams } from '../lib/dmPrefillUrl'
 export default function AssignTaskPage() {
   const { profile, isAdmin } = useAuth()
   const { assignTask } = useTaskActions()
-  const { profiles, loading: profilesLoading } = useProfiles()
+  const { profiles, loading: profilesLoading } = useProfiles({ excludeExternals: true })
   const { uploadAttachments } = useAttachments()
   const navigate = useNavigate()
 

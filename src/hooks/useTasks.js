@@ -477,7 +477,7 @@ export function useTaskActions() {
   return { assignTask, updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask, deleteTask, deleteTasks, updateTasks, addAssignee, removeAssignee }
 }
 
-export function useProfiles() {
+export function useProfiles({ excludeExternals = false } = {}) {
   const [profiles, setProfiles] = useState([])
   const [teams,    setTeams]    = useState([])
   const [loading,  setLoading]  = useState(true)
@@ -501,12 +501,15 @@ export function useProfiles() {
           manager: p.reports_to ? { id: p.reports_to, full_name: profileMap[p.reports_to]?.full_name } : null
         }
       })
-      setProfiles(enriched)
+      const filtered = excludeExternals
+        ? enriched.filter(p => p.role !== 'Agent' && p.role !== 'Client')
+        : enriched
+      setProfiles(filtered)
       setTeams(tData || [])
       setLoading(false)
     }
     load()
-  }, [])
+  }, [excludeExternals])
 
   return { profiles, teams, loading }
 }

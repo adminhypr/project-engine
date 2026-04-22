@@ -8,7 +8,7 @@ import { buildPrefillUrl } from '../../lib/dmPrefillUrl'
 
 export default function AssignFromChatModal({ conversation, onClose, onPosted }) {
   const { profile } = useAuth()
-  const { profiles } = useProfiles()
+  const { profiles } = useProfiles({ excludeExternals: true })
   const { assignTask } = useTaskActions()
   const navigate = useNavigate()
 

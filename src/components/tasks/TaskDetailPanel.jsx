@@ -17,7 +17,7 @@ import { useAttachments } from '../../hooks/useAttachments'
 export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   const { profile, isAdmin, isManager } = useAuth()
   const { updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask, deleteTask, addAssignee, removeAssignee } = useTaskActions()
-  const { profiles: allProfiles } = useProfiles()
+  const { profiles: allProfiles } = useProfiles({ excludeExternals: true })
   const { uploadAttachments, getTaskAttachments, getAttachmentUrl, deleteAttachment } = useAttachments()
 
   const [status,   setStatus]   = useState(task?.status || 'Not Started')
