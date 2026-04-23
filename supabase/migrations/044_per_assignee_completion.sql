@@ -25,8 +25,9 @@ alter table public.task_audit_log
   check (event_type in (
     'task_created','status_changed','urgency_changed','due_date_changed',
     'notes_updated','reassigned','accepted','declined','assigner_override',
-    'assignee_marked_done','assignee_unmarked','force_closed'
-  ));
+    'assignee_marked_done','assignee_unmarked','force_closed',
+    'all_assignees_completed'
+  )) not valid;
 
 -- ─────────────────────────────────────────────
 -- Aggregate trigger: if every assignee on a task now has completed_at,
@@ -35,12 +36,16 @@ alter table public.task_audit_log
 -- count query.
 -- ─────────────────────────────────────────────
 create or replace function public.aggregate_task_completion()
-returns trigger as $$
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
 declare
   total int;
   done  int;
 begin
-  -- Only react when completed_at actually transitioned to non-null.
+  -- Only react when completed_at actually transitioned.
   if (tg_op = 'UPDATE'
       and (old.completed_at is not distinct from new.completed_at)) then
     return new;
@@ -51,23 +56,35 @@ begin
     from public.task_assignees
    where task_id = new.task_id;
 
-  if total > 0 and total = done then
+  -- Mark-complete path: all assignees done → flip to Done.
+  if old.completed_at is null and new.completed_at is not null
+     and total > 0 and total = done then
     update public.tasks
        set status = 'Done'
      where id = new.task_id and status <> 'Done';
-    -- Audit only if we actually changed it
     if found then
+      -- Note event only. audit_task_updated (from 012) writes the
+      -- matching 'status_changed' row.
       insert into public.task_audit_log
         (task_id, event_type, performed_by, old_value, new_value, note)
       values
-        (new.task_id, 'status_changed', new.completed_by, 'In Progress', 'Done',
+        (new.task_id, 'all_assignees_completed', new.completed_by, null, null,
          'All assignees completed');
     end if;
   end if;
 
+  -- Unmark path: previously all-done, now someone is open again → reopen.
+  if old.completed_at is not null and new.completed_at is null
+     and total > 0 and done < total then
+    update public.tasks
+       set status = 'In Progress'
+     where id = new.task_id and status = 'Done';
+    -- audit_task_updated writes the status_changed row for us.
+  end if;
+
   return new;
 end;
-$$ language plpgsql security definer;
+$$;
 
 drop trigger if exists trg_aggregate_task_completion on public.task_assignees;
 create trigger trg_aggregate_task_completion
@@ -93,6 +110,7 @@ declare
   is_admin_caller boolean;
   is_assigner boolean;
   is_assignee boolean;
+  prev_status text;
 begin
   if caller is null then
     raise exception 'not authenticated';
@@ -106,16 +124,14 @@ begin
     raise exception 'not authorized to close task %', tid;
   end if;
 
-  -- Fill any open assignee rows.
+  select status into prev_status from public.tasks where id = tid;
+
   update public.task_assignees
      set completed_at = now(),
          completed_by = caller
    where task_id = tid
      and completed_at is null;
 
-  -- Flip the task's own status if still open. The aggregate trigger
-  -- will NOT fire on this path because we're updating tasks directly;
-  -- so we audit here explicitly.
   update public.tasks
      set status = 'Done'
    where id = tid and status <> 'Done';
@@ -124,7 +140,7 @@ begin
     insert into public.task_audit_log
       (task_id, event_type, performed_by, old_value, new_value, note)
     values
-      (tid, 'force_closed', caller, null, 'Done', 'Closed for everyone');
+      (tid, 'force_closed', caller, prev_status, 'Done', 'Closed for everyone');
   end if;
 end;
 $$;
@@ -162,3 +178,54 @@ create policy "task_assignees_update_self"
       where p.id = auth.uid() and p.role = 'Admin'
     )
   );
+
+-- ─────────────────────────────────────────────
+-- Self-update guard: RLS lets an assignee update their own row, but
+-- can't restrict which columns. This trigger enforces that self-
+-- updates may only touch completed_at / completed_by. Admin and the
+-- task's assigner bypass (they may legitimately change other fields).
+-- Service-role calls (auth.uid() is null) bypass.
+-- ─────────────────────────────────────────────
+create or replace function public.guard_task_assignee_self_update()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  me uuid := auth.uid();
+  is_admin_caller boolean;
+  is_assigner boolean;
+begin
+  if me is null then return new; end if;
+
+  select (role = 'Admin') into is_admin_caller
+    from public.profiles where id = me;
+  select exists(select 1 from public.tasks
+                where id = new.task_id and assigned_by = me)
+    into is_assigner;
+
+  if coalesce(is_admin_caller, false) or is_assigner then
+    return new;
+  end if;
+
+  if me <> new.profile_id then
+    raise exception 'cannot update another assignee row';
+  end if;
+
+  if new.task_id    is distinct from old.task_id
+     or new.profile_id is distinct from old.profile_id
+     or new.is_primary is distinct from old.is_primary
+     or new.created_at is distinct from old.created_at
+  then
+    raise exception 'self-update restricted to completion fields';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_guard_task_assignee_self_update on public.task_assignees;
+create trigger trg_guard_task_assignee_self_update
+  before update on public.task_assignees
+  for each row execute function public.guard_task_assignee_self_update();
