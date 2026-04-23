@@ -177,7 +177,7 @@ Each migration gets a PL/pgSQL smoke test against a Supabase test project.
 
 One stacked PR per migration:
 
-1. **044 — per-assignee completion.** Smallest blast radius. David's highest-value visibility win. Ships first.
+1. **044 — per-assignee completion.** Smallest blast radius. David's highest-value visibility win. Ships first. — shipped 2026-04-23
 2. **045 — sub-tasks.** Independent of 044. Touches My Tasks + Team View.
 3. **046 — dependencies.** Independent migration; UI reuses 045's chip components.
 4. **047 — task chat.** Independent; can ship in parallel with 046 if split across contributors.
