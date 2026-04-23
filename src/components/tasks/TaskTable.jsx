@@ -4,6 +4,7 @@ import { formatDateShort } from '../../lib/helpers'
 import { PriorityBadge, UrgencyBadge, StatusBadge } from '../ui'
 import { MessageSquare, Check, X, Calendar, Clock, User, ChevronRight } from 'lucide-react'
 import { TaskIcon } from '../ui/TaskIconPicker'
+import { completionProgress } from '../../lib/perAssigneeCompletion'
 
 const PRIORITY_INDICATOR = {
   red:    'bg-red-500',
@@ -28,6 +29,9 @@ export default function TaskTable({
         const isPending = task.acceptance_status === 'Pending'
         const isDeclined = task.acceptance_status === 'Declined'
         const isSelected = selectable && selectedIds?.has(task.id)
+        const progress = completionProgress(task.task_assignees ?? task.assignees)
+        const showProgressChip = progress.total >= 2
+        const progressComplete = progress.done === progress.total
 
         return (
           <motion.div
@@ -75,6 +79,18 @@ export default function TaskTable({
                   <h3 className="font-semibold text-slate-900 dark:text-white text-sm truncate">{task.title}</h3>
                   {isPending && <span className="shrink-0 badge bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 text-[10px]">Pending</span>}
                   {isDeclined && <span className="shrink-0 badge bg-red-500/15 text-red-700 dark:text-red-400 text-[10px]">Declined</span>}
+                  {showProgressChip && (
+                    <span
+                      className={`shrink-0 badge text-[10px] ${
+                        progressComplete
+                          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                          : 'bg-slate-500/15 text-slate-700 dark:text-slate-300'
+                      }`}
+                      title={`${progress.done} of ${progress.total} assignees completed`}
+                    >
+                      {progress.done}/{progress.total}
+                    </span>
+                  )}
                 </div>
 
                 {/* Meta row */}
