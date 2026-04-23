@@ -216,7 +216,9 @@ async function onTaskForceClosed(task: any, forceCloseRow: any) {
 
   if (recipients.size === 0) return
 
-  const subject = `Task closed: "${task.title}"`
+  const subject = closerName
+    ? `Task closed by ${closerName}: "${task.title}"`
+    : `Task closed: "${task.title}"`
 
   for (const r of recipients.values()) {
     const html = emailWrap('Task Closed', '#22c55e',

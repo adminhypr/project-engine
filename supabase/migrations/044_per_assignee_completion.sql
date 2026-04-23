@@ -124,6 +124,10 @@ begin
     raise exception 'not authorized to close task %', tid;
   end if;
 
+  -- Tell guard_task_assignee_self_update we're in a legitimate force-close
+  -- bulk update (scoped to this transaction; auto-resets on COMMIT/ROLLBACK).
+  perform set_config('app.force_close', 'on', true);
+
   select status into prev_status from public.tasks where id = tid;
 
   update public.task_assignees
@@ -136,7 +140,11 @@ begin
      set status = 'Done'
    where id = tid and status <> 'Done';
 
-  if found then
+  -- Audit based on prev_status, not FOUND: the aggregate AFTER trigger on
+  -- task_assignees may have already flipped status to 'Done' (making the
+  -- UPDATE above a no-op and FOUND false). We still want the force_closed
+  -- audit row so notify/ can detect force-close and email everyone.
+  if prev_status is distinct from 'Done' then
     insert into public.task_audit_log
       (task_id, event_type, performed_by, old_value, new_value, note)
     values
@@ -197,6 +205,15 @@ declare
   is_admin_caller boolean;
   is_assigner boolean;
 begin
+  -- force_close_task sets this GUC (txn-scoped) before its bulk UPDATE so
+  -- the per-row guard doesn't reject rows belonging to other assignees.
+  -- Placed BEFORE the service-role bypass so it applies regardless of
+  -- auth.uid() state. `true` third arg to current_setting returns NULL
+  -- instead of erroring when the setting is absent.
+  if coalesce(current_setting('app.force_close', true), '') = 'on' then
+    return new;
+  end if;
+
   if me is null then return new; end if;
 
   select (role = 'Admin') into is_admin_caller
