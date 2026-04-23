@@ -85,7 +85,7 @@ export function useTasks() {
     if (usedFallback && data?.length) {
       const { data: taData } = await supabase
         .from('task_assignees')
-        .select('task_id, profile_id, is_primary, profile:profiles(id, full_name, avatar_url)')
+        .select('task_id, profile_id, is_primary, completed_at, completed_by, profile:profiles(id, full_name, avatar_url)')
       if (taData) {
         for (const ta of taData) {
           if (!assigneesMap[ta.task_id]) assigneesMap[ta.task_id] = []
@@ -126,6 +126,8 @@ export function useTasks() {
         full_name: ta.profile?.full_name,
         avatar_url: ta.profile?.avatar_url,
         is_primary: ta.is_primary,
+        completed_at: ta.completed_at ?? null,
+        completed_by: ta.completed_by ?? null,
       }))
 
       return {

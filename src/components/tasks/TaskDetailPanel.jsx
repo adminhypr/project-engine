@@ -448,9 +448,9 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
                             }
                             if (res?.error) {
                               showToast(res.error.message || 'Failed to update', 'error')
-                            } else {
-                              onUpdated?.()
                             }
+                            // Realtime subscription on task_assignees refetches automatically;
+                            // don't call onUpdated() here because parent handlers close the panel.
                           }}
                           className="disabled:opacity-40 disabled:cursor-not-allowed flex items-center"
                           title={canToggle ? (open ? 'Mark done' : 'Unmark done') : 'Only self, assigner, or admin can toggle'}
@@ -510,7 +510,8 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
                         showToast(error.message || 'Failed to close task', 'error')
                       } else {
                         showToast('Task closed for everyone')
-                        onUpdated?.()
+                        // Realtime subscription refetches; don't call onUpdated()
+                        // here because parent handlers close the panel.
                       }
                     }}
                     className="btn btn-secondary text-[10px] py-0.5 px-2"
