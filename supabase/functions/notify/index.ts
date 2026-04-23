@@ -142,7 +142,27 @@ async function onTaskCompleted(record: any, oldRecord: any) {
   if (record.status !== 'Done') return
 
   const task = await getTask(record.id)
-  if (!task?.assigner?.email) return
+  if (!task) return
+
+  // Detect force-close: a recent task_audit_log row with event_type='force_closed'
+  // written in the last minute means this Done flip came from force_close_task RPC.
+  const { data: forceCloseRow } = await supabase
+    .from('task_audit_log')
+    .select('id, performed_by, created_at')
+    .eq('task_id', record.id)
+    .eq('event_type', 'force_closed')
+    .gte('created_at', new Date(Date.now() - 60_000).toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (forceCloseRow) {
+    await onTaskForceClosed(task, forceCloseRow)
+    return
+  }
+
+  // Regular completion path — notify assigner only.
+  if (!task.assigner?.email) return
   if (task.assigned_by === task.assigned_to) return
 
   const html = emailWrap('Task Completed', '#22c55e',
@@ -157,6 +177,62 @@ async function onTaskCompleted(record: any, oldRecord: any) {
      </div>`)
 
   await sendEmail([task.assigner.email], `Task completed: "${task.title}"`, html)
+}
+
+// ── 3b. TASK FORCE-CLOSED — notify all assignees + assigner ───
+async function onTaskForceClosed(task: any, forceCloseRow: any) {
+  // Fetch closer name
+  let closerName = 'A manager'
+  if (forceCloseRow.performed_by) {
+    const { data: closer } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', forceCloseRow.performed_by)
+      .maybeSingle()
+    if (closer?.full_name) closerName = closer.full_name
+  }
+
+  // Fetch all assignees from junction table
+  const { data: assigneeRows } = await supabase
+    .from('task_assignees')
+    .select('profile:profiles(id, full_name, email)')
+    .eq('task_id', task.id)
+
+  // Collect unique recipients: assigner + every assignee with an email.
+  const recipients = new Map<string, { id: string; full_name: string; email: string }>()
+  if (task.assigner?.id && task.assigner?.email) {
+    recipients.set(task.assigner.id, {
+      id: task.assigner.id,
+      full_name: task.assigner.full_name,
+      email: task.assigner.email,
+    })
+  }
+  for (const row of assigneeRows || []) {
+    const p: any = (row as any).profile
+    if (p?.id && p?.email && !recipients.has(p.id)) {
+      recipients.set(p.id, { id: p.id, full_name: p.full_name, email: p.email })
+    }
+  }
+
+  if (recipients.size === 0) return
+
+  const subject = `Task closed: "${task.title}"`
+
+  for (const r of recipients.values()) {
+    const html = emailWrap('Task Closed', '#22c55e',
+      `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${r.full_name}</strong>,</p>
+       <p style="margin: 0 0 16px; color: #374151;"><strong>${closerName}</strong> has closed the following task for everyone:</p>
+       <div style="background: #f0fdf4; border-radius: 10px; padding: 16px; margin: 12px 0;">
+         <p style="margin: 0 0 4px; font-size: 16px; font-weight: 700; color: #111827;">✓ ${task.title}</p>
+         <p style="margin: 0; font-size: 13px; color: #6b7280;">${task.task_id}${task.who_due_to ? ` · For: ${task.who_due_to}` : ''}</p>
+       </div>
+       <p style="margin: 0 0 16px; color: #374151; font-size: 14px;">No further action is required on this task.</p>
+       <div style="margin-top: 20px; text-align: center;">
+         <a href="${APP_URL}/my-tasks?task=${task.id}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Details</a>
+       </div>`)
+
+    await sendEmail([r.email], subject, html)
+  }
 }
 
 // ── 4. TASK REASSIGNED — notify new assignee ──
