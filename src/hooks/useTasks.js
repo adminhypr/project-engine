@@ -6,6 +6,7 @@ import { generateTaskId } from '../lib/helpers'
 import { useAuth } from './useAuth'
 import { useDocumentVisible } from '../lib/useDocumentVisible'
 import { playTaskSound } from '../lib/notificationSounds'
+import { onMessage } from '../lib/dmEventBus'
 
 // Sender-side realtime "poke": nudge an assignee's task list to refetch
 // immediately, bypassing any RLS/filter edge cases on postgres_changes for
@@ -107,6 +108,33 @@ export function useTasks() {
       }
     }
 
+    // Unread task-chat counts for the current user. One query for participant
+    // rows, then one parallel count per relevant conversation. Skips if the
+    // user has zero participant rows on task conversations.
+    const taskIds = (data || []).map(t => t.id).filter(Boolean)
+    const unreadByTaskId = new Map()
+    if (taskIds.length > 0) {
+      const { data: parts } = await supabase
+        .from('conversation_participants')
+        .select('conversation_id, last_read_at, conversations!inner(task_id, kind)')
+        .eq('user_id', profileRef.current.id)
+        .eq('conversations.kind', 'task')
+        .in('conversations.task_id', taskIds)
+
+      // Count unread per conversation in parallel
+      await Promise.all((parts || []).map(async (p) => {
+        const taskId = p.conversations?.task_id
+        if (!taskId) return
+        const { count } = await supabase
+          .from('dm_messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('conversation_id', p.conversation_id)
+          .neq('author_id', profileRef.current.id)
+          .gt('created_at', p.last_read_at || '1970-01-01')
+        unreadByTaskId.set(taskId, count || 0)
+      }))
+    }
+
     const enriched = (data || []).map(t => {
       // Enrich assignee/assigner with team_ids from profile_teams
       const enrichProfile = (p) => {
@@ -135,6 +163,7 @@ export function useTasks() {
         priority:      getPriority(t),
         comment_count: t.comments?.[0]?.count || 0,
         attachment_count: t.task_attachments?.[0]?.count || 0,
+        unread_chat_count: unreadByTaskId.get(t.id) || 0,
         assignee:      t.assignee ? { ...enrichProfile(t.assignee), manager: managerMap[t.assignee.reports_to] || null } : t.assignee,
         assigner:      enrichProfile(t.assigner),
         assignees,
@@ -275,6 +304,20 @@ export function useTasks() {
   useDocumentVisible(useCallback(() => {
     if (profileRef.current) fetchTasks(true)
   }, [fetchTasks]))
+
+  // Refresh unread_chat_count when DM messages arrive. The global
+  // useDmRealtime subscription fires dmEventBus "message" events for any
+  // conversation the user participates in — including task chats. A single
+  // debounced refetch coalesces bursts (e.g. paste-multiple messages).
+  useEffect(() => {
+    if (!profileId) return
+    let timer = null
+    const unsub = onMessage(() => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => { fetchTasks(true) }, 500)
+    })
+    return () => { if (timer) clearTimeout(timer); unsub() }
+  }, [profileId, fetchTasks])
 
   // My tasks only (primary + secondary assignee)
   const myTasks = tasks.filter(t =>
