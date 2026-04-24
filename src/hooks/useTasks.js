@@ -211,10 +211,15 @@ export function useTasks() {
         { event: '*', schema: 'public', table: 'task_assignees' },
         (payload) => {
           const row = payload.new || payload.old
-          if (!row || row.profile_id !== profileId) return
-          if (payload.eventType === 'INSERT' && !row.is_primary) {
+          if (!row) return
+          // Sound only on NEW assignments to the current user.
+          if (payload.eventType === 'INSERT' && !row.is_primary && row.profile_id === profileId) {
             playTaskSound()
           }
+          // Refetch on any task_assignees change we receive. Previously this
+          // skipped non-matching profile_ids, which broke the per-assignee
+          // completion UI: when an assigner toggled another user's checkbox,
+          // their own client never refetched and the UI stayed stuck.
           fetchTasks(true)
         }
       )
