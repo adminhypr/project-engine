@@ -5,6 +5,7 @@ import { showToast } from '../components/ui'
 import { upsertConversation, sortByLastMessage } from '../lib/conversationOrdering'
 import { onMessage } from '../lib/dmEventBus'
 import { shapeConversationRow } from '../lib/groupConversations'
+import { sortTaskChatRows } from '../lib/taskChat'
 import { isExternal } from '../lib/roleHelpers'
 
 // Row shape returned by this hook (per conversation):
@@ -16,7 +17,7 @@ import { isExternal } from '../lib/roleHelpers'
 async function fetchConversationsForUser(userId) {
   const { data: myRows, error: myErr } = await supabase
     .from('conversation_participants')
-    .select('conversation_id, last_read_at, muted, conversation:conversations!inner(id, kind, title, team_id, last_message_at, last_message_preview)')
+    .select('conversation_id, last_read_at, muted, conversation:conversations!inner(id, kind, title, team_id, task_id, last_message_at, last_message_preview)')
     .eq('user_id', userId)
   if (myErr) throw myErr
   if (!myRows || myRows.length === 0) return []
@@ -46,6 +47,19 @@ async function fetchConversationsForUser(userId) {
     .in('id', allUserIds)
   const profileById = new Map((profiles || []).map(p => [p.id, p]))
 
+  // Parent-task metadata for any kind='task' conversations. Drives the
+  // widget's Tasks section (active-only filter + title/urgency display).
+  const taskConvs = myRows.filter(r => r.conversation?.kind === 'task')
+  const taskIds = [...new Set(taskConvs.map(r => r.conversation.task_id).filter(Boolean))]
+  let taskById = new Map()
+  if (taskIds.length > 0) {
+    const { data: taskRows } = await supabase
+      .from('tasks')
+      .select('id, title, status, urgency, last_updated')
+      .in('id', taskIds)
+    taskById = new Map((taskRows || []).map(t => [t.id, t]))
+  }
+
   // Unread counts: messages created after my last_read_at, by someone else.
   const unreadByConv = new Map()
   await Promise.all(myRows.map(async (row) => {
@@ -63,6 +77,7 @@ async function fetchConversationsForUser(userId) {
     participantsByConv,
     profileById,
     unreadByConv,
+    taskById,
     myId: userId,
   }))
 
@@ -146,16 +161,30 @@ export function useConversations() {
   }, [])
 
   // Externals (Agent/Client) only ever see their team group conversations
-  // in the chat widget — no DMs, no custom groups. This is defense-in-depth:
-  // the widget itself is already gated on !isExternal in App.jsx, but this
-  // filter ensures any future caller of the hook honors the same rule.
+  // and task chats they're part of — no DMs, no custom groups. This is
+  // defense-in-depth: the widget itself is already gated on !isExternal in
+  // App.jsx, but this filter ensures any future caller of the hook honors
+  // the same rule. Task chats match migration 046 RLS (externals can
+  // participate when they're assignees).
   const visibleConversations = useMemo(() => {
     if (!isExternal(profile)) return conversations
-    return conversations.filter(c => c.kind === 'group' && c.team_id)
+    return conversations.filter(c =>
+      (c.kind === 'group' && c.team_id) || c.kind === 'task'
+    )
   }, [conversations, profile])
+
+  // Active task chats sorted by most-recent activity. Filters out tasks
+  // whose parent is Done. Uses the pure sorter from src/lib/taskChat.js.
+  const tasks = useMemo(() => {
+    const active = visibleConversations.filter(
+      c => c.kind === 'task' && c.task_status !== 'Done'
+    )
+    return sortTaskChatRows(active)
+  }, [visibleConversations])
 
   return {
     conversations: visibleConversations,
+    tasks,
     loading,
     refetch,
     createOrOpen,
