@@ -53,7 +53,8 @@ begin
   end if;
 
   -- Seed the assigner as a participant.
-  if conv_id is not null and new.assigned_by is not null then
+  -- Migration 001 declares tasks.assigned_by NOT NULL, so no nullability guard needed.
+  if conv_id is not null then
     insert into public.conversation_participants (conversation_id, user_id, last_read_at)
       values (conv_id, new.assigned_by, now())
       on conflict do nothing;
@@ -100,54 +101,34 @@ create trigger trg_sync_task_chat_participant
 
 -- ─────────────────────────────────────────────
 -- 4. RPC: first-visit enrolment for viewers
---    Checks the caller can SELECT the parent task (delegates to task
---    RLS) then upserts the caller into conversation_participants.
+--    SECURITY INVOKER — delegates task visibility to RLS rather than
+--    re-implementing it inline. The extended conversations SELECT
+--    policy below lets a task-viewer see the task chat IFF they can
+--    see the parent task; the new conversation_participants INSERT
+--    policy lets them self-enrol under the same predicate.
 -- ─────────────────────────────────────────────
 create or replace function public.ensure_task_chat_participant(tid uuid)
 returns uuid
 language plpgsql
-security definer
+-- NOTE: SECURITY INVOKER (default). Delegates task visibility to RLS.
 set search_path = public
 as $$
 declare
   caller  uuid := auth.uid();
   conv_id uuid;
-  can_see boolean;
 begin
   if caller is null then raise exception 'not authenticated'; end if;
 
-  -- Caller must be able to read the parent task via task RLS. Run the
-  -- visibility check as the caller (security invoker equivalent) by
-  -- explicitly joining the task into a visible-tasks query.
-  select true into can_see
-    from public.tasks t
-   where t.id = tid
-     and (
-       -- anyone who can see the task per existing RLS: assignee, assigner,
-       -- in task_assignees, or admin/manager of the team. Mirror the
-       -- predicates from migration 011's task SELECT policy.
-       t.assigned_to = caller
-       or t.assigned_by = caller
-       or exists (select 1 from public.task_assignees ta
-                   where ta.task_id = t.id and ta.profile_id = caller)
-       or exists (select 1 from public.profiles p
-                   where p.id = caller
-                     and (p.role = 'Admin'
-                          or exists (select 1 from public.profile_teams pt
-                                      where pt.profile_id = caller
-                                        and pt.team_id = t.team_id
-                                        and pt.role in ('Manager','TeamLeader'))))
-     );
-
-  if not coalesce(can_see, false) then
-    raise exception 'cannot view task %', tid;
-  end if;
-
-  select id into conv_id from public.conversations
-   where kind='task' and task_id = tid;
+  -- This SELECT runs under caller's RLS. The extended conversations
+  -- SELECT policy (below) lets a task-viewer see the conversation IFF
+  -- they can see the parent task. So: if this query returns a row,
+  -- the caller has legitimate task visibility.
+  select c.id into conv_id
+    from public.conversations c
+   where c.kind = 'task' and c.task_id = tid;
 
   if conv_id is null then
-    raise exception 'task chat not found for task %', tid;
+    raise exception 'cannot view task chat for % (task not found or access denied)', tid;
   end if;
 
   insert into public.conversation_participants (conversation_id, user_id, last_read_at)
@@ -191,3 +172,102 @@ on conflict do nothing;
 --    and dm_messages are already in supabase_realtime from 027/033.
 --    No change needed.
 -- ─────────────────────────────────────────────
+
+-- ─────────────────────────────────────────────
+-- 7. Extend 039/040 policies to permit kind='task'.
+--
+-- 039 restricted externals to team-group conversations. Task chat is
+-- a new category where external assignees legitimately belong
+-- (assignment IS a form of invitation).
+--
+-- Additionally, the existing participant-only SELECT rule blocks
+-- first-visit enrolment: a viewer who can see the parent task but
+-- isn't yet a participant couldn't see the conversation to enrol.
+-- The new kind='task' branch pivots on task SELECT RLS — the nested
+-- `exists (select 1 from public.tasks ...)` runs under the caller's
+-- task RLS (migration 011 + 004), which is THE authoritative task-
+-- visibility check. No drift, no duplication.
+-- ─────────────────────────────────────────────
+drop policy if exists "conversations_select_participant" on public.conversations;
+create policy "conversations_select_participant" on public.conversations
+  for select
+  using (
+    (
+      -- Either you're already a participant (existing rule)
+      public.is_conversation_participant(id)
+      -- Or the conversation is a task chat whose parent task you can read
+      or (
+        kind = 'task'
+        and task_id is not null
+        and exists (select 1 from public.tasks t where t.id = conversations.task_id)
+      )
+    )
+    and (
+      -- Non-externals: unrestricted (matches 027)
+      not public.is_external_user(auth.uid())
+      -- Externals: team groups (existing 039 rule) OR task chats
+      or (kind = 'group' and team_id is not null)
+      or kind = 'task'
+    )
+  );
+
+drop policy if exists "dm_messages_insert_participant" on public.dm_messages;
+create policy "dm_messages_insert_participant" on public.dm_messages
+  for insert
+  with check (
+    public.is_conversation_participant(conversation_id)
+    and author_id = auth.uid()
+    and (
+      not public.is_external_user(auth.uid())
+      or exists (
+        select 1 from public.conversations c
+        where c.id = conversation_id
+          and (
+            (c.kind = 'group' and c.team_id is not null)
+            or c.kind = 'task'
+          )
+      )
+    )
+  );
+
+-- 040 hardened dm_messages SELECT the same way 039 hardened INSERT.
+-- Extend it symmetrically so externals can read task-chat messages
+-- they're participants in.
+drop policy if exists "dm_messages_select_participant" on public.dm_messages;
+create policy "dm_messages_select_participant" on public.dm_messages
+  for select using (
+    public.is_conversation_participant(conversation_id)
+    and (
+      not public.is_external_user(auth.uid())
+      or exists (
+        select 1 from public.conversations c
+        where c.id = conversation_id
+          and (
+            (c.kind = 'group' and c.team_id is not null)
+            or c.kind = 'task'
+          )
+      )
+    )
+  );
+
+-- ─────────────────────────────────────────────
+-- 8. conversation_participants INSERT policy for task-chat self-enrol.
+--
+-- Lets the SECURITY INVOKER RPC (ensure_task_chat_participant) insert
+-- the caller's own row into a task-chat conversation they can read.
+-- The nested `exists` on tasks runs under the caller's task SELECT
+-- RLS, so only task-viewers can self-insert into task chats.
+-- ─────────────────────────────────────────────
+drop policy if exists "conversation_participants_insert_self_task" on public.conversation_participants;
+create policy "conversation_participants_insert_self_task" on public.conversation_participants
+  for insert
+  with check (
+    user_id = auth.uid()
+    and exists (
+      select 1 from public.conversations c
+      where c.id = conversation_id
+        and c.kind = 'task'
+        and c.task_id is not null
+        and exists (select 1 from public.tasks t where t.id = c.task_id)
+    )
+  );
