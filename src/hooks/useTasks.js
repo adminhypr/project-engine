@@ -464,17 +464,83 @@ export function useTaskActions() {
   }
 
   async function reassignTask(taskId, newAssigneeId) {
-    const { error } = await supabase
+    // Resolve the OLD primary assignee before we overwrite it. Everything
+    // below hinges on this — if we can't read the current row (RLS, missing
+    // id, etc.) we bail out rather than silently skipping cleanup.
+    const { data: current, error: fetchErr } = await supabase
+      .from('tasks')
+      .select('id, assigned_to')
+      .eq('id', taskId)
+      .maybeSingle()
+    if (fetchErr) return { ok: false, msg: fetchErr.message }
+    if (!current) return { ok: false, msg: 'Task not found' }
+
+    const oldAssigneeId = current.assigned_to
+
+    // No-op reassignment — nothing to do. Don't churn chat/assignee rows.
+    if (oldAssigneeId === newAssigneeId) return { ok: true }
+
+    // 1) Remove the OLD primary's junction row. Do this before the task
+    //    UPDATE so any downstream trigger on tasks sees a clean slate.
+    if (oldAssigneeId) {
+      const { error: delErr } = await supabase
+        .from('task_assignees')
+        .delete()
+        .eq('task_id', taskId)
+        .eq('profile_id', oldAssigneeId)
+        .eq('is_primary', true)
+      if (delErr) return { ok: false, msg: delErr.message }
+    }
+
+    // 2) Flip the task to the new primary + reset acceptance state. Also
+    //    clear email_alert_sent so the new assignee can receive red alerts.
+    const { error: updErr } = await supabase
       .from('tasks')
       .update({
         assigned_to: newAssigneeId,
         acceptance_status: 'Pending',
         decline_reason: null,
         accepted_at: null,
-        declined_at: null
+        declined_at: null,
+        email_alert_sent: false,
       })
       .eq('id', taskId)
-    if (error) return { ok: false, msg: error.message }
+    if (updErr) return { ok: false, msg: updErr.message }
+
+    // 3) Insert the NEW primary's junction row. Upsert in case the new
+    //    assignee was already a secondary — we promote them to primary.
+    const { error: insErr } = await supabase
+      .from('task_assignees')
+      .upsert(
+        { task_id: taskId, profile_id: newAssigneeId, is_primary: true },
+        { onConflict: 'task_id,profile_id' }
+      )
+    if (insErr) return { ok: false, msg: insErr.message }
+
+    // 4) Best-effort: remove the OLD assignee from the task's chat. The
+    //    sync_task_chat_participant trigger (migration 046) enrols the new
+    //    one automatically; it does NOT remove stale participants.
+    if (oldAssigneeId) {
+      try {
+        const { data: conv } = await supabase
+          .from('conversations')
+          .select('id')
+          .eq('kind', 'task')
+          .eq('task_id', taskId)
+          .maybeSingle()
+        if (conv) {
+          await supabase
+            .from('conversation_participants')
+            .delete()
+            .eq('conversation_id', conv.id)
+            .eq('user_id', oldAssigneeId)
+        }
+      } catch (e) {
+        // Chat cleanup failing shouldn't fail the reassignment.
+        console.warn('reassignTask: chat participant cleanup failed:', e)
+      }
+    }
+
     return { ok: true }
   }
 

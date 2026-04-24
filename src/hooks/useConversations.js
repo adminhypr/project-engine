@@ -129,6 +129,39 @@ export function useConversations() {
     })
   }, [profile?.id, refetch])
 
+  // Tasks realtime: when a task's status flips (e.g. to Done) or the task
+  // is deleted, the widget's Tasks section needs to re-evaluate. Without
+  // this, the row hangs around until the next message arrives or the user
+  // refreshes the page.
+  //
+  // Re-subscribe only when the set of tracked task-conversation ids
+  // changes — `conversations.length` is a cheap-enough proxy since task
+  // convs are a small subset and the handler reads from the ref anyway.
+  const taskConvCount = useMemo(
+    () => conversations.filter(c => c.kind === 'task').length,
+    [conversations]
+  )
+  useEffect(() => {
+    if (!profile?.id) return
+    if (taskConvCount === 0) return
+    const ch = supabase
+      .channel(`tasks-for-conversations-${profile.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tasks' },
+        (payload) => {
+          const id = payload.new?.id || payload.old?.id
+          if (!id) return
+          const tracked = convsRef.current.some(
+            c => c.kind === 'task' && c.task_id === id
+          )
+          if (tracked) refetch()
+        }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [profile?.id, taskConvCount, refetch])
+
   const createOrOpen = useCallback(async (otherUserId) => {
     if (!profile?.id || !otherUserId) return null
     const { data, error } = await supabase.rpc('get_or_create_dm', { other_user_id: otherUserId })

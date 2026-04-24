@@ -79,6 +79,14 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
     setEditUrgency(task.urgency || 'Med')
     setEditDueDate(task.due_date ? new Date(task.due_date).toISOString().slice(0, 16) : '')
     setEditWhoTo(task.who_due_to || '')
+    // Reset per-task composer state so attachments / drafts / mentions
+    // don't leak across task switches. commentsOpen is deliberately NOT
+    // reset — the accordion state is a session-level preference.
+    setCommentFiles([])
+    setMentionedIds([])
+    setMentionQuery(null)
+    setMentionIndex(0)
+    setNewComment('')
     setLoadingComments(true)
     getTaskComments(task.id).then(data => {
       setComments(data)
@@ -370,6 +378,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
                   onClick={startEditing}
                   className="text-slate-300 hover:text-brand-500 dark:text-slate-600 dark:hover:text-brand-400 transition-colors"
                   title="Edit task"
+                  aria-label="Edit task"
                 >
                   <Pencil size={14} />
                 </button>
@@ -382,6 +391,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
             onClick={() => setShowDeleteConfirm(true)}
             className="text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 p-1.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-500/10 transition-all duration-200 flex-shrink-0"
             title="Delete task"
+            aria-label="Delete task"
           >
             <Trash2 size={18} />
           </button>
@@ -389,6 +399,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
         <button
           onClick={onClose}
           className="text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-dark-hover transition-all duration-200 flex-shrink-0"
+          aria-label="Close task panel"
         >
           <X size={20} />
         </button>
@@ -493,6 +504,8 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
                         }}
                         className="disabled:opacity-40 disabled:cursor-not-allowed flex items-center"
                         title={canToggle ? (open ? 'Mark done' : 'Unmark done') : (row ? 'Only self, assigner, or admin can toggle' : 'Completion state loading…')}
+                        aria-label={open ? `Mark ${a.full_name || 'assignee'} done` : `Unmark ${a.full_name || 'assignee'}`}
+                        aria-pressed={!open}
                       >
                         {open
                           ? <Circle size={16} />
@@ -505,6 +518,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
                         <button
                           onClick={() => handleRemoveAssignee(a.id)}
                           className="text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
+                          aria-label={`Remove ${a.full_name || 'assignee'} from task`}
                         >
                           <X size={10} />
                         </button>

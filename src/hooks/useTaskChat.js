@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { showToast } from '../components/ui'
 import { onMessage } from '../lib/dmEventBus'
+import { useDocumentVisible } from '../lib/useDocumentVisible'
 
 // Same select shape as useConversation — keeps row shapes identical so UI
 // primitives (MessageList etc.) work on either kind of conversation.
@@ -89,6 +90,13 @@ export function useTaskChat(taskId) {
       })
     })
   }, [conversationId])
+
+  // Tab-wake resync — mirrors useConversation. If the realtime socket was
+  // asleep while the tab was hidden, a bus event may have been missed;
+  // refetch root messages so the task panel catches up on visible.
+  useDocumentVisible(useCallback(() => {
+    if (cidRef.current) fetchMessages()
+  }, [fetchMessages]))
 
   // 4. Send — object signature per plan Task 4, insert shape per
   //    useConversation (real columns: mentions, inline_images, reply_to_*).
