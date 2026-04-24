@@ -668,7 +668,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
         )}
 
         {/* Chat (primary) */}
-        {task?.id && <TaskChatSection taskId={task.id} />}
+        {task?.id && <TaskChatSection key={task.id} taskId={task.id} />}
 
         {/* Comments (accordion — collapsed by default) */}
         <div className="border-t border-slate-100 dark:border-dark-border">

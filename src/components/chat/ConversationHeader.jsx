@@ -1,4 +1,5 @@
 import { Minus, X, ClipboardList, CheckSquare, Maximize2, Minimize2, Users, ArrowUpRight } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import PresenceDot from './PresenceDot'
 import { groupDisplayName, memberCountLabel } from '../../lib/groupConversations'
 
@@ -29,6 +30,7 @@ export default function ConversationHeader({
   onAddTodo, canAddTodo,
   dragHandleProps, isMaximized, onToggleMaximize, onOpenMembers,
 }) {
+  const navigate = useNavigate()
   const isGroup = conversation?.kind === 'group'
   const isTask = conversation?.kind === 'task'
   const name = isTask
@@ -44,7 +46,17 @@ export default function ConversationHeader({
 
   const handleOpenTask = () => {
     if (!isTask || !conversation?.task_id) return
-    window.dispatchEvent(new CustomEvent('open-task', { detail: { taskId: conversation.task_id } }))
+    const taskId = conversation.task_id
+    // Dispatch for any listening page (e.g. MyTasksPage) to handle
+    // immediately and synchronously — it sets activeTaskId so the detail
+    // panel opens on the current page without a route change.
+    window.dispatchEvent(new CustomEvent('open-task', { detail: { taskId } }))
+    // Fallback: navigate to My Tasks with the task preselected. If the
+    // current page already handled the event, this just refreshes the
+    // URL params on the same page. If no page was listening, the
+    // navigate takes the user to My Tasks and MyTasksPage opens the
+    // panel via its `?task=` URL-param handler.
+    navigate(`/my-tasks?task=${taskId}`)
     // Close the widget pane so the task detail panel becomes the focus.
     onClose?.(conversation.id)
   }
