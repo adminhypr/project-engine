@@ -191,7 +191,7 @@ async function onNewComment(
        <p style="margin: 0; font-size: 14px; color: #374151; line-height: 1.5;">${emailText}</p>
      </div>
      <div style="margin-top: 20px; text-align: center;">
-       <a href="${APP_URL}/my-tasks" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
+       <a href="${APP_URL}/my-tasks?task=${task.id}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
      </div>`)
 
   const ok = await sendEmail([...recipientEmails], `${authorName} commented on "${task.title}"`, html)
