@@ -44,7 +44,7 @@ export default function TeamViewPage() {
   const savedView = loadSavedView()
   const [view, setView] = useState(() => savedView.viewMode || localStorage.getItem(VIEW_KEY) || 'list')
   const [filters, setFilters] = useState(() => savedView.filters || {})
-  const [activeTask, setActiveTask] = useState(null)
+  const [activeTaskId, setActiveTaskId] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [showBulkDelete, setShowBulkDelete] = useState(false)
   const [quickAddStatus, setQuickAddStatus] = useState(null)
@@ -74,6 +74,10 @@ export default function TeamViewPage() {
   }
 
   const viewTasks = isAdmin ? tasks : teamTasks
+
+  // Derive the live active task from the current tasks array so realtime
+  // updates (e.g. per-assignee completion checkboxes) flow into the open panel.
+  const activeTask = activeTaskId ? (viewTasks.find(t => t.id === activeTaskId) ?? null) : null
 
   // Board mode: strip status filters (columns handle it)
   const effectiveFilters = view === 'board'
@@ -256,7 +260,7 @@ export default function TeamViewPage() {
                 updateTask={updateTask}
                 deleteTask={deleteTask}
                 refetch={refetch}
-                onCardClick={setActiveTask}
+                onCardClick={(t) => setActiveTaskId(t.id)}
                 onQuickAdd={setQuickAddStatus}
               />
             </div>
@@ -350,7 +354,7 @@ export default function TeamViewPage() {
                                 </p>
                                 <TaskTable
                                   tasks={group.tasks}
-                                  onRowClick={setActiveTask}
+                                  onRowClick={(t) => setActiveTaskId(t.id)}
                                   showAssignedTo
                                   showAssignedBy
                                   selectable={isAdmin}
@@ -361,7 +365,7 @@ export default function TeamViewPage() {
                             ))
                           : <TaskTable
                               tasks={teamTasks}
-                              onRowClick={setActiveTask}
+                              onRowClick={(t) => setActiveTaskId(t.id)}
                               showAssignedTo
                               showAssignedBy
                               selectable={isAdmin}
@@ -380,8 +384,8 @@ export default function TeamViewPage() {
         {activeTask && (
           <TaskDetailPanel
             task={activeTask}
-            onClose={() => setActiveTask(null)}
-            onUpdated={() => { refetch(true); setActiveTask(null) }}
+            onClose={() => setActiveTaskId(null)}
+            onUpdated={() => { refetch(true); setActiveTaskId(null) }}
           />
         )}
 

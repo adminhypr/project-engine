@@ -22,7 +22,7 @@ export default function AdminOverviewPage() {
   const { profiles } = useProfiles()
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'list')
   const [filters, setFilters] = useState({})
-  const [activeTask, setActiveTask] = useState(null)
+  const [activeTaskId, setActiveTaskId] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [showBulkDelete, setShowBulkDelete] = useState(false)
   const [quickAddStatus, setQuickAddStatus] = useState(null)
@@ -34,6 +34,10 @@ export default function AdminOverviewPage() {
     setSelectedIds(new Set())
     setSidebarTeamFilter(null)
   }
+
+  // Derive the live active task from the current tasks array so realtime
+  // updates (e.g. per-assignee completion checkboxes) flow into the open panel.
+  const activeTask = activeTaskId ? (tasks.find(t => t.id === activeTaskId) ?? null) : null
 
   const allTeams = [...new Map(tasks.map(t => [t.team_id, t.team])).values()].filter(Boolean)
 
@@ -254,7 +258,7 @@ export default function AdminOverviewPage() {
                 updateTask={updateTask}
                 deleteTask={deleteTask}
                 refetch={refetch}
-                onCardClick={setActiveTask}
+                onCardClick={(t) => setActiveTaskId(t.id)}
                 onQuickAdd={setQuickAddStatus}
               />
             </div>
@@ -280,7 +284,7 @@ export default function AdminOverviewPage() {
                 ? <EmptyState icon="⊞" title="No tasks" description="No tasks match your filters." />
                 : <TaskTable
                     tasks={filtered}
-                    onRowClick={setActiveTask}
+                    onRowClick={(t) => setActiveTaskId(t.id)}
                     showAssignedTo
                     showAssignedBy
                     selectable
@@ -295,8 +299,8 @@ export default function AdminOverviewPage() {
         {activeTask && (
           <TaskDetailPanel
             task={activeTask}
-            onClose={() => setActiveTask(null)}
-            onUpdated={() => { refetch(true); setActiveTask(null) }}
+            onClose={() => setActiveTaskId(null)}
+            onUpdated={() => { refetch(true); setActiveTaskId(null) }}
           />
         )}
 

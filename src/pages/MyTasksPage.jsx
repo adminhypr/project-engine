@@ -27,7 +27,7 @@ export default function MyTasksPage() {
   const [tab, setTab] = useState('mine') // 'mine' | 'assigned'
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'list') // 'list' | 'board'
   const [filters,    setFilters]    = useState({ statuses: ['Not Started', 'In Progress', 'Blocked'] })
-  const [activeTask, setActiveTask] = useState(null)
+  const [activeTaskId, setActiveTaskId] = useState(null)
   const [declineTarget, setDeclineTarget] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [showBulkDelete, setShowBulkDelete] = useState(false)
@@ -39,6 +39,10 @@ export default function MyTasksPage() {
     localStorage.setItem(VIEW_KEY, v)
     setSelectedIds(new Set())
   }
+
+  // Derive the live active task from the current tasks array so realtime
+  // updates (e.g. per-assignee completion checkboxes) flow into the open panel.
+  const activeTask = activeTaskId ? (tasks.find(t => t.id === activeTaskId) ?? null) : null
 
   // Tasks I assigned to others (exclude self-assignments)
   const assignedByMe = tasks.filter(t => t.assigned_by === profile?.id && t.assigned_to !== profile?.id)
@@ -57,7 +61,7 @@ export default function MyTasksPage() {
     if (tasks.length === 0) return
     const task = tasks.find(t => t.id === openTaskId || t.task_id === openTaskId)
     if (task) {
-      setActiveTask(task)
+      setActiveTaskId(task.id)
       navigate(location.pathname, { replace: true, state: {} })
       return
     }
@@ -284,7 +288,7 @@ export default function MyTasksPage() {
                 updateTask={updateTask}
                 deleteTask={deleteTask}
                 refetch={refetch}
-                onCardClick={setActiveTask}
+                onCardClick={(t) => setActiveTaskId(t.id)}
                 onQuickAdd={setQuickAddStatus}
               />
             </div>
@@ -315,7 +319,7 @@ export default function MyTasksPage() {
                   />
                 : <TaskTable
                     tasks={filtered}
-                    onRowClick={setActiveTask}
+                    onRowClick={(t) => setActiveTaskId(t.id)}
                     showAssignedBy={tab === 'mine'}
                     showAssignedTo={tab === 'assigned'}
                     showAcceptanceActions={tab === 'mine'}
@@ -333,8 +337,8 @@ export default function MyTasksPage() {
         {activeTask && (
           <TaskDetailPanel
             task={activeTask}
-            onClose={() => setActiveTask(null)}
-            onUpdated={() => { refetch(true); setActiveTask(null) }}
+            onClose={() => setActiveTaskId(null)}
+            onUpdated={() => { refetch(true); setActiveTaskId(null) }}
           />
         )}
 
