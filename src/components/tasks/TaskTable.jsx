@@ -95,8 +95,11 @@ export default function TaskTable({
                     <span
                       className="shrink-0 inline-flex items-center gap-0.5 text-indigo-500 dark:text-indigo-400"
                       title={`${task.unread_chat_count} unread chat message${task.unread_chat_count === 1 ? '' : 's'}`}
+                      role="img"
+                      aria-label={`${task.unread_chat_count} unread chat message${task.unread_chat_count === 1 ? '' : 's'}`}
                     >
-                      <MessagesSquare size={12} />
+                      <MessagesSquare size={12} aria-hidden="true" />
+                      <span className="sr-only">{`${task.unread_chat_count} unread chat message${task.unread_chat_count === 1 ? '' : 's'}`}</span>
                     </span>
                   )}
                 </div>

@@ -375,6 +375,9 @@ export default function NotificationBell({ onTaskClick }) {
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="relative p-2.5 rounded-xl bg-white dark:bg-dark-card border border-slate-200 dark:border-dark-border shadow-soft text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-dark-hover transition-all duration-200"
+        aria-label={count > 0 ? `Notifications, ${count} unread` : 'Notifications'}
+        aria-haspopup="true"
+        aria-expanded={isOpen}
       >
         <Bell size={18} />
         {count > 0 && (
@@ -439,6 +442,7 @@ export default function NotificationBell({ onTaskClick }) {
                     <button
                       onClick={(e) => { e.stopPropagation(); dismiss(n.id) }}
                       className="p-1 rounded-lg text-slate-300 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-dark-hover transition-colors flex-shrink-0"
+                      aria-label="Dismiss notification"
                     >
                       <X size={12} />
                     </button>
