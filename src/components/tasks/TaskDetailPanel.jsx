@@ -435,31 +435,30 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
                         ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300'
                         : 'bg-slate-100 text-slate-600 dark:bg-dark-hover dark:text-slate-300'
                       }`}>
-                      {row && (
-                        <button
-                          type="button"
-                          disabled={!canToggle}
-                          onClick={async () => {
-                            let res
-                            if (isMe) {
-                              res = open ? await markSelfComplete(task.id) : await unmarkSelf(task.id)
-                            } else {
-                              res = await setAssigneeCompletion(task.id, a.id, open)
-                            }
-                            if (res?.error) {
-                              showToast(res.error.message || 'Failed to update', 'error')
-                            }
-                            // Realtime subscription on task_assignees refetches automatically;
-                            // don't call onUpdated() here because parent handlers close the panel.
-                          }}
-                          className="disabled:opacity-40 disabled:cursor-not-allowed flex items-center"
-                          title={canToggle ? (open ? 'Mark done' : 'Unmark done') : 'Only self, assigner, or admin can toggle'}
-                        >
-                          {open
-                            ? <Circle size={12} />
-                            : <CheckCircle2 size={12} className="text-emerald-600 dark:text-emerald-400" />}
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        disabled={!canToggle}
+                        onClick={async () => {
+                          if (!row) return
+                          let res
+                          if (isMe) {
+                            res = open ? await markSelfComplete(task.id) : await unmarkSelf(task.id)
+                          } else {
+                            res = await setAssigneeCompletion(task.id, a.id, open)
+                          }
+                          if (res?.error) {
+                            showToast(res.error.message || 'Failed to update', 'error')
+                          }
+                          // Realtime subscription on task_assignees refetches automatically;
+                          // don't call onUpdated() here because parent handlers close the panel.
+                        }}
+                        className="disabled:opacity-40 disabled:cursor-not-allowed flex items-center"
+                        title={canToggle ? (open ? 'Mark done' : 'Unmark done') : (row ? 'Only self, assigner, or admin can toggle' : 'Completion state loading…')}
+                      >
+                        {open
+                          ? <Circle size={16} />
+                          : <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400" />}
+                      </button>
                       <span className={open ? '' : 'line-through opacity-70'}>
                         {a.full_name || 'Unknown'}
                       </span>
