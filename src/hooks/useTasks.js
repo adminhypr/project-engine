@@ -32,7 +32,7 @@ const TASK_SELECT_FULL = `
   *,
   assignee:profiles!tasks_assigned_to_fkey(id, full_name, email, role, team_id, reports_to, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
   assigner:profiles!tasks_assigned_by_fkey(id, full_name, email, role, team_id, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
-  task_assignees!task_assignees_task_id_fkey(profile_id, is_primary, profile:profiles!task_assignees_profile_id_fkey(id, full_name, avatar_url)),
+  task_assignees!task_assignees_task_id_fkey(profile_id, is_primary, completed_at, completed_by, profile:profiles!task_assignees_profile_id_fkey(id, full_name, avatar_url)),
   team:teams(id, name),
   comments(count),
   task_attachments(count)
@@ -85,7 +85,7 @@ export function useTasks() {
     if (usedFallback && data?.length) {
       const { data: taData } = await supabase
         .from('task_assignees')
-        .select('task_id, profile_id, is_primary, profile:profiles(id, full_name, avatar_url)')
+        .select('task_id, profile_id, is_primary, completed_at, completed_by, profile:profiles(id, full_name, avatar_url)')
       if (taData) {
         for (const ta of taData) {
           if (!assigneesMap[ta.task_id]) assigneesMap[ta.task_id] = []
@@ -126,6 +126,8 @@ export function useTasks() {
         full_name: ta.profile?.full_name,
         avatar_url: ta.profile?.avatar_url,
         is_primary: ta.is_primary,
+        completed_at: ta.completed_at ?? null,
+        completed_by: ta.completed_by ?? null,
       }))
 
       return {

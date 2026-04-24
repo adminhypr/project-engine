@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { X, Send, Check, RefreshCw, Pencil, Trash2, Plus, Users, Paperclip } from 'lucide-react'
+import { X, Send, Check, RefreshCw, Pencil, Trash2, Plus, Users, Paperclip, CheckCircle2, Circle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useTaskActions, useProfiles } from '../../hooks/useTasks'
 import { useAuth } from '../../hooks/useAuth'
@@ -13,12 +13,22 @@ import ReassignModal from './ReassignModal'
 import DeleteConfirmModal from './DeleteConfirmModal'
 import { FilePickerInput, AttachmentList, CommentAttachments, hasOversizedFiles } from '../ui/FileAttachment'
 import { useAttachments } from '../../hooks/useAttachments'
+import { useTaskAssigneeCompletion } from '../../hooks/useTaskAssigneeCompletion'
+import { completionProgress, canForceClose, isAssigneeOpen } from '../../lib/perAssigneeCompletion'
 
 export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   const { profile, isAdmin, isManager } = useAuth()
   const { updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask, deleteTask, addAssignee, removeAssignee } = useTaskActions()
   const { profiles: allProfiles } = useProfiles({ excludeExternals: true })
   const { uploadAttachments, getTaskAttachments, getAttachmentUrl, deleteAttachment } = useAttachments()
+  const { markSelfComplete, unmarkSelf, setAssigneeCompletion, forceClose } = useTaskAssigneeCompletion()
+
+  // Per-assignee completion state (sourced from the raw task_assignees join).
+  const completionMap = Object.fromEntries(
+    (task?.task_assignees || []).map(r => [r.profile_id, r])
+  )
+  const { done: doneCount, total: totalCount } = completionProgress(task?.task_assignees)
+  const canClose = canForceClose(task, profile?.id, isAdmin)
 
   const [status,   setStatus]   = useState(task?.status || 'Not Started')
   const [notes,    setNotes]    = useState(task?.notes || '')
@@ -413,23 +423,56 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
           {[
             { label: 'Assigned To',   value: (
               <div className="flex flex-wrap items-center gap-1.5">
-                {(task.assignees?.length > 0 ? task.assignees : [{ id: task.assigned_to, full_name: task.assignee?.full_name, is_primary: true }]).map(a => (
-                  <span key={a.id} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium
-                    ${a.is_primary
-                      ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300'
-                      : 'bg-slate-100 text-slate-600 dark:bg-dark-hover dark:text-slate-300'
-                    }`}>
-                    {a.full_name || 'Unknown'}
-                    {!a.is_primary && isOwner && (
+                {(task.assignees?.length > 0 ? task.assignees : [{ id: task.assigned_to, full_name: task.assignee?.full_name, is_primary: true }]).map(a => {
+                  const row = completionMap[a.id]
+                  const open = row ? isAssigneeOpen(row) : true
+                  const isMe = a.id === profile?.id
+                  const canToggleOther = isAdmin || task.assigned_by === profile?.id
+                  const canToggle = !!row && (isMe || canToggleOther)
+                  return (
+                    <span key={a.id} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium
+                      ${a.is_primary
+                        ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300'
+                        : 'bg-slate-100 text-slate-600 dark:bg-dark-hover dark:text-slate-300'
+                      }`}>
                       <button
-                        onClick={() => handleRemoveAssignee(a.id)}
-                        className="text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
+                        type="button"
+                        disabled={!canToggle}
+                        onClick={async () => {
+                          if (!row) return
+                          let res
+                          if (isMe) {
+                            res = open ? await markSelfComplete(task.id) : await unmarkSelf(task.id)
+                          } else {
+                            res = await setAssigneeCompletion(task.id, a.id, open)
+                          }
+                          if (res?.error) {
+                            showToast(res.error.message || 'Failed to update', 'error')
+                          }
+                          // Realtime subscription on task_assignees refetches automatically;
+                          // don't call onUpdated() here because parent handlers close the panel.
+                        }}
+                        className="disabled:opacity-40 disabled:cursor-not-allowed flex items-center"
+                        title={canToggle ? (open ? 'Mark done' : 'Unmark done') : (row ? 'Only self, assigner, or admin can toggle' : 'Completion state loading…')}
                       >
-                        <X size={10} />
+                        {open
+                          ? <Circle size={16} />
+                          : <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400" />}
                       </button>
-                    )}
-                  </span>
-                ))}
+                      <span className={open ? '' : 'line-through opacity-70'}>
+                        {a.full_name || 'Unknown'}
+                      </span>
+                      {!a.is_primary && isOwner && (
+                        <button
+                          onClick={() => handleRemoveAssignee(a.id)}
+                          className="text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
+                        >
+                          <X size={10} />
+                        </button>
+                      )}
+                    </span>
+                  )
+                })}
                 {isOwner && (
                   showAddAssignee ? (
                     <select
@@ -455,6 +498,26 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
                       <Plus size={10} /> Add
                     </button>
                   )
+                )}
+                {totalCount > 1 && doneCount < totalCount && canClose && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!confirm(`Close this task for ${totalCount - doneCount} remaining assignee(s)?`)) return
+                      const { error } = await forceClose(task.id)
+                      if (error) {
+                        showToast(error.message || 'Failed to close task', 'error')
+                      } else {
+                        showToast('Task closed for everyone')
+                        // Realtime subscription refetches; don't call onUpdated()
+                        // here because parent handlers close the panel.
+                      }
+                    }}
+                    className="btn btn-secondary text-[10px] py-0.5 px-2"
+                    title="Mark this task done for all remaining assignees"
+                  >
+                    Close for everyone ({doneCount}/{totalCount} done)
+                  </button>
                 )}
               </div>
             )},
