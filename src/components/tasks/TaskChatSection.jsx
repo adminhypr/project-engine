@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MessagesSquare } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
@@ -6,6 +6,7 @@ import { useTaskChat } from '../../hooks/useTaskChat'
 import { useConversations } from '../../hooks/useConversations'
 import MessageList from '../chat/MessageList'
 import ChatComposer from '../chat/ChatComposer'
+import ThreadPanel from '../chat/ThreadPanel'
 import { ReplyProvider } from '../chat/ReplyContext'
 import { showToast } from '../ui'
 
@@ -75,6 +76,11 @@ export default function TaskChatSection({ taskId }) {
 
   const scrollRootRef = useRef(null)
 
+  // Thread state — Slack-style split column inside the Chat section. We
+  // store the full root message (mirrors ChatWidget's `threadRoot`) so
+  // ThreadPanel can render the canonical root without an extra fetch.
+  const [threadRoot, setThreadRoot] = useState(null)
+
   // Soft-delete own task-chat messages. Mirrors useConversation.deleteMessage
   // — update dm_messages.deleted_at and let realtime propagate the change.
   const handleDelete = useCallback(async (messageId) => {
@@ -106,37 +112,64 @@ export default function TaskChatSection({ taskId }) {
         the outer panel. 380px is close to the DM widget's compact pane.
       */}
       <ReplyProvider scrollToMessage={() => {}}>
-        <div className="flex flex-col h-[380px] border-t border-slate-100 dark:border-dark-border bg-white dark:bg-dark-card">
-          {messages.length === 0 && !loading ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
-              <MessagesSquare size={32} className="text-slate-300 dark:text-slate-600 mb-2" />
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                No messages yet. Start the conversation.
-              </p>
-            </div>
-          ) : (
-            <MessageList
-              messages={messages}
-              myId={profile?.id}
-              loading={loading}
-              hasMore={false}
-              onLoadMore={() => {}}
-              onDelete={handleDelete}
-              otherLastReadAt={null}
-              groupReaders={null}
-              scrollRootRef={scrollRootRef}
-              conversationId={conversationId}
-              profileLookup={profileLookup}
-              onOpenThread={undefined}
-            />
-          )}
-          {conversationId && (
-            <ChatComposer
-              conversationId={conversationId}
-              onSend={handleSend}
-              onTyping={() => {}}
+        {/*
+          Outer flex shell: row when a thread is open (Slack-style split),
+          column otherwise. Fixed 380px height so inner panes scroll
+          independently of the task detail panel.
+        */}
+        <div
+          className={`flex h-[380px] border-t border-slate-100 dark:border-dark-border bg-white dark:bg-dark-card ${
+            threadRoot ? 'flex-row' : 'flex-col'
+          }`}
+        >
+          {/* Main conversation column */}
+          <div
+            className={`flex flex-col min-h-0 ${
+              threadRoot ? 'flex-1 min-w-0' : 'w-full'
+            }`}
+          >
+            {messages.length === 0 && !loading ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
+                <MessagesSquare size={32} className="text-slate-300 dark:text-slate-600 mb-2" />
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  No messages yet. Start the conversation.
+                </p>
+              </div>
+            ) : (
+              <MessageList
+                messages={messages}
+                myId={profile?.id}
+                loading={loading}
+                hasMore={false}
+                onLoadMore={() => {}}
+                onDelete={handleDelete}
+                otherLastReadAt={null}
+                groupReaders={null}
+                scrollRootRef={scrollRootRef}
+                conversationId={conversationId}
+                profileLookup={profileLookup}
+                onOpenThread={conversation ? setThreadRoot : undefined}
+              />
+            )}
+            {conversationId && (
+              <ChatComposer
+                conversationId={conversationId}
+                onSend={handleSend}
+                onTyping={() => {}}
+                mentionablePeople={mentionablePeople}
+                placeholder="Message about this task…"
+              />
+            )}
+          </div>
+          {/* Thread column — slides in on the right when open. ThreadPanel
+              already paints its own left border + brand accent bar. */}
+          {threadRoot && conversation && (
+            <ThreadPanel
+              conversation={conversation}
+              rootMessage={threadRoot}
+              onClose={() => setThreadRoot(null)}
               mentionablePeople={mentionablePeople}
-              placeholder="Message about this task…"
+              profileLookup={profileLookup}
             />
           )}
         </div>
