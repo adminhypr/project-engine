@@ -6,15 +6,14 @@ import { replaceEmoticons } from '../../lib/emoticons'
 import parse from 'html-react-parser'
 import DOMPurify from 'dompurify'
 import { isHtmlContent } from '../../lib/contentFormat'
-
-const INLINE_MD_RE = /\*\*([^*\n]+?)\*\*|_([^_\n]+?)_|\[([^\]\n]+?)\]\(([^)\n]+?)\)|(https?:\/\/[^\s<>]+)/g
+import { INLINE_MD_RE_SOURCE, INLINE_MD_FLAGS, normalizeUrlMatch } from '../../lib/linkify'
 
 function renderInlineMarkdown(text, keyBase) {
   const nodes = []
   let lastIndex = 0
   let match
   let k = 0
-  const re = new RegExp(INLINE_MD_RE.source, 'g')
+  const re = new RegExp(INLINE_MD_RE_SOURCE, INLINE_MD_FLAGS)
   while ((match = re.exec(text)) !== null) {
     if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index))
     if (match[1] !== undefined) {
@@ -35,23 +34,21 @@ function renderInlineMarkdown(text, keyBase) {
         </a>
       )
     } else if (match[5] !== undefined) {
-      // Bare URL — strip trailing punctuation people often put after URLs
-      const raw = match[5]
-      const trailing = raw.match(/[.,!?;:)\]}'">]+$/)
-      const url = trailing ? raw.slice(0, raw.length - trailing[0].length) : raw
-      const after = trailing ? trailing[0] : ''
+      // Bare URL (protocol, www., or allowlisted-TLD bare domain).
+      // Strip trailing punctuation; prepend https:// if no protocol present.
+      const { displayUrl, href, trailing } = normalizeUrlMatch(match[5])
       nodes.push(
         <a
           key={`${keyBase}-${k++}`}
-          href={url}
+          href={href}
           target="_blank"
           rel="noopener noreferrer"
           className="text-brand-600 dark:text-brand-400 hover:underline break-all"
         >
-          {url}
+          {displayUrl}
         </a>
       )
-      if (after) nodes.push(after)
+      if (trailing) nodes.push(trailing)
     }
     lastIndex = re.lastIndex
   }

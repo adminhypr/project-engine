@@ -58,4 +58,61 @@ describe('RichContentRenderer URL auto-linking', () => {
     const link = getByText('https://example.com')
     expect(link.tagName).toBe('A')
   })
+
+  it('linkifies bare domain google.com', () => {
+    const { getByText } = render(
+      <RichContentRenderer content="visit google.com today" mentions={[]} />
+    )
+    const link = getByText('google.com')
+    expect(link.tagName).toBe('A')
+    expect(link.getAttribute('href')).toBe('https://google.com')
+  })
+
+  it('linkifies www.example.com (prepends https)', () => {
+    const { getByText } = render(
+      <RichContentRenderer content="see www.example.com" mentions={[]} />
+    )
+    const link = getByText('www.example.com')
+    expect(link.getAttribute('href')).toBe('https://www.example.com')
+  })
+
+  it('linkifies bare domain with path: github.com/user/repo', () => {
+    const { getByText } = render(
+      <RichContentRenderer content="check github.com/anthropics/claude-code" mentions={[]} />
+    )
+    const link = getByText('github.com/anthropics/claude-code')
+    expect(link.getAttribute('href')).toBe('https://github.com/anthropics/claude-code')
+  })
+
+  it('linkifies case-insensitive: Google.com', () => {
+    const { getByText } = render(
+      <RichContentRenderer content="Go to Google.com" mentions={[]} />
+    )
+    const link = getByText('Google.com')
+    expect(link.getAttribute('href')).toMatch(/https:\/\/Google\.com/i)
+  })
+
+  it('does NOT linkify version numbers like v1.2.3', () => {
+    const { container } = render(
+      <RichContentRenderer content="install v1.2.3" mentions={[]} />
+    )
+    const links = container.querySelectorAll('a')
+    expect(links.length).toBe(0)
+  })
+
+  it('does NOT linkify filenames like report.txt', () => {
+    const { container } = render(
+      <RichContentRenderer content="see report.txt attached" mentions={[]} />
+    )
+    const links = container.querySelectorAll('a')
+    expect(links.length).toBe(0)
+  })
+
+  it('strips trailing comma from bare domain', () => {
+    const { getByText } = render(
+      <RichContentRenderer content="visit google.com, it's good" mentions={[]} />
+    )
+    const link = getByText('google.com')
+    expect(link.getAttribute('href')).toBe('https://google.com')
+  })
 })

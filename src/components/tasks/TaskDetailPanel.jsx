@@ -16,38 +16,35 @@ import { useAttachments } from '../../hooks/useAttachments'
 import { useTaskAssigneeCompletion } from '../../hooks/useTaskAssigneeCompletion'
 import { completionProgress, canForceClose, isAssigneeOpen } from '../../lib/perAssigneeCompletion'
 import TaskChatSection from './TaskChatSection'
+import { URL_RE_SOURCE, URL_RE_FLAGS, normalizeUrlMatch } from '../../lib/linkify'
 
-// Auto-linkify bare https:// URLs in plain text segments. Mirrors the URL
-// handling in RichContentRenderer so comments get the same behaviour without
-// pulling in the full rich content pipeline (task comments have no stored
-// mentions array, so RichContentRenderer would lose the existing @mention
-// highlight).
-const URL_RE = /(https?:\/\/[^\s<>]+)/g
+// Auto-linkify URLs in plain text segments. Mirrors the URL handling in
+// RichContentRenderer so comments get the same behaviour (bare domains,
+// www.-prefixed, and full protocol URLs) without pulling in the full rich
+// content pipeline (task comments have no stored mentions array, so
+// RichContentRenderer would lose the existing @mention highlight).
 function linkifyText(text, keyBase) {
   if (!text) return text
   const nodes = []
   let lastIndex = 0
   let match
   let k = 0
-  const re = new RegExp(URL_RE.source, 'g')
+  const re = new RegExp(URL_RE_SOURCE, URL_RE_FLAGS)
   while ((match = re.exec(text)) !== null) {
     if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index))
-    const raw = match[1]
-    const trailing = raw.match(/[.,!?;:)\]}'">]+$/)
-    const url = trailing ? raw.slice(0, raw.length - trailing[0].length) : raw
-    const after = trailing ? trailing[0] : ''
+    const { displayUrl, href, trailing } = normalizeUrlMatch(match[1])
     nodes.push(
       <a
         key={`${keyBase}-${k++}`}
-        href={url}
+        href={href}
         target="_blank"
         rel="noopener noreferrer"
         className="text-brand-600 dark:text-brand-400 hover:underline break-all"
       >
-        {url}
+        {displayUrl}
       </a>
     )
-    if (after) nodes.push(after)
+    if (trailing) nodes.push(trailing)
     lastIndex = re.lastIndex
   }
   if (lastIndex < text.length) nodes.push(text.slice(lastIndex))
