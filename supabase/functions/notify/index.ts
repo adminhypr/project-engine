@@ -8,6 +8,7 @@
 //   2. Table: tasks, Events: UPDATE → POST to this function URL with payload
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { corsHeadersFor, verifyWebhookSecret } from '../_shared/security.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -270,8 +271,19 @@ async function onTaskReassigned(record: any, oldRecord: any) {
 
 // ── Webhook handler ───────────────────────────
 Deno.serve(async (req) => {
+  const cors = corsHeadersFor(req)
+
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: cors })
+  }
+
+  // H-1: verify shared secret (soft-fail if env var not set).
+  if (!verifyWebhookSecret(req)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: cors })
+  }
+
   if (!RESEND_API_KEY) {
-    return new Response(JSON.stringify({ error: 'RESEND_API_KEY not configured' }), { status: 500 })
+    return new Response(JSON.stringify({ error: 'RESEND_API_KEY not configured' }), { status: 500, headers: cors })
   }
 
   try {
@@ -281,7 +293,7 @@ Deno.serve(async (req) => {
     // INSERT — new task assigned
     if (type === 'INSERT' && record) {
       await onTaskCreated(record)
-      return new Response(JSON.stringify({ action: 'task_created', ok: true }), { status: 200 })
+      return new Response(JSON.stringify({ action: 'task_created', ok: true }), { status: 200, headers: cors })
     }
 
     // UPDATE — check what changed
@@ -306,12 +318,12 @@ Deno.serve(async (req) => {
         actions.push('reassigned')
       }
 
-      return new Response(JSON.stringify({ actions, ok: true }), { status: 200 })
+      return new Response(JSON.stringify({ actions, ok: true }), { status: 200, headers: cors })
     }
 
-    return new Response(JSON.stringify({ action: 'none', ok: true }), { status: 200 })
+    return new Response(JSON.stringify({ action: 'none', ok: true }), { status: 200, headers: cors })
   } catch (err) {
     console.error('Notify error:', err)
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500 })
+    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: cors })
   }
 })

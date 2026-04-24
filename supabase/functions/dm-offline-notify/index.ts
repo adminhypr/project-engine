@@ -4,6 +4,7 @@
 // Enforces a 15-minute debounce per (recipient, conversation) via dm_email_log.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { corsHeadersFor, verifyWebhookSecret } from '../_shared/security.ts'
 
 const SUPABASE_URL      = Deno.env.get('SUPABASE_URL')!
 const SERVICE_KEY       = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -152,9 +153,23 @@ function escapeHtml(str: string) {
     .replace(/>/g, '&gt;')
 }
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  const cors = corsHeadersFor(req)
+
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: cors })
+  }
+
+  // H-1: verify shared secret (soft-fail if env var not set).
+  if (!verifyWebhookSecret(req)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+
   const result = await flush()
   return new Response(JSON.stringify(result), {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...cors, 'Content-Type': 'application/json' },
   })
 })
