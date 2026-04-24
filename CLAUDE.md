@@ -111,8 +111,9 @@ Schema in `supabase/migrations/` (apply in filename order):
 - **042_access_hardening.sql** — Security audit follow-up. Blocks self-privilege escalation (BEFORE UPDATE trigger on `profiles` — no user can change their own `role`/`team_id`/`reports_to`/`email`). Drops a stray anon-readable `"Profiles select open"` policy. Scopes `profile_teams` / `teams` reads to self + member teams. Adds caller-is-member check to `get_or_create_team_group`. Adds missing `WITH CHECK` on `conversations` UPDATE.
 - **043_fix_team_group_service_context.sql** — Allows trigger / service-role paths through `get_or_create_team_group` (the caller-is-member check from 042 broke auto-enrolment triggers).
 
-**Per-assignee completion (044):**
+**Per-assignee completion (044–045):**
 - **044_per_assignee_completion.sql** — Adds `completed_at` / `completed_by` on `task_assignees`. Aggregate trigger writes an `all_assignees_completed` note-event and flips `tasks.status='Done'` only when every assignee has `completed_at` set. Unmarking after aggregate-close reopens the task to `In Progress`. RPC `force_close_task(tid)` lets assigner / admin / any assignee close a task for everyone and writes a `force_closed` audit entry with the prior status preserved. Column-restriction is enforced by a BEFORE UPDATE trigger (`guard_task_assignee_self_update`) since RLS can't limit UPDATE to specific columns.
+- **045_sync_assignees_on_task_done.sql** — AFTER UPDATE trigger on `tasks` that back-fills `task_assignees.completed_at` / `completed_by` for any still-open rows whenever `status` transitions to `Done`. Closes a gap where a manual status-dropdown change to Done left per-assignee checkboxes empty. Reuses the `app.force_close` GUC from 044 to bypass the per-row self-update guard. Idempotent on the aggregate + force-close paths.
 
 ## Supabase Edge Functions
 
