@@ -108,31 +108,20 @@ export function useTasks() {
       }
     }
 
-    // Unread task-chat counts for the current user. One query for participant
-    // rows, then one parallel count per relevant conversation. Skips if the
-    // user has zero participant rows on task conversations.
+    // Unread task-chat counts for the current user. One RPC call instead
+    // of N+1 HEAD count queries (migration 052).
     const taskIds = (data || []).map(t => t.id).filter(Boolean)
     const unreadByTaskId = new Map()
     if (taskIds.length > 0) {
-      const { data: parts } = await supabase
-        .from('conversation_participants')
-        .select('conversation_id, last_read_at, conversations!inner(task_id, kind)')
-        .eq('user_id', profileRef.current.id)
-        .eq('conversations.kind', 'task')
-        .in('conversations.task_id', taskIds)
-
-      // Count unread per conversation in parallel
-      await Promise.all((parts || []).map(async (p) => {
-        const taskId = p.conversations?.task_id
-        if (!taskId) return
-        const { count } = await supabase
-          .from('dm_messages')
-          .select('id', { count: 'exact', head: true })
-          .eq('conversation_id', p.conversation_id)
-          .neq('author_id', profileRef.current.id)
-          .gt('created_at', p.last_read_at || '1970-01-01')
-        unreadByTaskId.set(taskId, count || 0)
-      }))
+      const { data: unreadRows, error: unreadErr } = await supabase
+        .rpc('get_user_task_chat_unreads', { p_task_ids: taskIds })
+      if (unreadErr) {
+        console.warn('get_user_task_chat_unreads failed:', unreadErr.message)
+      } else if (unreadRows) {
+        for (const r of unreadRows) {
+          unreadByTaskId.set(r.task_id, Number(r.unread_count) || 0)
+        }
+      }
     }
 
     const enriched = (data || []).map(t => {
