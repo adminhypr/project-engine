@@ -8,7 +8,7 @@ import { groupDisplayName } from '../lib/groupConversations'
 export function useContactList(searchQuery = '') {
   const { profile, presence } = useAuth()
   const { profiles, loading: profilesLoading } = useProfiles()
-  const { conversations, loading: convsLoading, createOrOpen, createGroup, markRead } = useConversations()
+  const { conversations, tasks, loading: convsLoading, createOrOpen, createGroup, markRead } = useConversations()
 
   const sections = useMemo(() => {
     if (!profile?.id) return { recent: [], teammates: [], company: [] }
@@ -35,6 +35,7 @@ export function useContactList(searchQuery = '') {
   return {
     sections: filtered,
     groups,
+    tasks: tasks || [],
     conversations,
     presence: presence || new Map(),
     loading: profilesLoading || convsLoading,

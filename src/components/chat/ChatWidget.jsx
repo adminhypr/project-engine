@@ -48,7 +48,7 @@ export default function ChatWidget() {
     return () => window.removeEventListener('pe-chat-open', handler)
   }, [])
 
-  const { sections, groups, conversations, presence, createOrOpen, createGroup, markRead } =
+  const { sections, groups, tasks, conversations, presence, createOrOpen, createGroup, markRead } =
     useContactList(query)
   const total = sumUnread(conversations)
 
@@ -183,9 +183,11 @@ export default function ChatWidget() {
             <ContactList
               sections={sections}
               groups={groups}
+              tasks={tasks}
               presence={presence}
               onOpen={openOne}
               onOpenGroup={openConversationById}
+              onOpenTask={openConversationById}
               onCreateGroup={() => setCreateGroupOpen(true)}
             />
           </ChatPanel>
