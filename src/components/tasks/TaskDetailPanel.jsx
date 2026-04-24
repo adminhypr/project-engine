@@ -15,6 +15,7 @@ import { FilePickerInput, AttachmentList, CommentAttachments, hasOversizedFiles 
 import { useAttachments } from '../../hooks/useAttachments'
 import { useTaskAssigneeCompletion } from '../../hooks/useTaskAssigneeCompletion'
 import { completionProgress, canForceClose, isAssigneeOpen } from '../../lib/perAssigneeCompletion'
+import TaskChatSection from './TaskChatSection'
 
 export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   const { profile, isAdmin, isManager } = useAuth()
@@ -55,6 +56,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   const [showAddAssignee, setShowAddAssignee] = useState(false)
   const [attachments, setAttachments] = useState([])
   const [commentFiles, setCommentFiles] = useState([])
+  const [commentsOpen, setCommentsOpen] = useState(false)
 
   const canEdit = isAdmin ||
     (task?.team_id && profile?.team_roles?.[task.team_id] === 'Manager') ||
@@ -86,6 +88,39 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
       if (res.ok) setAttachments(res.attachments)
     })
   }, [task?.id])
+
+  // Auto-scroll the panel to the Chat section on open when the viewer has
+  // unread messages in this task's chat. We query conversation_participants
+  // to compare last_read_at vs. the conversation's last_message_at; scroll
+  // only when strictly behind.
+  useEffect(() => {
+    if (!task?.id || !profile?.id) return
+    let cancelled = false
+    ;(async () => {
+      const { data: conv } = await supabase
+        .from('conversations')
+        .select('id, last_message_at')
+        .eq('kind', 'task')
+        .eq('task_id', task.id)
+        .maybeSingle()
+      if (cancelled || !conv?.last_message_at) return
+      const { data: part } = await supabase
+        .from('conversation_participants')
+        .select('last_read_at')
+        .eq('conversation_id', conv.id)
+        .eq('user_id', profile.id)
+        .maybeSingle()
+      if (cancelled || !part) return
+      const hasUnread = new Date(part.last_read_at || 0) < new Date(conv.last_message_at)
+      if (hasUnread) {
+        setTimeout(() => {
+          document.getElementById('task-chat-section')
+            ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 200)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [task?.id, profile?.id])
 
   function startEditing() {
     setEditTitle(task.title || '')
@@ -628,12 +663,22 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
           </div>
         )}
 
-        {/* Comments */}
-        <div className="px-5 py-4">
-          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
-            Comments ({comments.length})
-          </p>
+        {/* Chat (primary) */}
+        {task?.id && <TaskChatSection taskId={task.id} />}
 
+        {/* Comments (accordion — collapsed by default) */}
+        <div className="border-t border-slate-100 dark:border-dark-border">
+          <button
+            type="button"
+            onClick={() => setCommentsOpen(v => !v)}
+            className="w-full flex items-center justify-between px-4 sm:px-5 py-3 text-left hover:bg-slate-50 dark:hover:bg-dark-hover"
+          >
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              {commentsOpen ? '▼' : '▶'} Comments &amp; posts{comments.length > 0 ? ` (${comments.length})` : ''}
+            </span>
+          </button>
+          {commentsOpen && (
+        <div className="px-5 pb-4">
           <div className="flex gap-2 items-end mb-4 relative">
             <div className="flex-1 relative">
               <textarea
@@ -715,6 +760,8 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
                 </div>
               ))}
             </div>
+          )}
+        </div>
           )}
         </div>
 
