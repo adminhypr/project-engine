@@ -15,6 +15,44 @@ import { FilePickerInput, AttachmentList, CommentAttachments, hasOversizedFiles 
 import { useAttachments } from '../../hooks/useAttachments'
 import { useTaskAssigneeCompletion } from '../../hooks/useTaskAssigneeCompletion'
 import { completionProgress, canForceClose, isAssigneeOpen } from '../../lib/perAssigneeCompletion'
+import TaskChatSection from './TaskChatSection'
+
+// Auto-linkify bare https:// URLs in plain text segments. Mirrors the URL
+// handling in RichContentRenderer so comments get the same behaviour without
+// pulling in the full rich content pipeline (task comments have no stored
+// mentions array, so RichContentRenderer would lose the existing @mention
+// highlight).
+const URL_RE = /(https?:\/\/[^\s<>]+)/g
+function linkifyText(text, keyBase) {
+  if (!text) return text
+  const nodes = []
+  let lastIndex = 0
+  let match
+  let k = 0
+  const re = new RegExp(URL_RE.source, 'g')
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index))
+    const raw = match[1]
+    const trailing = raw.match(/[.,!?;:)\]}'">]+$/)
+    const url = trailing ? raw.slice(0, raw.length - trailing[0].length) : raw
+    const after = trailing ? trailing[0] : ''
+    nodes.push(
+      <a
+        key={`${keyBase}-${k++}`}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-brand-600 dark:text-brand-400 hover:underline break-all"
+      >
+        {url}
+      </a>
+    )
+    if (after) nodes.push(after)
+    lastIndex = re.lastIndex
+  }
+  if (lastIndex < text.length) nodes.push(text.slice(lastIndex))
+  return nodes
+}
 
 export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   const { profile, isAdmin, isManager } = useAuth()
@@ -55,6 +93,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   const [showAddAssignee, setShowAddAssignee] = useState(false)
   const [attachments, setAttachments] = useState([])
   const [commentFiles, setCommentFiles] = useState([])
+  const [commentsOpen, setCommentsOpen] = useState(false)
 
   const canEdit = isAdmin ||
     (task?.team_id && profile?.team_roles?.[task.team_id] === 'Manager') ||
@@ -77,6 +116,14 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
     setEditUrgency(task.urgency || 'Med')
     setEditDueDate(task.due_date ? new Date(task.due_date).toISOString().slice(0, 16) : '')
     setEditWhoTo(task.who_due_to || '')
+    // Reset per-task composer state so attachments / drafts / mentions
+    // don't leak across task switches. commentsOpen is deliberately NOT
+    // reset — the accordion state is a session-level preference.
+    setCommentFiles([])
+    setMentionedIds([])
+    setMentionQuery(null)
+    setMentionIndex(0)
+    setNewComment('')
     setLoadingComments(true)
     getTaskComments(task.id).then(data => {
       setComments(data)
@@ -86,6 +133,43 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
       if (res.ok) setAttachments(res.attachments)
     })
   }, [task?.id])
+
+  // Auto-scroll the panel to the Chat section on open when the viewer has
+  // unread messages in this task's chat. We query conversation_participants
+  // to compare last_read_at vs. the conversation's last_message_at; scroll
+  // only when strictly behind.
+  useEffect(() => {
+    if (!task?.id || !profile?.id) return
+    let cancelled = false
+    let timerId = null
+    ;(async () => {
+      const { data: conv } = await supabase
+        .from('conversations')
+        .select('id, last_message_at')
+        .eq('kind', 'task')
+        .eq('task_id', task.id)
+        .maybeSingle()
+      if (cancelled || !conv?.last_message_at) return
+      const { data: part } = await supabase
+        .from('conversation_participants')
+        .select('last_read_at')
+        .eq('conversation_id', conv.id)
+        .eq('user_id', profile.id)
+        .maybeSingle()
+      if (cancelled || !part) return
+      const hasUnread = new Date(part.last_read_at || 0) < new Date(conv.last_message_at)
+      if (hasUnread) {
+        timerId = setTimeout(() => {
+          document.getElementById('task-chat-section')
+            ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        }, 200)
+      }
+    })()
+    return () => {
+      cancelled = true
+      if (timerId) clearTimeout(timerId)
+    }
+  }, [task?.id, profile?.id])
 
   function startEditing() {
     setEditTitle(task.title || '')
@@ -331,6 +415,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
                   onClick={startEditing}
                   className="text-slate-300 hover:text-brand-500 dark:text-slate-600 dark:hover:text-brand-400 transition-colors"
                   title="Edit task"
+                  aria-label="Edit task"
                 >
                   <Pencil size={14} />
                 </button>
@@ -343,6 +428,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
             onClick={() => setShowDeleteConfirm(true)}
             className="text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 p-1.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-500/10 transition-all duration-200 flex-shrink-0"
             title="Delete task"
+            aria-label="Delete task"
           >
             <Trash2 size={18} />
           </button>
@@ -350,6 +436,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
         <button
           onClick={onClose}
           className="text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-dark-hover transition-all duration-200 flex-shrink-0"
+          aria-label="Close task panel"
         >
           <X size={20} />
         </button>
@@ -454,6 +541,8 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
                         }}
                         className="disabled:opacity-40 disabled:cursor-not-allowed flex items-center"
                         title={canToggle ? (open ? 'Mark done' : 'Unmark done') : (row ? 'Only self, assigner, or admin can toggle' : 'Completion state loading…')}
+                        aria-label={open ? `Mark ${a.full_name || 'assignee'} done` : `Unmark ${a.full_name || 'assignee'}`}
+                        aria-pressed={!open}
                       >
                         {open
                           ? <Circle size={16} />
@@ -466,6 +555,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
                         <button
                           onClick={() => handleRemoveAssignee(a.id)}
                           className="text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400"
+                          aria-label={`Remove ${a.full_name || 'assignee'} from task`}
                         >
                           <X size={10} />
                         </button>
@@ -628,12 +718,22 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
           </div>
         )}
 
-        {/* Comments */}
-        <div className="px-5 py-4">
-          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
-            Comments ({comments.length})
-          </p>
+        {/* Chat (primary) */}
+        {task?.id && <TaskChatSection key={task.id} taskId={task.id} />}
 
+        {/* Comments (accordion — collapsed by default) */}
+        <div className="border-t border-slate-100 dark:border-dark-border">
+          <button
+            type="button"
+            onClick={() => setCommentsOpen(v => !v)}
+            className="w-full flex items-center justify-between px-4 sm:px-5 py-3 text-left hover:bg-slate-50 dark:hover:bg-dark-hover"
+          >
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              {commentsOpen ? '▼' : '▶'} Comments &amp; posts{comments.length > 0 ? ` (${comments.length})` : ''}
+            </span>
+          </button>
+          {commentsOpen && (
+        <div className="px-5 pb-4">
           <div className="flex gap-2 items-end mb-4 relative">
             <div className="flex-1 relative">
               <textarea
@@ -701,11 +801,11 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
                     <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{c.author?.full_name}</span>
                     <span className="text-xs text-slate-400 dark:text-slate-500">{formatDate(c.created_at)}</span>
                   </div>
-                  <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">
+                  <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap break-words">
                     {c.content.split(/(@\w[\w\s]*?\w)(?=\s|$|[.,!?])/).map((part, i) =>
                       part.startsWith('@')
                         ? <span key={i} className="text-brand-600 dark:text-brand-400 font-semibold">{part}</span>
-                        : part
+                        : <span key={i}>{linkifyText(part, `c${c.id}-${i}`)}</span>
                     )}
                   </p>
                   <CommentAttachments
@@ -715,6 +815,8 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
                 </div>
               ))}
             </div>
+          )}
+        </div>
           )}
         </div>
 

@@ -8,6 +8,7 @@
 //   Table: hub_mentions, Events: INSERT → POST to this function URL
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { corsHeadersFor, verifyWebhookSecret } from '../_shared/security.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -126,8 +127,19 @@ async function getMessagePreview(entityType: string, entityId: string): Promise<
 }
 
 Deno.serve(async (req) => {
+  const cors = corsHeadersFor(req)
+
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: cors })
+  }
+
+  // H-1: verify shared secret (soft-fail if env var not set).
+  if (!verifyWebhookSecret(req)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: cors })
+  }
+
   if (!RESEND_API_KEY) {
-    return new Response(JSON.stringify({ error: 'RESEND_API_KEY not configured' }), { status: 500 })
+    return new Response(JSON.stringify({ error: 'RESEND_API_KEY not configured' }), { status: 500, headers: cors })
   }
 
   try {
@@ -135,12 +147,12 @@ Deno.serve(async (req) => {
     const { type, record } = payload
 
     if (type !== 'INSERT' || !record) {
-      return new Response(JSON.stringify({ action: 'none', ok: true }), { status: 200 })
+      return new Response(JSON.stringify({ action: 'none', ok: true }), { status: 200, headers: cors })
     }
 
     // Skip self-mentions
     if (record.mentioned_by === record.mentioned_user) {
-      return new Response(JSON.stringify({ action: 'self_mention_skipped', ok: true }), { status: 200 })
+      return new Response(JSON.stringify({ action: 'self_mention_skipped', ok: true }), { status: 200, headers: cors })
     }
 
     // Fetch mentioned user's email
@@ -150,7 +162,7 @@ Deno.serve(async (req) => {
       .eq('id', record.mentioned_user)
       .single()
     if (!mentionedUser?.email) {
-      return new Response(JSON.stringify({ action: 'no_email', ok: true }), { status: 200 })
+      return new Response(JSON.stringify({ action: 'no_email', ok: true }), { status: 200, headers: cors })
     }
 
     // Fetch mentioner's name
@@ -184,9 +196,9 @@ Deno.serve(async (req) => {
 
     await sendEmail([mentionedUser.email], `${mentionerName} mentioned you in ${hubName}`, html)
 
-    return new Response(JSON.stringify({ action: 'mention_email_sent', ok: true }), { status: 200 })
+    return new Response(JSON.stringify({ action: 'mention_email_sent', ok: true }), { status: 200, headers: cors })
   } catch (err) {
     console.error('Hub mention notify error:', err)
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500 })
+    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: cors })
   }
 })

@@ -115,6 +115,10 @@ Schema in `supabase/migrations/` (apply in filename order):
 - **044_per_assignee_completion.sql** — Adds `completed_at` / `completed_by` on `task_assignees`. Aggregate trigger writes an `all_assignees_completed` note-event and flips `tasks.status='Done'` only when every assignee has `completed_at` set. Unmarking after aggregate-close reopens the task to `In Progress`. RPC `force_close_task(tid)` lets assigner / admin / any assignee close a task for everyone and writes a `force_closed` audit entry with the prior status preserved. Column-restriction is enforced by a BEFORE UPDATE trigger (`guard_task_assignee_self_update`) since RLS can't limit UPDATE to specific columns.
 - **045_sync_assignees_on_task_done.sql** — AFTER UPDATE trigger on `tasks` that back-fills `task_assignees.completed_at` / `completed_by` for any still-open rows whenever `status` transitions to `Done`. Closes a gap where a manual status-dropdown change to Done left per-assignee checkboxes empty. Reuses the `app.force_close` GUC from 044 to bypass the per-row self-update guard. Idempotent on the aggregate + force-close paths.
 
+**Task chat (046–047):**
+- **046_task_chat.sql** — Adds `conversations.task_id` + extends the `kind` CHECK with `'task'`. AFTER INSERT triggers on `tasks` and `task_assignees` create a conversation eagerly and seed the assigner/assignees as participants. SECURITY INVOKER RPC `ensure_task_chat_participant(tid)` lets a task viewer self-enrol on first open by delegating to the task SELECT RLS. Migration 039's external-user conversation policies extended to permit `kind='task'` for externals who are participants. Backfill creates conversations + participants for every existing task.
+- **047_task_chat_mention_enrol.sql** — AFTER INSERT trigger on `dm_messages` parses the `mentions` jsonb array (shape `{user_id, display_name}`) and auto-enrols any mentioned user as a participant in a `kind='task'` conversation, unless they're an external (Agent/Client) who isn't already a participant.
+
 ## Supabase Edge Functions
 
 All are Deno-based and use Resend for email delivery:

@@ -9,17 +9,43 @@
  *
  *   row: {
  *     conversation_id, last_read_at, muted,
- *     conversation: { id, kind, title, team_id, last_message_at, last_message_preview }
+ *     conversation: { id, kind, title, team_id, task_id, last_message_at, last_message_preview }
  *   }
  *   participantsByConv: Map<convId, string[]>  (all user ids, including me)
  *   profileById:        Map<userId, profile>
  *   unreadByConv:       Map<convId, number>
+ *   taskById:           Map<taskId, { id, title, status, urgency, last_updated }>  (optional; for kind='task')
  *   myId:               string
  */
-export function shapeConversationRow({ row, participantsByConv, profileById, unreadByConv, myId }) {
+export function shapeConversationRow({ row, participantsByConv, profileById, unreadByConv, taskById, myId }) {
   const conv = row.conversation
   const kind = conv.kind
   const allIds = participantsByConv.get(row.conversation_id) || []
+  if (kind === 'task') {
+    const participants = allIds
+      .map(id => profileById.get(id))
+      .filter(Boolean)
+    const task = (taskById && conv.task_id) ? taskById.get(conv.task_id) || null : null
+    return {
+      id: row.conversation_id,
+      kind: 'task',
+      title: task?.title || conv.title || 'Task',
+      team_id: conv.team_id || null,
+      last_message_at: conv.last_message_at,
+      last_message_preview: conv.last_message_preview,
+      last_read_at: row.last_read_at,
+      muted: row.muted,
+      other_user_id: null,
+      other_profile: null,
+      participants,
+      unread: unreadByConv.get(row.conversation_id) || 0,
+      task_id: conv.task_id || null,
+      task_title: task?.title ?? null,
+      task_status: task?.status ?? null,
+      task_urgency: task?.urgency ?? null,
+      task_last_updated: task?.last_updated ?? null,
+    }
+  }
   if (kind === 'group') {
     const participants = allIds
       .map(id => profileById.get(id))

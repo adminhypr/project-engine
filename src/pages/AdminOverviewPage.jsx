@@ -39,6 +39,17 @@ export default function AdminOverviewPage() {
   // updates (e.g. per-assignee completion checkboxes) flow into the open panel.
   const activeTask = activeTaskId ? (tasks.find(t => t.id === activeTaskId) ?? null) : null
 
+  // Listen for the chat widget's "Open task →" link. The header dispatches a
+  // window-level open-task CustomEvent with { taskId }; we set activeTaskId so
+  // the detail panel opens on top of the current page.
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.detail?.taskId) setActiveTaskId(e.detail.taskId)
+    }
+    window.addEventListener('open-task', handler)
+    return () => window.removeEventListener('open-task', handler)
+  }, [])
+
   const allTeams = [...new Map(tasks.map(t => [t.team_id, t.team])).values()].filter(Boolean)
 
   // Team breakdown keyed by team_id for sidebar interactivity

@@ -62,6 +62,19 @@ export function StaggerItem({ children, className = '' }) {
 
 // ── Slide panel (right side) ─────────────────
 export function SlidePanel({ isOpen, onClose, children, width = 520 }) {
+  const previousFocusRef = useRef(null)
+
+  useEffect(() => {
+    if (isOpen) {
+      // Panel is opening — remember who had focus
+      previousFocusRef.current = document.activeElement
+    } else if (previousFocusRef.current instanceof HTMLElement) {
+      // Panel is closing — restore focus to the trigger
+      previousFocusRef.current.focus()
+      previousFocusRef.current = null
+    }
+  }, [isOpen])
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -144,6 +157,19 @@ export function ShakeReject({ children, trigger }) {
 
 // ── Modal wrapper ────────────────────────────
 export function ModalWrapper({ isOpen, onClose, children }) {
+  const previousFocusRef = useRef(null)
+
+  useEffect(() => {
+    if (isOpen) {
+      // Modal is opening — remember who had focus
+      previousFocusRef.current = document.activeElement
+    } else if (previousFocusRef.current instanceof HTMLElement) {
+      // Modal is closing — restore focus to the trigger
+      previousFocusRef.current.focus()
+      previousFocusRef.current = null
+    }
+  }, [isOpen])
+
   return (
     <AnimatePresence>
       {isOpen && (

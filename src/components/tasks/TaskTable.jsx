@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import { PRIORITY_COLORS } from '../../lib/priority'
 import { formatDateShort } from '../../lib/helpers'
 import { PriorityBadge, UrgencyBadge, StatusBadge } from '../ui'
-import { MessageSquare, Check, X, Calendar, Clock, User, ChevronRight } from 'lucide-react'
+import { MessageSquare, MessagesSquare, Check, X, Calendar, Clock, User, ChevronRight } from 'lucide-react'
 import { TaskIcon } from '../ui/TaskIconPicker'
 import { completionProgress } from '../../lib/perAssigneeCompletion'
 
@@ -89,6 +89,17 @@ export default function TaskTable({
                       title={`${progress.done} of ${progress.total} assignees completed`}
                     >
                       {progress.done}/{progress.total}
+                    </span>
+                  )}
+                  {task.unread_chat_count > 0 && (
+                    <span
+                      className="shrink-0 inline-flex items-center gap-0.5 text-indigo-500 dark:text-indigo-400"
+                      title={`${task.unread_chat_count} unread chat message${task.unread_chat_count === 1 ? '' : 's'}`}
+                      role="img"
+                      aria-label={`${task.unread_chat_count} unread chat message${task.unread_chat_count === 1 ? '' : 's'}`}
+                    >
+                      <MessagesSquare size={12} aria-hidden="true" />
+                      <span className="sr-only">{`${task.unread_chat_count} unread chat message${task.unread_chat_count === 1 ? '' : 's'}`}</span>
                     </span>
                   )}
                 </div>

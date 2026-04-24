@@ -6,6 +6,7 @@ import { generateTaskId } from '../lib/helpers'
 import { useAuth } from './useAuth'
 import { useDocumentVisible } from '../lib/useDocumentVisible'
 import { playTaskSound } from '../lib/notificationSounds'
+import { onMessage } from '../lib/dmEventBus'
 
 // Sender-side realtime "poke": nudge an assignee's task list to refetch
 // immediately, bypassing any RLS/filter edge cases on postgres_changes for
@@ -107,6 +108,33 @@ export function useTasks() {
       }
     }
 
+    // Unread task-chat counts for the current user. One query for participant
+    // rows, then one parallel count per relevant conversation. Skips if the
+    // user has zero participant rows on task conversations.
+    const taskIds = (data || []).map(t => t.id).filter(Boolean)
+    const unreadByTaskId = new Map()
+    if (taskIds.length > 0) {
+      const { data: parts } = await supabase
+        .from('conversation_participants')
+        .select('conversation_id, last_read_at, conversations!inner(task_id, kind)')
+        .eq('user_id', profileRef.current.id)
+        .eq('conversations.kind', 'task')
+        .in('conversations.task_id', taskIds)
+
+      // Count unread per conversation in parallel
+      await Promise.all((parts || []).map(async (p) => {
+        const taskId = p.conversations?.task_id
+        if (!taskId) return
+        const { count } = await supabase
+          .from('dm_messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('conversation_id', p.conversation_id)
+          .neq('author_id', profileRef.current.id)
+          .gt('created_at', p.last_read_at || '1970-01-01')
+        unreadByTaskId.set(taskId, count || 0)
+      }))
+    }
+
     const enriched = (data || []).map(t => {
       // Enrich assignee/assigner with team_ids from profile_teams
       const enrichProfile = (p) => {
@@ -135,6 +163,7 @@ export function useTasks() {
         priority:      getPriority(t),
         comment_count: t.comments?.[0]?.count || 0,
         attachment_count: t.task_attachments?.[0]?.count || 0,
+        unread_chat_count: unreadByTaskId.get(t.id) || 0,
         assignee:      t.assignee ? { ...enrichProfile(t.assignee), manager: managerMap[t.assignee.reports_to] || null } : t.assignee,
         assigner:      enrichProfile(t.assigner),
         assignees,
@@ -275,6 +304,20 @@ export function useTasks() {
   useDocumentVisible(useCallback(() => {
     if (profileRef.current) fetchTasks(true)
   }, [fetchTasks]))
+
+  // Refresh unread_chat_count when DM messages arrive. The global
+  // useDmRealtime subscription fires dmEventBus "message" events for any
+  // conversation the user participates in — including task chats. A single
+  // debounced refetch coalesces bursts (e.g. paste-multiple messages).
+  useEffect(() => {
+    if (!profileId) return
+    let timer = null
+    const unsub = onMessage(() => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => { fetchTasks(true) }, 500)
+    })
+    return () => { if (timer) clearTimeout(timer); unsub() }
+  }, [profileId, fetchTasks])
 
   // My tasks only (primary + secondary assignee)
   const myTasks = tasks.filter(t =>
@@ -421,17 +464,83 @@ export function useTaskActions() {
   }
 
   async function reassignTask(taskId, newAssigneeId) {
-    const { error } = await supabase
+    // Resolve the OLD primary assignee before we overwrite it. Everything
+    // below hinges on this — if we can't read the current row (RLS, missing
+    // id, etc.) we bail out rather than silently skipping cleanup.
+    const { data: current, error: fetchErr } = await supabase
+      .from('tasks')
+      .select('id, assigned_to')
+      .eq('id', taskId)
+      .maybeSingle()
+    if (fetchErr) return { ok: false, msg: fetchErr.message }
+    if (!current) return { ok: false, msg: 'Task not found' }
+
+    const oldAssigneeId = current.assigned_to
+
+    // No-op reassignment — nothing to do. Don't churn chat/assignee rows.
+    if (oldAssigneeId === newAssigneeId) return { ok: true }
+
+    // 1) Remove the OLD primary's junction row. Do this before the task
+    //    UPDATE so any downstream trigger on tasks sees a clean slate.
+    if (oldAssigneeId) {
+      const { error: delErr } = await supabase
+        .from('task_assignees')
+        .delete()
+        .eq('task_id', taskId)
+        .eq('profile_id', oldAssigneeId)
+        .eq('is_primary', true)
+      if (delErr) return { ok: false, msg: delErr.message }
+    }
+
+    // 2) Flip the task to the new primary + reset acceptance state. Also
+    //    clear email_alert_sent so the new assignee can receive red alerts.
+    const { error: updErr } = await supabase
       .from('tasks')
       .update({
         assigned_to: newAssigneeId,
         acceptance_status: 'Pending',
         decline_reason: null,
         accepted_at: null,
-        declined_at: null
+        declined_at: null,
+        email_alert_sent: false,
       })
       .eq('id', taskId)
-    if (error) return { ok: false, msg: error.message }
+    if (updErr) return { ok: false, msg: updErr.message }
+
+    // 3) Insert the NEW primary's junction row. Upsert in case the new
+    //    assignee was already a secondary — we promote them to primary.
+    const { error: insErr } = await supabase
+      .from('task_assignees')
+      .upsert(
+        { task_id: taskId, profile_id: newAssigneeId, is_primary: true },
+        { onConflict: 'task_id,profile_id' }
+      )
+    if (insErr) return { ok: false, msg: insErr.message }
+
+    // 4) Best-effort: remove the OLD assignee from the task's chat. The
+    //    sync_task_chat_participant trigger (migration 046) enrols the new
+    //    one automatically; it does NOT remove stale participants.
+    if (oldAssigneeId) {
+      try {
+        const { data: conv } = await supabase
+          .from('conversations')
+          .select('id')
+          .eq('kind', 'task')
+          .eq('task_id', taskId)
+          .maybeSingle()
+        if (conv) {
+          await supabase
+            .from('conversation_participants')
+            .delete()
+            .eq('conversation_id', conv.id)
+            .eq('user_id', oldAssigneeId)
+        }
+      } catch (e) {
+        // Chat cleanup failing shouldn't fail the reassignment.
+        console.warn('reassignTask: chat participant cleanup failed:', e)
+      }
+    }
+
     return { ok: true }
   }
 

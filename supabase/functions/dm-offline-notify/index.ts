@@ -4,6 +4,7 @@
 // Enforces a 15-minute debounce per (recipient, conversation) via dm_email_log.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { corsHeadersFor, verifyWebhookSecret } from '../_shared/security.ts'
 
 const SUPABASE_URL      = Deno.env.get('SUPABASE_URL')!
 const SERVICE_KEY       = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -43,7 +44,8 @@ async function flush() {
       id, message_id, conversation_id, recipient_id, enqueued_at,
       message:dm_messages(id, content, author_id, created_at,
                          author:profiles!dm_messages_author_id_fkey(id, full_name)),
-      recipient:profiles!pending_dm_emails_recipient_id_fkey(id, email, full_name)
+      recipient:profiles!pending_dm_emails_recipient_id_fkey(id, email, full_name),
+      conversation:conversations!pending_dm_emails_conversation_id_fkey(id, kind, task_id)
     `)
     .is('sent_at', null)
     .is('skipped_reason', null)
@@ -116,11 +118,20 @@ async function flush() {
         <div>${escapeHtml(r.message.content || '')}</div>
       </div>`
     ).join('')
+
+    // Task chats deep-link to the task detail panel; DM/group open the app root
+    // (the chat widget handles routing to the conversation from there).
+    const conv: any = (first as any).conversation
+    const linkUrl = conv?.kind === 'task' && conv?.task_id
+      ? `${APP_URL}/my-tasks?task=${conv.task_id}`
+      : APP_URL
+    const linkLabel = conv?.kind === 'task' ? 'Open Task' : 'Open Project Engine'
+
     const html = `
       <div style="font-family:system-ui,sans-serif;max-width:560px;">
         <h2 style="font-size:16px;">You have unread messages from ${escapeHtml(senderName)}</h2>
         ${lines}
-        <p><a href="${APP_URL}" style="color:#3b82f6;">Open Project Engine</a></p>
+        <p><a href="${linkUrl}" style="color:#3b82f6;">${linkLabel}</a></p>
       </div>`
 
     const ok = await sendEmail(recipient.email, subject, html)
@@ -152,9 +163,23 @@ function escapeHtml(str: string) {
     .replace(/>/g, '&gt;')
 }
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  const cors = corsHeadersFor(req)
+
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: cors })
+  }
+
+  // H-1: verify shared secret (soft-fail if env var not set).
+  if (!verifyWebhookSecret(req)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+
   const result = await flush()
   return new Response(JSON.stringify(result), {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...cors, 'Content-Type': 'application/json' },
   })
 })

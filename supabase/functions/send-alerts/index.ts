@@ -4,6 +4,7 @@
 // Schedule: every 2 hours — npx supabase functions schedule send-alerts --cron "0 */2 * * *"
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { corsHeadersFor, verifyWebhookSecret } from '../_shared/security.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -231,9 +232,20 @@ async function sendDueReminders(): Promise<number> {
 }
 
 // ── Main handler ──────────────────────────────
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  const cors = corsHeadersFor(req)
+
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: cors })
+  }
+
+  // H-1: verify shared secret (soft-fail if env var not set).
+  if (!verifyWebhookSecret(req)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: cors })
+  }
+
   if (!RESEND_API_KEY) {
-    return new Response(JSON.stringify({ error: 'RESEND_API_KEY not configured' }), { status: 500 })
+    return new Response(JSON.stringify({ error: 'RESEND_API_KEY not configured' }), { status: 500, headers: cors })
   }
 
   const redSent = await sendRedAlerts()
@@ -243,5 +255,5 @@ Deno.serve(async () => {
     red_alerts_sent: redSent,
     due_reminders_sent: reminderSent,
     timestamp: new Date().toISOString()
-  }), { status: 200 })
+  }), { status: 200, headers: cors })
 })

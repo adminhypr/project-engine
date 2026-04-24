@@ -28,8 +28,22 @@ function getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInv
     })
   })
 
-  // Hub @mentions
+  // @mentions — combined hub + task chat. Each entry is tagged with `source`.
   hubMentions.forEach(m => {
+    if (m.source === 'task_chat') {
+      notifications.push({
+        id: `task-mention-${m.id}`,
+        type: 'task-mention',
+        icon: <AtSign size={14} />,
+        color: 'text-brand-600 bg-brand-500/15',
+        title: `${m.author?.full_name || 'Someone'} mentioned you`,
+        body: `in ${m.task_title || 'a task'} chat`,
+        taskChatTaskId: m.task_id,
+        time: m.created_at,
+        priority: 0.2,
+      })
+      return
+    }
     const moduleLabel = { chat: 'Campfire', message: 'Message Board', message_reply: 'Message Board', check_in_response: 'Check-ins', todo_note: 'To-dos', todo_comment: 'To-dos', todo_list: 'To-dos' }[m.entity_type] || 'Hub'
     notifications.push({
       id: `hub-mention-${m.id}`,
@@ -166,7 +180,7 @@ function getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInv
   // internal-only noise. Keep this list in sync with any new hub/to-do
   // notification types added above.
   const isExternal = profile?.role === 'Agent' || profile?.role === 'Client'
-  const externalAllowedTypes = new Set(['hub-invite', 'hub-mention', 'dm'])
+  const externalAllowedTypes = new Set(['hub-invite', 'hub-mention', 'task-mention', 'dm'])
   const filtered = isExternal
     ? notifications.filter(n => externalAllowedTypes.has(n.type))
     : notifications
@@ -340,7 +354,13 @@ export default function NotificationBell({ onTaskClick }) {
   function handleNotifClick(n) {
     dismiss(n.id)
     if (n.mentionId) markMentionSeen(n.mentionId)
-    if (n.convId) {
+    if (n.taskChatTaskId) {
+      // Open the task detail (which hosts the task chat). Seen-tracking
+      // for task-chat mentions happens implicitly: once the viewer opens
+      // the chat, mark_conversation_read updates last_read_at, which the
+      // mentions query filters against.
+      window.dispatchEvent(new CustomEvent('open-task', { detail: { taskId: n.taskChatTaskId } }))
+    } else if (n.convId) {
       window.dispatchEvent(new CustomEvent('pe-chat-open', { detail: { conversationId: n.convId } }))
     } else if (n.link) {
       navigate(n.link)
@@ -355,6 +375,9 @@ export default function NotificationBell({ onTaskClick }) {
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="relative p-2.5 rounded-xl bg-white dark:bg-dark-card border border-slate-200 dark:border-dark-border shadow-soft text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-dark-hover transition-all duration-200"
+        aria-label={count > 0 ? `Notifications, ${count} unread` : 'Notifications'}
+        aria-haspopup="true"
+        aria-expanded={isOpen}
       >
         <Bell size={18} />
         {count > 0 && (
@@ -419,6 +442,7 @@ export default function NotificationBell({ onTaskClick }) {
                     <button
                       onClick={(e) => { e.stopPropagation(); dismiss(n.id) }}
                       className="p-1 rounded-lg text-slate-300 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-dark-hover transition-colors flex-shrink-0"
+                      aria-label="Dismiss notification"
                     >
                       <X size={12} />
                     </button>

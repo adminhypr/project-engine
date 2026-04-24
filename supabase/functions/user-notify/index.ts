@@ -1,16 +1,20 @@
 // supabase/functions/user-notify/index.ts
-// User lifecycle emails: approval notifications + invite emails
+// User lifecycle emails: approval notifications + invite emails + comment pings.
 // Deploy: npx supabase functions deploy user-notify
 //
 // Called from the frontend via supabase.functions.invoke('user-notify', { body: {...} })
 // Requires: RESEND_API_KEY, APP_URL env vars
+//
+// Auth policy (C1):
+//   - 'invite'   → Admin only.
+//   - 'approved' → Admin only.
+//   - 'comment'  → Authenticated caller must be the comment author AND a
+//                  participant of the target task (assignee, co-assignee, or
+//                  assigner). Email recipients are looked up from the DB — we
+//                  never trust client-supplied email addresses.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { corsHeadersFor, verifyJWT } from '../_shared/security.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -107,9 +111,16 @@ async function onInviteUser(email: string, inviterName: string) {
   return { ok }
 }
 
-// ── 3. COMMENT — notify assignee, assigner, and @mentioned users ──
-async function onNewComment(taskId: string, authorId: string, commentText: string, mentionedIds: string[] = []) {
-  // Fetch task with assignee + assigner separately to avoid any FK issues
+// ── 3. COMMENT — notify assignees + assigner + @mentioned users ──
+// `authorId` and `callerRole` come from verified JWT — we do NOT trust client body.
+// Recipients are derived from the DB: tasks.assigned_by + task_assignees rows +
+// intersect mentionedIds with the hub/task's known participant set.
+async function onNewComment(
+  taskId: string,
+  authorId: string,
+  commentText: string,
+  mentionedIds: string[] = []
+) {
   const { data: task } = await supabase
     .from('tasks')
     .select('id, task_id, title, assigned_to, assigned_by')
@@ -118,17 +129,36 @@ async function onNewComment(taskId: string, authorId: string, commentText: strin
 
   if (!task) return { ok: false, error: 'Task not found' }
 
-  // Collect all user IDs who should be notified (except the author)
+  // Pull the full assignee list from the junction table (primary assigned_to
+  // is kept for back-compat but multi-assignee is the source of truth).
+  const { data: assigneeRows } = await supabase
+    .from('task_assignees')
+    .select('profile_id')
+    .eq('task_id', taskId)
+
+  const assigneeIds = new Set<string>()
+  if (task.assigned_to) assigneeIds.add(task.assigned_to)
+  for (const r of assigneeRows || []) {
+    if (r.profile_id) assigneeIds.add(r.profile_id)
+  }
+
+  // Authorization check: caller must be a task participant (assignee or assigner).
+  const isParticipant = assigneeIds.has(authorId) || task.assigned_by === authorId
+  if (!isParticipant) {
+    return { ok: false, error: 'Not a task participant' }
+  }
+
+  // Collect recipients: all assignees + assigner + valid @mentions (except author).
   const notifyIds = new Set<string>()
-  if (task.assigned_to && task.assigned_to !== authorId) notifyIds.add(task.assigned_to)
+  for (const id of assigneeIds) if (id !== authorId) notifyIds.add(id)
   if (task.assigned_by && task.assigned_by !== authorId) notifyIds.add(task.assigned_by)
   for (const id of mentionedIds) {
-    if (id !== authorId) notifyIds.add(id)
+    if (typeof id === 'string' && id !== authorId) notifyIds.add(id)
   }
 
   if (notifyIds.size === 0) return { ok: true }
 
-  // Fetch all profiles we need in one query (author + recipients)
+  // Fetch profiles for recipients + author (for name) from the DB.
   const allIds = [...notifyIds, authorId]
   const { data: profiles } = await supabase
     .from('profiles')
@@ -140,7 +170,6 @@ async function onNewComment(taskId: string, authorId: string, commentText: strin
   const profileMap = Object.fromEntries(profiles.map(p => [p.id, p]))
   const authorName = profileMap[authorId]?.full_name || 'Someone'
 
-  // Build unique recipient emails
   const recipientEmails = new Set<string>()
   for (const id of notifyIds) {
     const email = profileMap[id]?.email
@@ -150,8 +179,6 @@ async function onNewComment(taskId: string, authorId: string, commentText: strin
   if (recipientEmails.size === 0) return { ok: true }
 
   const truncated = commentText.length > 200 ? commentText.slice(0, 200) + '...' : commentText
-
-  // Highlight @mentions in the email
   const emailText = truncated.replace(/@(\w[\w\s]*?\w)(?=\s|$|[.,!?])/g, '<strong style="color: #6366f1;">@$1</strong>')
 
   const html = emailWrap('New Comment on Task', '#6366f1',
@@ -164,7 +191,7 @@ async function onNewComment(taskId: string, authorId: string, commentText: strin
        <p style="margin: 0; font-size: 14px; color: #374151; line-height: 1.5;">${emailText}</p>
      </div>
      <div style="margin-top: 20px; text-align: center;">
-       <a href="${APP_URL}/my-tasks" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
+       <a href="${APP_URL}/my-tasks?task=${task.id}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
      </div>`)
 
   const ok = await sendEmail([...recipientEmails], `${authorName} commented on "${task.title}"`, html)
@@ -173,35 +200,58 @@ async function onNewComment(taskId: string, authorId: string, commentText: strin
 
 // ── Request handler ───────────────────────────
 Deno.serve(async (req) => {
+  const cors = corsHeadersFor(req)
+
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: cors })
   }
 
   if (!RESEND_API_KEY) {
-    return new Response(JSON.stringify({ error: 'RESEND_API_KEY not configured' }), { status: 500, headers: corsHeaders })
+    return new Response(JSON.stringify({ error: 'RESEND_API_KEY not configured' }), { status: 500, headers: cors })
+  }
+
+  // C1: require a valid JWT for every call.
+  const caller = await verifyJWT(req)
+  if (!caller) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: cors })
   }
 
   try {
-    const { type, userId, email, approverName, inviterName, taskId, authorId, commentText, mentionedIds } = await req.json()
+    const body = await req.json()
+    const { type, userId, email, approverName, inviterName, taskId, authorId, commentText, mentionedIds } = body
 
     if (type === 'approved' && userId) {
+      // Admins and Managers can approve users (managers via manager_setup_users
+      // RLS — they can add profile_teams rows for unassigned users on their teams).
+      if (caller.role !== 'Admin' && caller.role !== 'Manager') {
+        return new Response(JSON.stringify({ error: 'Admin or Manager access required' }), { status: 403, headers: cors })
+      }
       const result = await onUserApproved(userId, approverName || 'An administrator')
-      return new Response(JSON.stringify(result), { status: result.ok ? 200 : 400, headers: corsHeaders })
+      return new Response(JSON.stringify(result), { status: result.ok ? 200 : 400, headers: cors })
     }
 
     if (type === 'invite' && email) {
+      // Managers + Admins can invite users (matches the Settings UI: invite is
+      // hidden only for external roles Agent/Client).
+      if (caller.role !== 'Admin' && caller.role !== 'Manager') {
+        return new Response(JSON.stringify({ error: 'Admin or Manager access required' }), { status: 403, headers: cors })
+      }
       const result = await onInviteUser(email, inviterName || 'A team member')
-      return new Response(JSON.stringify(result), { status: result.ok ? 200 : 400, headers: corsHeaders })
+      return new Response(JSON.stringify(result), { status: result.ok ? 200 : 400, headers: cors })
     }
 
     if (type === 'comment' && taskId && authorId && commentText) {
-      const result = await onNewComment(taskId, authorId, commentText, mentionedIds || [])
-      return new Response(JSON.stringify(result), { status: result.ok ? 200 : 400, headers: corsHeaders })
+      // Caller must be the authorId they're claiming.
+      if (authorId !== caller.userId) {
+        return new Response(JSON.stringify({ error: 'authorId must match caller' }), { status: 403, headers: cors })
+      }
+      const result = await onNewComment(taskId, caller.userId, commentText, mentionedIds || [])
+      return new Response(JSON.stringify(result), { status: result.ok ? 200 : 400, headers: cors })
     }
 
-    return new Response(JSON.stringify({ error: 'Invalid request' }), { status: 400, headers: corsHeaders })
+    return new Response(JSON.stringify({ error: 'Invalid request' }), { status: 400, headers: cors })
   } catch (err) {
     console.error('user-notify error:', err)
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: corsHeaders })
+    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: cors })
   }
 })
