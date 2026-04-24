@@ -17,6 +17,43 @@ import { useTaskAssigneeCompletion } from '../../hooks/useTaskAssigneeCompletion
 import { completionProgress, canForceClose, isAssigneeOpen } from '../../lib/perAssigneeCompletion'
 import TaskChatSection from './TaskChatSection'
 
+// Auto-linkify bare https:// URLs in plain text segments. Mirrors the URL
+// handling in RichContentRenderer so comments get the same behaviour without
+// pulling in the full rich content pipeline (task comments have no stored
+// mentions array, so RichContentRenderer would lose the existing @mention
+// highlight).
+const URL_RE = /(https?:\/\/[^\s<>]+)/g
+function linkifyText(text, keyBase) {
+  if (!text) return text
+  const nodes = []
+  let lastIndex = 0
+  let match
+  let k = 0
+  const re = new RegExp(URL_RE.source, 'g')
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index))
+    const raw = match[1]
+    const trailing = raw.match(/[.,!?;:)\]}'">]+$/)
+    const url = trailing ? raw.slice(0, raw.length - trailing[0].length) : raw
+    const after = trailing ? trailing[0] : ''
+    nodes.push(
+      <a
+        key={`${keyBase}-${k++}`}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-brand-600 dark:text-brand-400 hover:underline break-all"
+      >
+        {url}
+      </a>
+    )
+    if (after) nodes.push(after)
+    lastIndex = re.lastIndex
+  }
+  if (lastIndex < text.length) nodes.push(text.slice(lastIndex))
+  return nodes
+}
+
 export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   const { profile, isAdmin, isManager } = useAuth()
   const { updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask, deleteTask, addAssignee, removeAssignee } = useTaskActions()
@@ -764,11 +801,11 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
                     <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{c.author?.full_name}</span>
                     <span className="text-xs text-slate-400 dark:text-slate-500">{formatDate(c.created_at)}</span>
                   </div>
-                  <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">
+                  <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap break-words">
                     {c.content.split(/(@\w[\w\s]*?\w)(?=\s|$|[.,!?])/).map((part, i) =>
                       part.startsWith('@')
                         ? <span key={i} className="text-brand-600 dark:text-brand-400 font-semibold">{part}</span>
-                        : part
+                        : <span key={i}>{linkifyText(part, `c${c.id}-${i}`)}</span>
                     )}
                   </p>
                   <CommentAttachments

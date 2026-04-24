@@ -7,7 +7,7 @@ import parse from 'html-react-parser'
 import DOMPurify from 'dompurify'
 import { isHtmlContent } from '../../lib/contentFormat'
 
-const INLINE_MD_RE = /\*\*([^*\n]+?)\*\*|_([^_\n]+?)_|\[([^\]\n]+?)\]\(([^)\n]+?)\)/g
+const INLINE_MD_RE = /\*\*([^*\n]+?)\*\*|_([^_\n]+?)_|\[([^\]\n]+?)\]\(([^)\n]+?)\)|(https?:\/\/[^\s<>]+)/g
 
 function renderInlineMarkdown(text, keyBase) {
   const nodes = []
@@ -21,18 +21,37 @@ function renderInlineMarkdown(text, keyBase) {
       nodes.push(<strong key={`${keyBase}-${k++}`}>{match[1]}</strong>)
     } else if (match[2] !== undefined) {
       nodes.push(<em key={`${keyBase}-${k++}`}>{match[2]}</em>)
-    } else {
+    } else if (match[3] !== undefined) {
+      // [text](url) markdown link
       nodes.push(
         <a
           key={`${keyBase}-${k++}`}
           href={match[4]}
           target="_blank"
-          rel="noreferrer"
-          className="text-brand-600 dark:text-brand-400 hover:underline"
+          rel="noopener noreferrer"
+          className="text-brand-600 dark:text-brand-400 hover:underline break-all"
         >
           {match[3]}
         </a>
       )
+    } else if (match[5] !== undefined) {
+      // Bare URL — strip trailing punctuation people often put after URLs
+      const raw = match[5]
+      const trailing = raw.match(/[.,!?;:)\]}'">]+$/)
+      const url = trailing ? raw.slice(0, raw.length - trailing[0].length) : raw
+      const after = trailing ? trailing[0] : ''
+      nodes.push(
+        <a
+          key={`${keyBase}-${k++}`}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-brand-600 dark:text-brand-400 hover:underline break-all"
+        >
+          {url}
+        </a>
+      )
+      if (after) nodes.push(after)
     }
     lastIndex = re.lastIndex
   }
