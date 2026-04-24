@@ -96,6 +96,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   useEffect(() => {
     if (!task?.id || !profile?.id) return
     let cancelled = false
+    let timerId = null
     ;(async () => {
       const { data: conv } = await supabase
         .from('conversations')
@@ -113,13 +114,16 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
       if (cancelled || !part) return
       const hasUnread = new Date(part.last_read_at || 0) < new Date(conv.last_message_at)
       if (hasUnread) {
-        setTimeout(() => {
+        timerId = setTimeout(() => {
           document.getElementById('task-chat-section')
-            ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
         }, 200)
       }
     })()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      if (timerId) clearTimeout(timerId)
+    }
   }, [task?.id, profile?.id])
 
   function startEditing() {

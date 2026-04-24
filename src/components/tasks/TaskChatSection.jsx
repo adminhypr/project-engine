@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { MessagesSquare } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { useTaskChat } from '../../hooks/useTaskChat'
 import { useConversations } from '../../hooks/useConversations'
 import MessageList from '../chat/MessageList'
 import ChatComposer from '../chat/ChatComposer'
 import { ReplyProvider } from '../chat/ReplyContext'
+import { showToast } from '../ui'
 
 /**
  * Inline Chat section for TaskDetailPanel. Reuses the DM MessageList +
@@ -73,6 +75,16 @@ export default function TaskChatSection({ taskId }) {
 
   const scrollRootRef = useRef(null)
 
+  // Soft-delete own task-chat messages. Mirrors useConversation.deleteMessage
+  // — update dm_messages.deleted_at and let realtime propagate the change.
+  const handleDelete = useCallback(async (messageId) => {
+    const { error } = await supabase
+      .from('dm_messages')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', messageId)
+    if (error) showToast(error.message || 'Failed to delete message', 'error')
+  }, [])
+
   return (
     <div
       id="task-chat-section"
@@ -109,13 +121,13 @@ export default function TaskChatSection({ taskId }) {
               loading={loading}
               hasMore={false}
               onLoadMore={() => {}}
-              onDelete={() => {}}
+              onDelete={handleDelete}
               otherLastReadAt={null}
               groupReaders={null}
               scrollRootRef={scrollRootRef}
               conversationId={conversationId}
               profileLookup={profileLookup}
-              onOpenThread={() => {}}
+              onOpenThread={undefined}
             />
           )}
           {conversationId && (
@@ -123,7 +135,6 @@ export default function TaskChatSection({ taskId }) {
               conversationId={conversationId}
               onSend={handleSend}
               onTyping={() => {}}
-              disabled={!conversationId}
               mentionablePeople={mentionablePeople}
               placeholder="Message about this task…"
             />

@@ -208,7 +208,7 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt, reac
               Delivered
             </span>
           )}
-          {isMine && !isDeleted && (
+          {isMine && !isDeleted && onDelete && (
             <button
               type="button"
               onClick={() => onDelete(message.id)}
