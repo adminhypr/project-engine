@@ -310,6 +310,7 @@ export default function AdminOverviewPage() {
         {activeTask && (
           <TaskDetailPanel
             task={activeTask}
+            tasks={tasks}
             onClose={() => setActiveTaskId(null)}
             onUpdated={() => { refetch(true); setActiveTaskId(null) }}
           />
