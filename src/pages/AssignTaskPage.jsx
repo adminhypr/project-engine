@@ -169,9 +169,23 @@ export default function AssignTaskPage() {
       showToast('Please select at least one assignee and add a task description', 'error')
       return
     }
-    if (form.dueDate && new Date(form.dueDate) < new Date()) {
-      showToast('Due date must be in the future', 'error')
-      return
+    // One-off path validates the dueDate field. Recurring path uses startAt
+    // instead and validates that the start is at least 1 minute in the future.
+    if (repeat === 'none') {
+      if (form.dueDate && new Date(form.dueDate) < new Date()) {
+        showToast('Due date must be in the future', 'error')
+        return
+      }
+    } else {
+      const startMs = startAt ? new Date(startAt).getTime() : NaN
+      if (!Number.isFinite(startMs)) {
+        showToast('Pick a Start date for the recurring task', 'error')
+        return
+      }
+      if (startMs < Date.now() + 60 * 1000) {
+        showToast('Start must be at least 1 minute in the future', 'error')
+        return
+      }
     }
     if (hasOversizedFiles(pendingFiles)) {
       showToast('Remove files over 5 MB before submitting', 'error')
