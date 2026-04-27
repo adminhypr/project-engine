@@ -2,9 +2,10 @@ import { motion } from 'framer-motion'
 import { PRIORITY_COLORS } from '../../lib/priority'
 import { formatDateShort } from '../../lib/helpers'
 import { PriorityBadge, UrgencyBadge, StatusBadge } from '../ui'
-import { MessageSquare, MessagesSquare, Check, X, Calendar, Clock, User, ChevronRight } from 'lucide-react'
+import { MessageSquare, MessagesSquare, Check, X, Calendar, Clock, User, ChevronRight, GitBranch } from 'lucide-react'
 import { TaskIcon } from '../ui/TaskIconPicker'
 import { completionProgress } from '../../lib/perAssigneeCompletion'
+import { truncateParentLabel } from '../../lib/subtasks'
 
 const PRIORITY_INDICATOR = {
   red:    'bg-red-500',
@@ -22,6 +23,11 @@ export default function TaskTable({
   if (!tasks.length) return (
     <div className="text-center py-16 text-slate-400 dark:text-slate-500 text-sm">No tasks match your filters.</div>
   )
+
+  // Lookup map for parent titles when a row is a sub-task and the parent
+  // happens to be in the same list. (When the parent isn't in the visible
+  // slice, we just show the generic "↳ parent" pill without title.)
+  const titleById = new Map(tasks.map(t => [t.id, t.title]))
 
   return (
     <div className="space-y-2">
@@ -77,6 +83,29 @@ export default function TaskTable({
                 {/* Top row: title + badges */}
                 <div className="flex items-center gap-2 mb-1">
                   <h3 className="font-semibold text-slate-900 dark:text-white text-sm truncate">{task.title}</h3>
+                  {task.parent_task_id && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        window.dispatchEvent(new CustomEvent('open-task', { detail: { taskId: task.parent_task_id } }))
+                      }}
+                      className="shrink-0 badge bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-dark-hover dark:text-slate-300 text-[10px] inline-flex items-center transition-colors"
+                      title={`Parent: ${titleById.get(task.parent_task_id) || 'Open parent'}`}
+                      aria-label="Open parent task"
+                    >
+                      ↳ {truncateParentLabel(titleById.get(task.parent_task_id) || 'parent', 20)}
+                    </button>
+                  )}
+                  {task.subtask_count > 0 && (
+                    <span
+                      className="shrink-0 badge bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-[10px] inline-flex items-center gap-1"
+                      title={`${task.open_subtask_count} of ${task.subtask_count} sub-task${task.subtask_count === 1 ? '' : 's'} open`}
+                    >
+                      <GitBranch size={10} aria-hidden="true" />
+                      {task.subtask_count - task.open_subtask_count}/{task.subtask_count}
+                    </span>
+                  )}
                   {isPending && <span className="shrink-0 badge bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 text-[10px]">Pending</span>}
                   {isDeclined && <span className="shrink-0 badge bg-red-500/15 text-red-700 dark:text-red-400 text-[10px]">Declined</span>}
                   {showProgressChip && (

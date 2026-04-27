@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { useTasks, useTaskActions, useProfiles } from '../hooks/useTasks'
 import { useAuth } from '../hooks/useAuth'
 import { applyFilters } from '../lib/filters'
+import { applyHideSubtasksFilter, anyHasSubtasks } from '../lib/subtasks'
 import { PageHeader, StatsStrip, FilterRow, LoadingScreen, EmptyState, showToast } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
 import TaskTable from '../components/tasks/TaskTable'
@@ -48,6 +49,7 @@ export default function TeamViewPage() {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [showBulkDelete, setShowBulkDelete] = useState(false)
   const [quickAddStatus, setQuickAddStatus] = useState(null)
+  const [hideSubtasks, setHideSubtasks] = useState(true) // on by default in Team View
 
   function switchView(v) {
     setView(v)
@@ -94,7 +96,8 @@ export default function TeamViewPage() {
   const effectiveFilters = view === 'board'
     ? (({ statuses, ...rest }) => rest)(filters)
     : filters
-  const filtered = applyFilters(viewTasks, effectiveFilters)
+  const filtered = applyHideSubtasksFilter(applyFilters(viewTasks, effectiveFilters), hideSubtasks)
+  const showSubtaskToggle = anyHasSubtasks(viewTasks)
 
   const grouped = filtered.reduce((acc, t) => {
     const key = t.team?.name || 'No Team'
@@ -288,6 +291,22 @@ export default function TeamViewPage() {
                     showTeamFilter={isAdmin}
                     teams={allTeams}
                   />
+                  {showSubtaskToggle && (
+                    <div className="px-4 sm:px-5 py-2 border-t border-slate-100 dark:border-dark-border">
+                      <button
+                        type="button"
+                        onClick={() => setHideSubtasks(v => !v)}
+                        className={`text-xs font-medium px-2.5 py-1 rounded-full transition-colors ${
+                          hideSubtasks
+                            ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300'
+                            : 'bg-slate-100 text-slate-600 dark:bg-dark-hover dark:text-slate-300'
+                        }`}
+                        aria-pressed={hideSubtasks}
+                      >
+                        {hideSubtasks ? '✓ Hiding sub-tasks' : 'Show sub-tasks'}
+                      </button>
+                    </div>
+                  )}
                 </div>
                 {hasFilters && (
                   <div className="flex items-center gap-1.5 flex-shrink-0 pt-0.5">

@@ -16,7 +16,9 @@ import { useAttachments } from '../../hooks/useAttachments'
 import { useTaskAssigneeCompletion } from '../../hooks/useTaskAssigneeCompletion'
 import { completionProgress, canForceClose, isAssigneeOpen } from '../../lib/perAssigneeCompletion'
 import TaskChatSection from './TaskChatSection'
+import SubtasksSection from './SubtasksSection'
 import { URL_RE_SOURCE, URL_RE_FLAGS, normalizeUrlMatch } from '../../lib/linkify'
+import { truncateParentLabel } from '../../lib/subtasks'
 
 // Auto-linkify URLs in plain text segments. Mirrors the URL handling in
 // RichContentRenderer so comments get the same behaviour (bare domains,
@@ -91,6 +93,7 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
   const [attachments, setAttachments] = useState([])
   const [commentFiles, setCommentFiles] = useState([])
   const [commentsOpen, setCommentsOpen] = useState(false)
+  const [parentInfo, setParentInfo] = useState(null) // {id, title} when viewing a sub-task
 
   const canEdit = isAdmin ||
     (task?.team_id && profile?.team_roles?.[task.team_id] === 'Manager') ||
@@ -121,6 +124,18 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
     setMentionQuery(null)
     setMentionIndex(0)
     setNewComment('')
+    // Resolve parent breadcrumb if this is a sub-task. Single-row select; the
+    // parent title is enough for the pill. Cleared first to avoid showing the
+    // previous task's parent during a panel switch.
+    setParentInfo(null)
+    if (task.parent_task_id) {
+      supabase
+        .from('tasks')
+        .select('id, title')
+        .eq('id', task.parent_task_id)
+        .maybeSingle()
+        .then(({ data }) => { if (data) setParentInfo(data) })
+    }
     setLoadingComments(true)
     getTaskComments(task.id).then(data => {
       setComments(data)
@@ -393,7 +408,18 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
       {/* Header */}
       <div className="px-5 py-4 border-b border-slate-100 dark:border-dark-border flex items-start gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            {parentInfo && (
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('open-task', { detail: { taskId: parentInfo.id } }))}
+                className="badge bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-dark-hover dark:text-slate-300 text-[10px] inline-flex items-center gap-1 transition-colors"
+                title={`Open parent: ${parentInfo.title}`}
+                aria-label={`Open parent task ${parentInfo.title}`}
+              >
+                ↳ {truncateParentLabel(parentInfo.title)}
+              </button>
+            )}
             {isPending && <span className="badge bg-yellow-500/15 text-yellow-700 text-[10px]">Pending</span>}
             {isDeclined && <span className="badge bg-red-500/15 text-red-700 text-[10px]">Declined</span>}
           </div>
@@ -713,6 +739,14 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
               className="form-input resize-none"
             />
           </div>
+        )}
+
+        {/* Sub-tasks (only on parent tasks; component itself bails on children) */}
+        {task?.id && (
+          <SubtasksSection
+            task={task}
+            onOpenChild={(child) => window.dispatchEvent(new CustomEvent('open-task', { detail: { taskId: child.id } }))}
+          />
         )}
 
         {/* Chat (primary) */}
