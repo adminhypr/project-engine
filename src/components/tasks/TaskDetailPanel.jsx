@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { X, Send, Check, RefreshCw, Pencil, Trash2, Plus, Users, Paperclip, CheckCircle2, Circle } from 'lucide-react'
+import { X, Send, Check, RefreshCw, Pencil, Trash2, Plus, Users, Paperclip, CheckCircle2, Circle, Repeat } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useTaskActions, useProfiles } from '../../hooks/useTasks'
 import { useAuth } from '../../hooks/useAuth'
@@ -379,7 +379,7 @@ export default function TaskDetailPanel({ task, tasks = [], onClose, onUpdated }
     const text = newComment.trim()
     setPosting(true)
     const result = text
-      ? await addComment(task.id, text)
+      ? await addComment(task.id, text, mentionedIds)
       : { ok: true, comment: null }
     setPosting(false)
     if (result.ok) {
@@ -432,6 +432,14 @@ export default function TaskDetailPanel({ task, tasks = [], onClose, onUpdated }
               >
                 ↳ {truncateParentLabel(parentInfo.title)}
               </button>
+            )}
+            {task.recurrence_id && (
+              <span
+                className="badge bg-purple-500/15 text-purple-700 dark:text-purple-300 text-[10px] inline-flex items-center gap-1"
+                title="Spawned from a recurring template — manage in Settings → Recurring Tasks"
+              >
+                <Repeat size={10} aria-hidden="true" /> Recurring
+              </span>
             )}
             {isPending && <span className="badge bg-yellow-500/15 text-yellow-700 text-[10px]">Pending</span>}
             {isDeclined && <span className="badge bg-red-500/15 text-red-700 text-[10px]">Declined</span>}

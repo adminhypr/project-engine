@@ -2,12 +2,14 @@ import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTaskActions, useProfiles } from '../hooks/useTasks'
+import { useRecurrences } from '../hooks/useRecurrences'
 import { PageHeader, showToast } from '../components/ui'
 import { AssignmentBadge } from '../components/ui'
 import { getAssignmentType } from '../lib/assignmentType'
 import { useAuth } from '../hooks/useAuth'
 import { PageTransition, SuccessBurst } from '../components/ui/animations'
-import { CheckCircle, Users, X } from 'lucide-react'
+import { CheckCircle, Users, X, Repeat as RepeatIcon } from 'lucide-react'
+import { computeNextRun, formatCountdown } from '../lib/recurrence'
 import TaskIconPicker from '../components/ui/TaskIconPicker'
 import { FilePickerInput, hasOversizedFiles } from '../components/ui/FileAttachment'
 import { useAttachments } from '../hooks/useAttachments'
@@ -16,6 +18,7 @@ import { parsePrefillParams } from '../lib/dmPrefillUrl'
 export default function AssignTaskPage() {
   const { profile, isAdmin } = useAuth()
   const { assignTask } = useTaskActions()
+  const { createTemplate } = useRecurrences()
   const { profiles, loading: profilesLoading } = useProfiles({ excludeExternals: true })
   const { uploadAttachments } = useAttachments()
   const navigate = useNavigate()
@@ -34,6 +37,19 @@ export default function AssignTaskPage() {
   const [selectedTeamId, setSelectedTeamId] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [result,     setResult]     = useState(null)
+
+  // Recurrence state — sits next to the form but doesn't merge into it
+  // because it only applies when repeat !== 'none'.
+  const [repeat, setRepeat] = useState('none') // 'none' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'yearly' | 'custom'
+  const [customEvery, setCustomEvery] = useState(1)
+  const [customUnit, setCustomUnit]   = useState('week') // 'day' | 'week' | 'month'
+  const [startAt, setStartAt]         = useState(() => {
+    // Default = now in local time, formatted for datetime-local.
+    const d = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  })
+  const [dueOffsetHours, setDueOffsetHours] = useState(24)
 
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -107,6 +123,38 @@ export default function AssignTaskPage() {
     }
   }
 
+  // Repeat preset → (interval_unit, interval_every) tuple. Used at submit time.
+  function repeatToInterval() {
+    switch (repeat) {
+      case 'daily':    return { unit: 'day',   every: 1 }
+      case 'weekly':   return { unit: 'week',  every: 1 }
+      case 'biweekly': return { unit: 'week',  every: 2 }
+      case 'monthly':  return { unit: 'month', every: 1 }
+      case 'yearly':   return { unit: 'month', every: 12 }
+      case 'custom':   return { unit: customUnit, every: Math.max(1, customEvery) }
+      default:         return null
+    }
+  }
+
+  // Live "First spawn" preview shown under the Start picker.
+  const recurrencePreview = useMemo(() => {
+    if (repeat === 'none') return null
+    const interval = repeatToInterval()
+    if (!interval) return null
+    const anchor = startAt ? new Date(startAt) : null
+    if (!anchor || isNaN(anchor)) return null
+    const next = computeNextRun({
+      anchor,
+      intervalUnit: interval.unit,
+      intervalEvery: interval.every,
+    })
+    return { anchor, next }
+    // intentionally omitting customEvery / customUnit from deps — they
+    // change repeatToInterval's output via state read, and React will
+    // re-render this component on those state changes anyway.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repeat, startAt, customEvery, customUnit])
+
   // Format team display in dropdowns
   function formatTeamNames(p) {
     if (p.all_teams?.length > 1) {
@@ -130,6 +178,38 @@ export default function AssignTaskPage() {
       return
     }
     setSubmitting(true)
+
+    // Recurrence path — create a template; the hook handles the immediate
+    // first-occurrence spawn for "Start = now/past" via the edge function.
+    if (repeat !== 'none') {
+      const interval = repeatToInterval()
+      const r = await createTemplate({
+        template_title:            form.title.trim(),
+        template_notes:            form.notes || null,
+        template_icon:             form.icon || null,
+        template_urgency:          form.urgency || 'Med',
+        template_due_offset_hours: Math.max(0, dueOffsetHours || 24),
+        team_id:                   (showTeamPicker ? selectedTeamId : null) || null,
+        interval_unit:             interval.unit,
+        interval_every:            interval.every,
+        anchor_at:                 new Date(startAt).toISOString(),
+        is_active:                 true,
+        assignee_ids:              form.assigneeIds,
+      })
+      setSubmitting(false)
+      if (!r.ok) { showToast(r.msg || 'Failed to create recurring task', 'error'); return }
+      showToast('Recurring task created')
+      // Soft reset.
+      setForm({ assigneeIds: [], title: '', urgency: 'Med', dueDate: '', whoTo: '', notes: '', icon: '' })
+      setPendingFiles([])
+      setSelectedTeamId('')
+      setRepeat('none')
+      // Push to My Tasks → Recurring tab so the user sees what they just made.
+      navigate('/my-tasks?tab=recurring')
+      return
+    }
+
+    // One-off task path (existing flow).
     const res = await assignTask({
       ...form,
       allProfiles: profiles,
@@ -328,16 +408,29 @@ export default function AssignTaskPage() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="form-label">Due Date (optional)</label>
-                  <input
-                    type="datetime-local"
-                    value={form.dueDate}
-                    onChange={e => set('dueDate', e.target.value)}
-                    min={new Date().toISOString().slice(0, 16)}
-                    className="form-input"
-                  />
-                </div>
+                {repeat === 'none' ? (
+                  <div>
+                    <label className="form-label">Due Date (optional)</label>
+                    <input
+                      type="datetime-local"
+                      value={form.dueDate}
+                      onChange={e => set('dueDate', e.target.value)}
+                      min={new Date().toISOString().slice(0, 16)}
+                      className="form-input"
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <label className="form-label">Due in (hours after spawn)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={dueOffsetHours}
+                      onChange={e => setDueOffsetHours(parseInt(e.target.value, 10) || 0)}
+                      className="form-input"
+                    />
+                  </div>
+                )}
                 <div>
                   <label className="form-label">Who It's For (optional)</label>
                   <input
@@ -348,6 +441,73 @@ export default function AssignTaskPage() {
                     className="form-input"
                   />
                 </div>
+              </div>
+
+              {/* Repeat — leave at "Don't repeat" for one-off tasks. */}
+              <div className="space-y-3">
+                <div>
+                  <label className="form-label flex items-center gap-1.5">
+                    <RepeatIcon size={13} className="text-slate-400" /> Repeat
+                  </label>
+                  <select
+                    value={repeat}
+                    onChange={e => setRepeat(e.target.value)}
+                    className="form-input"
+                  >
+                    <option value="none">Don't repeat</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="biweekly">Every 2 weeks</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="yearly">Yearly</option>
+                    <option value="custom">Custom…</option>
+                  </select>
+                </div>
+
+                {repeat === 'custom' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="form-label">Every</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={customEvery}
+                        onChange={e => setCustomEvery(parseInt(e.target.value, 10) || 1)}
+                        className="form-input"
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">Unit</label>
+                      <select
+                        value={customUnit}
+                        onChange={e => setCustomUnit(e.target.value)}
+                        className="form-input"
+                      >
+                        <option value="day">day(s)</option>
+                        <option value="week">week(s)</option>
+                        <option value="month">month(s)</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {repeat !== 'none' && (
+                  <div>
+                    <label className="form-label">Start (ET)</label>
+                    <input
+                      type="datetime-local"
+                      value={startAt}
+                      onChange={e => setStartAt(e.target.value)}
+                      className="form-input"
+                    />
+                    {recurrencePreview?.next && (
+                      <p className="text-xs text-brand-700 dark:text-brand-300 mt-1.5">
+                        <strong>First spawn:</strong>{' '}
+                        {recurrencePreview.next.toLocaleString()} ({formatCountdown(recurrencePreview.next)})
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>

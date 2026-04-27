@@ -273,6 +273,34 @@ export function AuthProvider({ children }) {
   const presence = useGlobalPresence(profile)
   useDmRealtime(profile?.id)
 
+  // Presence heartbeat — bumps profiles.last_seen_at so the notification
+  // digest knows the user is "online". Fires immediately on mount, then
+  // every 60s while the tab is visible. Pauses when hidden so we don't
+  // burn DB updates on idle background tabs.
+  useEffect(() => {
+    if (!profile?.id) return
+    let timer = null
+    const bump = async () => {
+      if (document.visibilityState !== 'visible') return
+      try {
+        await supabase
+          .from('profiles')
+          .update({ last_seen_at: new Date().toISOString() })
+          .eq('id', profile.id)
+      } catch (e) {
+        console.warn('last_seen_at heartbeat failed:', e)
+      }
+    }
+    bump()
+    timer = setInterval(bump, 60000)
+    const onVisibility = () => { if (document.visibilityState === 'visible') bump() }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      if (timer) clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [profile?.id])
+
   const value = {
     session,
     profile,

@@ -423,11 +423,12 @@ export function useTaskActions() {
     return { ok: true }
   }
 
-  async function addComment(taskId, content) {
+  async function addComment(taskId, content, mentionedIds = []) {
     const { data, error } = await supabase.from('comments').insert({
       task_id:   taskId,
       author_id: profile.id,
-      content
+      content,
+      mentioned_ids: Array.isArray(mentionedIds) ? mentionedIds : [],
     }).select('*, author:profiles(full_name, avatar_url)').single()
 
     if (error) return { ok: false, msg: error.message }

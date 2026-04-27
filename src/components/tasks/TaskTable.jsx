@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import { PRIORITY_COLORS } from '../../lib/priority'
 import { formatDateShort } from '../../lib/helpers'
 import { PriorityBadge, UrgencyBadge, StatusBadge } from '../ui'
-import { MessageSquare, MessagesSquare, Check, X, Calendar, Clock, User, ChevronRight, GitBranch } from 'lucide-react'
+import { MessageSquare, MessagesSquare, Check, X, Calendar, Clock, User, ChevronRight, GitBranch, Repeat } from 'lucide-react'
 import { TaskIcon } from '../ui/TaskIconPicker'
 import { completionProgress } from '../../lib/perAssigneeCompletion'
 import { truncateParentLabel } from '../../lib/subtasks'
@@ -104,6 +104,16 @@ export default function TaskTable({
                     >
                       <GitBranch size={10} aria-hidden="true" />
                       {task.subtask_count - task.open_subtask_count}/{task.subtask_count}
+                    </span>
+                  )}
+                  {task.recurrence_id && (
+                    <span
+                      className="shrink-0 inline-flex items-center text-purple-500 dark:text-purple-400"
+                      title="Spawned from a recurring template"
+                      role="img"
+                      aria-label="Recurring task"
+                    >
+                      <Repeat size={11} aria-hidden="true" />
                     </span>
                   )}
                   {isPending && <span className="shrink-0 badge bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 text-[10px]">Pending</span>}

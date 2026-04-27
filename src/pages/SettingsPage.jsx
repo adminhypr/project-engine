@@ -9,6 +9,7 @@ import { ModalWrapper } from '../components/ui/animations'
 import AvatarCard from '../components/settings/AvatarCard'
 import DisplayNameCard from '../components/settings/DisplayNameCard'
 import NotificationSoundCard from '../components/settings/NotificationSoundCard'
+import EmailDigestCard from '../components/settings/EmailDigestCard'
 import { setPendingInvite, getPendingInvite, clearPendingInvite } from '../lib/pendingInvites'
 
 export default function SettingsPage() {
@@ -155,6 +156,8 @@ export default function SettingsPage() {
           <AvatarCard />
           <DisplayNameCard />
           <NotificationSoundCard />
+
+          <EmailDigestCard />
 
           {/* Teams — admin only */}
           {isAdmin && (

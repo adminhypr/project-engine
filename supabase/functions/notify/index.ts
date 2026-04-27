@@ -8,6 +8,7 @@
 //   2. Table: tasks, Events: UPDATE → POST to this function URL with payload
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { isProfileOnline } from '../_shared/presence.ts'
 import { corsHeadersFor, verifyWebhookSecret } from '../_shared/security.ts'
 
 const supabase = createClient(
@@ -80,6 +81,10 @@ async function onTaskCreated(record: any) {
   // Don't email yourself for self-assignments
   if (task.assigned_to === task.assigned_by) return
 
+  // Skip the instant email if the recipient is currently online — the bell
+  // already covers them, and the 15-min digest will catch anything missed.
+  if (await isProfileOnline(task.assigned_to)) return
+
   const dueInfo = task.due_date
     ? `<tr><td style="padding: 6px 0; color: #6b7280; font-size: 13px;">Due</td><td style="padding: 6px 0; font-size: 14px;">${new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td></tr>`
     : ''
@@ -116,6 +121,7 @@ async function onTaskDeclined(record: any, oldRecord: any) {
   const task = await getTask(record.id)
   if (!task?.assigner?.email) return
   if (task.assigned_by === task.assigned_to) return // self-assigned
+  if (await isProfileOnline(task.assigned_by)) return
 
   const html = emailWrap('Task Declined', '#ef4444',
     `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${task.assigner.full_name}</strong>,</p>
@@ -165,6 +171,7 @@ async function onTaskCompleted(record: any, oldRecord: any) {
   // Regular completion path — notify assigner only.
   if (!task.assigner?.email) return
   if (task.assigned_by === task.assigned_to) return
+  if (await isProfileOnline(task.assigned_by)) return
 
   const html = emailWrap('Task Completed', '#22c55e',
     `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${task.assigner.full_name}</strong>,</p>
@@ -222,6 +229,7 @@ async function onTaskForceClosed(task: any, forceCloseRow: any) {
     : `Task closed: "${task.title}"`
 
   for (const r of recipients.values()) {
+    if (await isProfileOnline(r.id)) continue
     const html = emailWrap('Task Closed', '#22c55e',
       `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${r.full_name}</strong>,</p>
        <p style="margin: 0 0 16px; color: #374151;"><strong>${closerName}</strong> has closed the following task for everyone:</p>
@@ -245,6 +253,7 @@ async function onTaskReassigned(record: any, oldRecord: any) {
   const task = await getTask(record.id)
   if (!task?.assignee?.email) return
   if (task.assigned_to === task.assigned_by) return
+  if (await isProfileOnline(task.assigned_to)) return
 
   const html = emailWrap('Task Reassigned to You', '#6366f1',
     `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${task.assignee.full_name}</strong>,</p>
@@ -269,6 +278,41 @@ async function onTaskReassigned(record: any, oldRecord: any) {
   await sendEmail([task.assignee.email], `Task reassigned to you: "${task.title}"`, html)
 }
 
+async function onRecurringSpawnFailed(payload: any) {
+  const { recurrence_id, template_title, creator_id } = payload
+
+  // Resolve recipient: prefer the template creator; if creator was deleted,
+  // ping every admin so it doesn't silently get stuck.
+  let recipients: { email: string; full_name: string | null }[] = []
+  if (creator_id) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('email, full_name')
+      .eq('id', creator_id)
+      .maybeSingle()
+    if (data?.email) recipients.push(data)
+  }
+  if (recipients.length === 0) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('email, full_name')
+      .eq('role', 'Admin')
+    recipients = (data || []).filter((r) => r.email)
+  }
+  if (recipients.length === 0) return
+
+  const safeTitle = String(template_title || 'Untitled').replace(/</g, '&lt;')
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 20px; max-width: 560px;">
+      <h2 style="color:#dc2626; margin: 0 0 12px;">Recurring task couldn't spawn</h2>
+      <p style="color:#374151;">The template <strong>${safeTitle}</strong> reached its scheduled run, but had no valid assignees at the time. The template has been <strong>paused</strong> automatically.</p>
+      <p style="color:#374151;">To resume it, open <a href="${(Deno.env.get('PUBLIC_APP_URL') || 'https://tasks.hyprstaffing.com')}/settings" style="color:#6366f1;">Settings → Recurring Tasks</a>, edit the template's assignees, and resume.</p>
+      <p style="color:#9ca3af; font-size:12px; margin-top:24px;">Recurrence ID: ${recurrence_id}</p>
+    </div>
+  `
+  await sendEmail(recipients.map((r) => r.email), `Recurring task paused: "${safeTitle}"`, html)
+}
+
 // ── Webhook handler ───────────────────────────
 Deno.serve(async (req) => {
   const cors = corsHeadersFor(req)
@@ -289,6 +333,14 @@ Deno.serve(async (req) => {
   try {
     const payload = await req.json()
     const { type, record, old_record } = payload
+
+    // Direct call from spawn-recurring-tasks when a template has no valid
+    // assignees at spawn time. Email the creator (or fall back to admins
+    // if creator has been deleted).
+    if (type === 'recurring_spawn_failed') {
+      await onRecurringSpawnFailed(payload)
+      return new Response(JSON.stringify({ action: 'recurring_spawn_failed', ok: true }), { status: 200, headers: cors })
+    }
 
     // INSERT — new task assigned
     if (type === 'INSERT' && record) {

@@ -9,6 +9,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeadersFor, verifyWebhookSecret } from '../_shared/security.ts'
+import { isProfileOnline } from '../_shared/presence.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -153,6 +154,12 @@ Deno.serve(async (req) => {
     // Skip self-mentions
     if (record.mentioned_by === record.mentioned_user) {
       return new Response(JSON.stringify({ action: 'self_mention_skipped', ok: true }), { status: 200, headers: cors })
+    }
+
+    // Skip if recipient is online — bell already covers them, and the
+    // 15-min digest cron will catch up with anything missed.
+    if (await isProfileOnline(record.mentioned_user)) {
+      return new Response(JSON.stringify({ action: 'recipient_online_skip', ok: true }), { status: 200, headers: cors })
     }
 
     // Fetch mentioned user's email
