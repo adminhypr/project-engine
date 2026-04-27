@@ -7,6 +7,7 @@ import { useAuth } from './useAuth'
 import { useDocumentVisible } from '../lib/useDocumentVisible'
 import { playTaskSound } from '../lib/notificationSounds'
 import { onMessage } from '../lib/dmEventBus'
+import { buildSubtaskCounts } from '../lib/subtasks'
 
 // Sender-side realtime "poke": nudge an assignee's task list to refetch
 // immediately, bypassing any RLS/filter edge cases on postgres_changes for
@@ -29,23 +30,28 @@ async function pokeAssignee(userId) {
   }
 }
 
+// Lean read-time SELECT. Heavy nested embeds (profile_teams, nested team data,
+// per-row comment count, attachment count) were dropped after audit:
+//   • attachment_count had zero consumers in the app.
+//   • comment_count is now fetched via get_user_task_comment_counts() RPC
+//     (one aggregation, not N LATERAL subqueries).
+//   • assignee.team_ids / team_roles / all_teams aren't read off task.assignee
+//     anywhere in the app — those fields are only used off useAuth().profile
+//     or useProfiles(). Pulling them per task was pure waste.
+// reports_to stays on assignee because the manager chip uses it for lookup.
 const TASK_SELECT_FULL = `
   *,
-  assignee:profiles!tasks_assigned_to_fkey(id, full_name, email, role, team_id, reports_to, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
-  assigner:profiles!tasks_assigned_by_fkey(id, full_name, email, role, team_id, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
+  assignee:profiles!tasks_assigned_to_fkey(id, full_name, avatar_url, reports_to),
+  assigner:profiles!tasks_assigned_by_fkey(id, full_name),
   task_assignees!task_assignees_task_id_fkey(profile_id, is_primary, completed_at, completed_by, profile:profiles!task_assignees_profile_id_fkey(id, full_name, avatar_url)),
-  team:teams(id, name),
-  comments(count),
-  task_attachments(count)
+  team:teams(id, name)
 `
 
 const TASK_SELECT_FALLBACK = `
   *,
-  assignee:profiles!tasks_assigned_to_fkey(id, full_name, email, role, team_id, reports_to, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
-  assigner:profiles!tasks_assigned_by_fkey(id, full_name, email, role, team_id, teams!profiles_team_id_fkey(name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))),
-  team:teams(id, name),
-  comments(count),
-  task_attachments(count)
+  assignee:profiles!tasks_assigned_to_fkey(id, full_name, avatar_url, reports_to),
+  assigner:profiles!tasks_assigned_by_fkey(id, full_name),
+  team:teams(id, name)
 `
 
 export function useTasks() {
@@ -69,9 +75,15 @@ export function useTasks() {
     if (!silent) setLoading(true)
     setError(null)
 
-    // Try with task_assignees join; fall back without if table doesn't exist yet
+    // Run the main task query and the comment-count aggregation in parallel.
+    // Comment counts used to be a per-row LATERAL subquery via PostgREST's
+    // `comments(count)` embed — fine for a few rows, brutal for 100+.
     let usedFallback = false
-    let { data, error } = await supabase.from('tasks').select(TASK_SELECT_FULL).order('date_assigned', { ascending: false })
+    const [tasksRes, commentCountsRes] = await Promise.all([
+      supabase.from('tasks').select(TASK_SELECT_FULL).order('date_assigned', { ascending: false }),
+      supabase.rpc('get_user_task_comment_counts'),
+    ])
+    let { data, error } = tasksRes
     if (error) {
       console.warn('task_assignees join failed, using fallback query:', error.message)
       usedFallback = true
@@ -80,6 +92,15 @@ export function useTasks() {
       error = retry.error
     }
     if (error) { setError(error.message); setLoading(false); return }
+
+    const commentCountByTaskId = new Map()
+    if (commentCountsRes?.error) {
+      console.warn('get_user_task_comment_counts failed:', commentCountsRes.error.message)
+    } else if (commentCountsRes?.data) {
+      for (const r of commentCountsRes.data) {
+        commentCountByTaskId.set(r.task_id, Number(r.comment_count) || 0)
+      }
+    }
 
     // If fallback was used, fetch task_assignees separately
     let assigneesMap = {}
@@ -124,18 +145,9 @@ export function useTasks() {
       }
     }
 
+    const subtaskCounts = buildSubtaskCounts(data || [])
+
     const enriched = (data || []).map(t => {
-      // Enrich assignee/assigner with team_ids from profile_teams
-      const enrichProfile = (p) => {
-        if (!p) return p
-        const pt = p.profile_teams || []
-        return {
-          ...p,
-          team_ids: pt.length > 0 ? pt.map(r => r.team_id) : (p.team_id ? [p.team_id] : []),
-          all_teams: pt.length > 0 ? pt.map(r => ({ ...r.team, is_primary: r.is_primary, role: r.role })) : (p.teams ? [{ id: p.team_id, name: p.teams.name, is_primary: true }] : []),
-          team_roles: pt.length > 0 ? Object.fromEntries(pt.map(r => [r.team_id, r.role])) : {}
-        }
-      }
       // Build assignees array from junction table (inline join or fallback map)
       const rawAssignees = t.task_assignees?.length ? t.task_assignees : (assigneesMap[t.id] || [])
       const assignees = rawAssignees.map(ta => ({
@@ -147,14 +159,15 @@ export function useTasks() {
         completed_by: ta.completed_by ?? null,
       }))
 
+      const counts = subtaskCounts.get(t.id) || { total: 0, open: 0 }
       return {
         ...t,
         priority:      getPriority(t),
-        comment_count: t.comments?.[0]?.count || 0,
-        attachment_count: t.task_attachments?.[0]?.count || 0,
+        comment_count: commentCountByTaskId.get(t.id) || 0,
         unread_chat_count: unreadByTaskId.get(t.id) || 0,
-        assignee:      t.assignee ? { ...enrichProfile(t.assignee), manager: managerMap[t.assignee.reports_to] || null } : t.assignee,
-        assigner:      enrichProfile(t.assigner),
+        subtask_count:      counts.total,
+        open_subtask_count: counts.open,
+        assignee:      t.assignee ? { ...t.assignee, manager: managerMap[t.assignee.reports_to] || null } : t.assignee,
         assignees,
       }
     })
@@ -330,7 +343,7 @@ export function useTaskActions() {
   const { profile } = useAuth()
 
   async function assignTask(payload) {
-    const { assigneeIds, assigneeId, title, urgency, dueDate, whoTo, notes, icon, allProfiles, overrideAssignerId, teamId } = payload
+    const { assigneeIds, assigneeId, title, urgency, dueDate, whoTo, notes, icon, allProfiles, overrideAssignerId, teamId, parentTaskId } = payload
 
     // Support both single assigneeId (legacy) and multiple assigneeIds
     const ids = assigneeIds?.length ? assigneeIds : [assigneeId]
@@ -358,7 +371,8 @@ export function useTaskActions() {
       notes:           notes || null,
       icon:            icon || null,
       date_assigned:   new Date().toISOString(),
-      status:          'Not Started'
+      status:          'Not Started',
+      parent_task_id:  parentTaskId || null,
     }).select().single()
 
     if (error) return { ok: false, msg: error.message }

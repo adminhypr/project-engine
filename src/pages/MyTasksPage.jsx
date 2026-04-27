@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useTasks, useTaskActions, useProfiles } from '../hooks/useTasks'
 import { useAuth } from '../hooks/useAuth'
 import { applyFilters } from '../lib/filters'
+import { applyHideSubtasksFilter, anyHasSubtasks } from '../lib/subtasks'
 import { PageHeader, StatsStrip, FilterRow, LoadingScreen, EmptyState, showToast } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
 import TaskTable from '../components/tasks/TaskTable'
@@ -32,6 +33,7 @@ export default function MyTasksPage() {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [showBulkDelete, setShowBulkDelete] = useState(false)
   const [quickAddStatus, setQuickAddStatus] = useState(null)
+  const [hideSubtasks, setHideSubtasks] = useState(false) // off by default on My Tasks
 
   // Persist view preference
   function switchView(v) {
@@ -91,7 +93,8 @@ export default function MyTasksPage() {
   const effectiveFilters = view === 'board'
     ? (({ statuses, ...rest }) => rest)(filters)
     : filters
-  const filtered = applyFilters(activeTasks, effectiveFilters)
+  const filtered = applyHideSubtasksFilter(applyFilters(activeTasks, effectiveFilters), hideSubtasks)
+  const showSubtaskToggle = anyHasSubtasks(activeTasks)
 
   const mineRedOverdue = filtered.filter(t => t.priority === 'red' && t.due_date && new Date(t.due_date) < new Date()).length
   const mineRedInactive = filtered.filter(t => t.priority === 'red' && (!t.due_date || new Date(t.due_date) >= new Date())).length
@@ -312,6 +315,22 @@ export default function MyTasksPage() {
                 onChange={(k, v) => setFilters(f => ({ ...f, [k]: v }))}
                 onClear={() => setFilters({ statuses: ['Not Started', 'In Progress', 'Blocked'] })}
               />
+              {showSubtaskToggle && (
+                <div className="px-4 sm:px-5 py-2 border-b border-slate-100 dark:border-dark-border">
+                  <button
+                    type="button"
+                    onClick={() => setHideSubtasks(v => !v)}
+                    className={`text-xs font-medium px-2.5 py-1 rounded-full transition-colors ${
+                      hideSubtasks
+                        ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300'
+                        : 'bg-slate-100 text-slate-600 dark:bg-dark-hover dark:text-slate-300'
+                    }`}
+                    aria-pressed={hideSubtasks}
+                  >
+                    {hideSubtasks ? '✓ Hiding sub-tasks' : 'Hide sub-tasks'}
+                  </button>
+                </div>
+              )}
               <MassActionBar
                 selectedCount={filtered.filter(t => selectedIds.has(t.id)).length}
                 onSelectAll={() => setSelectedIds(new Set(filtered.map(t => t.id)))}

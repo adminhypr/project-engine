@@ -60,17 +60,19 @@ async function fetchConversationsForUser(userId) {
     taskById = new Map((taskRows || []).map(t => [t.id, t]))
   }
 
-  // Unread counts: messages created after my last_read_at, by someone else.
+  // Unread counts: one aggregation RPC instead of N parallel HEAD counts
+  // (migration 054). For an admin/manager with 100+ conversations this
+  // collapses ~100 round trips into one.
   const unreadByConv = new Map()
-  await Promise.all(myRows.map(async (row) => {
-    const { count } = await supabase
-      .from('dm_messages')
-      .select('id', { count: 'exact', head: true })
-      .eq('conversation_id', row.conversation_id)
-      .neq('author_id', userId)
-      .gt('created_at', row.last_read_at)
-    unreadByConv.set(row.conversation_id, count || 0)
-  }))
+  const { data: unreadRows, error: unreadErr } = await supabase
+    .rpc('get_user_conversation_unreads')
+  if (unreadErr) {
+    console.warn('get_user_conversation_unreads failed:', unreadErr.message)
+  } else if (unreadRows) {
+    for (const r of unreadRows) {
+      unreadByConv.set(r.conversation_id, Number(r.unread_count) || 0)
+    }
+  }
 
   const out = myRows.map(row => shapeConversationRow({
     row,
