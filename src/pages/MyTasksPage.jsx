@@ -4,6 +4,8 @@ import { useTasks, useTaskActions, useProfiles } from '../hooks/useTasks'
 import { useAuth } from '../hooks/useAuth'
 import { applyFilters } from '../lib/filters'
 import { applyHideSubtasksFilter, anyHasSubtasks } from '../lib/subtasks'
+import { useRecurrences } from '../hooks/useRecurrences'
+import RecurringList from '../components/recurring/RecurringList'
 import { PageHeader, StatsStrip, FilterRow, LoadingScreen, EmptyState, showToast } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
 import TaskTable from '../components/tasks/TaskTable'
@@ -21,11 +23,21 @@ const VIEW_KEY = 'pe-task-view'
 export default function MyTasksPage() {
   const { profile, isManager } = useAuth()
   const { myTasks, tasks, loading, refetch } = useTasks()
+  const { templates: recurringTemplates } = useRecurrences()
+  const ownedRecurringCount = (recurringTemplates || []).filter(
+    t => profile?.role === 'Admin' || t.created_by === profile?.id
+  ).length
   const { acceptTask, declineTask, deleteTasks, updateTasks, updateTask, deleteTask, assignTask } = useTaskActions()
   const { profiles } = useProfiles()
   const location = useLocation()
   const navigate = useNavigate()
-  const [tab, setTab] = useState('mine') // 'mine' | 'assigned'
+  const [tab, setTab] = useState(() => {
+    // Honor ?tab= from initial URL (the AssignTaskPage redirects with
+    // ?tab=recurring after creating a recurring task).
+    const params = new URLSearchParams(window.location.search)
+    const t = params.get('tab')
+    return (t === 'assigned' || t === 'recurring') ? t : 'mine'
+  }) // 'mine' | 'assigned' | 'recurring'
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'list') // 'list' | 'board'
   const [filters,    setFilters]    = useState({ statuses: ['Not Started', 'In Progress', 'Blocked'] })
   const [activeTaskId, setActiveTaskId] = useState(null)
@@ -247,11 +259,36 @@ export default function MyTasksPage() {
                 {assignedByMe.length}
               </span>
             </button>
+            {ownedRecurringCount > 0 && (
+              <button
+                onClick={() => setTab('recurring')}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                  tab === 'recurring'
+                    ? 'bg-white dark:bg-dark-card text-slate-900 dark:text-white shadow-soft'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                }`}
+              >
+                Recurring
+                <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-md ${
+                  tab === 'recurring'
+                    ? 'bg-purple-50 text-purple-600 dark:bg-purple-500/15 dark:text-purple-300'
+                    : 'bg-slate-200/60 text-slate-500 dark:bg-dark-border dark:text-slate-400'
+                }`}>
+                  {ownedRecurringCount}
+                </span>
+              </button>
+            )}
           </div>
         </div>
 
         {tab === 'mine' && <AcceptanceBanner count={pendingTasks.length} />}
 
+        {tab === 'recurring' ? (
+          <div className="p-4 sm:p-6">
+            <RecurringList />
+          </div>
+        ) : (
+        <>
         <StatsStrip stats={stats} />
 
         {view === 'board' ? (
@@ -362,6 +399,8 @@ export default function MyTasksPage() {
               }
             </div>
           </div>
+        )}
+        </>
         )}
 
         {activeTask && (
