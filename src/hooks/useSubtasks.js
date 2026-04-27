@@ -1,13 +1,13 @@
 import { useCallback, useMemo } from 'react'
-import { useTasks, useTaskActions } from './useTasks'
+import { useTaskActions } from './useTasks'
 import { getChildren } from '../lib/subtasks'
 
-// Lightweight wrapper: children are derived from the existing `tasks` array
-// (already realtime-synced via useTasks). createSubtask delegates to assignTask
-// with parentTaskId set, so RLS / audit / chat / participant seeding all
-// re-use the existing task creation path.
-export function useSubtasks(parentId) {
-  const { tasks, loading, refetch } = useTasks()
+// Lightweight wrapper. The caller passes in the live `tasks` array (from a
+// page-level useTasks instance) so we don't spawn duplicate fetches /
+// realtime channels per-panel. createSubtask delegates to assignTask with
+// parentTaskId set, so RLS / audit / chat / participant seeding all reuse
+// the existing task creation path.
+export function useSubtasks(parentId, tasks = []) {
   const { assignTask } = useTaskActions()
 
   const children = useMemo(() => {
@@ -27,5 +27,5 @@ export function useSubtasks(parentId) {
     return assignTask({ ...draft, parentTaskId: parentId })
   }, [assignTask, parentId])
 
-  return { children, loading, createSubtask, refetch }
+  return { children, createSubtask }
 }

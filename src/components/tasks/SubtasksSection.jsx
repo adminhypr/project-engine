@@ -8,14 +8,14 @@ import { completionProgress } from '../../lib/perAssigneeCompletion'
 
 // Inline mini-form for adding a sub-task. Empty assignee by default — user
 // must pick (matches David's call: silent inheritance is a footgun).
-function SubtaskForm({ parentTask, onCreated, onCancel }) {
+function SubtaskForm({ parentTask, tasks, onCreated, onCancel }) {
   const { profiles: allProfiles } = useProfiles({ excludeExternals: true })
   const [title, setTitle]         = useState('')
   const [assigneeId, setAssigneeId] = useState('')
   const [urgency, setUrgency]     = useState('Med')
   const [dueDate, setDueDate]     = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const { createSubtask } = useSubtasks(parentTask?.id)
+  const { createSubtask } = useSubtasks(parentTask?.id, tasks)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -102,9 +102,9 @@ function SubtaskForm({ parentTask, onCreated, onCancel }) {
   )
 }
 
-export default function SubtasksSection({ task, onOpenChild }) {
+export default function SubtasksSection({ task, tasks = [], onOpenChild }) {
   const { profile, isAdmin, isExternal } = useAuth()
-  const { children } = useSubtasks(task?.id)
+  const { children } = useSubtasks(task?.id, tasks)
   const [adding, setAdding] = useState(false)
 
   // v1: only the parent's assigner, an admin, or an assignee on the parent
@@ -140,6 +140,7 @@ export default function SubtasksSection({ task, onOpenChild }) {
         <div className="mb-3">
           <SubtaskForm
             parentTask={task}
+            tasks={tasks}
             onCreated={() => setAdding(false)}
             onCancel={() => setAdding(false)}
           />

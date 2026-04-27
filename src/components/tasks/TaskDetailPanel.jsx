@@ -17,8 +17,11 @@ import { useTaskAssigneeCompletion } from '../../hooks/useTaskAssigneeCompletion
 import { completionProgress, canForceClose, isAssigneeOpen } from '../../lib/perAssigneeCompletion'
 import TaskChatSection from './TaskChatSection'
 import SubtasksSection from './SubtasksSection'
+import DependenciesSection from './DependenciesSection'
 import { URL_RE_SOURCE, URL_RE_FLAGS, normalizeUrlMatch } from '../../lib/linkify'
 import { truncateParentLabel } from '../../lib/subtasks'
+import { useTaskDependencies } from '../../hooks/useTaskDependencies'
+import { getOpenBlockers, shouldWarnOnStatusChange } from '../../lib/dependencies'
 
 // Auto-linkify URLs in plain text segments. Mirrors the URL handling in
 // RichContentRenderer so comments get the same behaviour (bare domains,
@@ -53,12 +56,13 @@ function linkifyText(text, keyBase) {
   return nodes
 }
 
-export default function TaskDetailPanel({ task, onClose, onUpdated }) {
+export default function TaskDetailPanel({ task, tasks = [], onClose, onUpdated }) {
   const { profile, isAdmin, isManager } = useAuth()
   const { updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask, deleteTask, addAssignee, removeAssignee } = useTaskActions()
   const { profiles: allProfiles } = useProfiles({ excludeExternals: true })
   const { uploadAttachments, getTaskAttachments, getAttachmentUrl, deleteAttachment } = useAttachments()
   const { markSelfComplete, unmarkSelf, setAssigneeCompletion, forceClose } = useTaskAssigneeCompletion()
+  const { blockers: dependencyBlockerRows } = useTaskDependencies(task?.id)
 
   // Per-assignee completion state (sourced from the raw task_assignees join).
   const completionMap = Object.fromEntries(
@@ -216,6 +220,15 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
 
   async function handleSave() {
     if (!task) return
+    // Soft dependency warning: surface a toast (does NOT block) when the
+    // user moves a blocked task into an active state. v1 is display-only.
+    const taskById = new Map((tasks || []).map(t => [t.id, t]))
+    const openBlockers = getOpenBlockers(dependencyBlockerRows, taskById)
+    if (shouldWarnOnStatusChange(task.status, status, openBlockers.length)) {
+      const names = openBlockers.slice(0, 2).map(b => b.title).join(', ')
+      const more = openBlockers.length > 2 ? ` +${openBlockers.length - 2} more` : ''
+      showToast(`Heads up — still blocked by: ${names}${more}`, 'error')
+    }
     setSaving(true)
     const result = await updateTask(task.id, { status, notes })
     setSaving(false)
@@ -745,9 +758,13 @@ export default function TaskDetailPanel({ task, onClose, onUpdated }) {
         {task?.id && (
           <SubtasksSection
             task={task}
+            tasks={tasks}
             onOpenChild={(child) => window.dispatchEvent(new CustomEvent('open-task', { detail: { taskId: child.id } }))}
           />
         )}
+
+        {/* Dependencies — soft Blocked-by / Blocks chips */}
+        {task?.id && <DependenciesSection task={task} tasks={tasks} />}
 
         {/* Chat (primary) */}
         {task?.id && <TaskChatSection key={task.id} taskId={task.id} />}
