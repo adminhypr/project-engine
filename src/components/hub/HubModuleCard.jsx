@@ -1,14 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronDown, Pencil, Trash2, Check, X as XIcon } from 'lucide-react'
+import { ChevronDown, Pencil, Trash2, Check, X as XIcon, Maximize2 } from 'lucide-react'
 
 // `onRename(nextTitle)` and `onDelete()` are optional. When provided, the
 // card shows owner-only inline rename + a delete button on hover. Pages
 // pass them as null/undefined for non-owners or for fixed (non-editable)
 // modules; the controls hide automatically.
+//
+// `onExpand()` opens the module in a focused floating-window view
+// (Basecamp-style). Available to anyone, not just owners.
 export default function HubModuleCard({
   title, icon: Icon, children, defaultOpen = true, badge, color = '#6366f1',
-  onRename, onDelete,
+  onRename, onDelete, onExpand,
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const [editing, setEditing] = useState(false)
@@ -85,8 +88,18 @@ export default function HubModuleCard({
             </motion.div>
           </button>
         )}
-        {!editing && (onRename || onDelete) && (
+        {!editing && (onRename || onDelete || onExpand) && (
           <div className="flex items-center gap-0.5 opacity-0 group-hover/module:opacity-100 transition-opacity">
+            {onExpand && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onExpand() }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-brand-500 hover:bg-slate-100 dark:hover:bg-dark-hover"
+                title="Expand"
+              >
+                <Maximize2 size={13} />
+              </button>
+            )}
             {onRename && (
               <button
                 type="button"

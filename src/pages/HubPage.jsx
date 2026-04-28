@@ -1,7 +1,11 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { DndContext, DragOverlay, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
-import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
+import {
+  DndContext, DragOverlay, closestCorners, pointerWithin, rectIntersection,
+  PointerSensor, TouchSensor, useSensor, useSensors,
+} from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
+import { useDroppable } from '@dnd-kit/core'
 import { useHubs } from '../hooks/useHubs'
 import { useAuth } from '../hooks/useAuth'
 import { showToast } from '../components/ui'
@@ -18,6 +22,7 @@ import MessageBoard from '../components/hub/MessageBoard'
 import DocsFiles from '../components/hub/DocsFiles'
 import TodosModuleCard from '../components/hub/todos/TodosModuleCard'
 import AddModuleModal from '../components/hub/AddModuleModal'
+import ExpandedModuleModal from '../components/hub/ExpandedModuleModal'
 import {
   Users, Flame, MessageSquare, FolderOpen, ArrowLeft, CheckSquare,
   Pencil, Check, X as XIcon, Plus,
@@ -27,7 +32,7 @@ const DEFAULT_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '
 
 // Per-kind visual config and component mapping. Title comes from the
 // hub_modules row (renameable); these stay constant per kind.
-const KIND_META = {
+export const KIND_META = {
   'message-board':   { icon: MessageSquare, color: '#7c3aed', defaultOpen: true,  Comp: MessageBoard },
   'to-dos':          { icon: CheckSquare,   color: '#8b5cf6', defaultOpen: true,  Comp: TodosModuleCard },
   'docs-files':      { icon: FolderOpen,    color: '#0284c7', defaultOpen: false, Comp: DocsFiles },
@@ -35,29 +40,31 @@ const KIND_META = {
   'attendance-room': { icon: Users,         color: '#8b5cf6', defaultOpen: true,  Comp: Attendance },
 }
 
+const COLUMN_IDS = ['col-0', 'col-1', 'col-2']
+
+// Wraps a column's drop zone so dnd-kit recognizes the empty area as a
+// valid target (otherwise dragging into an empty column wouldn't fire any
+// `over` event).
+function DroppableColumn({ id, children }) {
+  const { setNodeRef, isOver } = useDroppable({ id })
+  return (
+    <div
+      ref={setNodeRef}
+      className={`min-w-0 min-h-[200px] rounded-2xl transition-colors ${
+        isOver ? 'bg-slate-50/40 dark:bg-white/[0.02]' : ''
+      }`}
+    >
+      {children}
+    </div>
+  )
+}
+
 function ModuleColumn({
-  columnIndex, modules, hubId, sensors, activeId, setActiveId,
-  canManage, onReorder, onRename, onDelete,
+  columnId, modules, hubId, canManage, onRename, onDelete, onExpand,
 }) {
   const ids = modules.map(m => m.id)
-
-  function handleDragEnd({ active, over }) {
-    setActiveId(null)
-    if (!over || active.id === over.id) return
-    const oldIdx = ids.indexOf(active.id)
-    const newIdx = ids.indexOf(over.id)
-    if (oldIdx === -1 || newIdx === -1) return
-    onReorder(columnIndex, arrayMove(modules, oldIdx, newIdx))
-  }
-
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={({ active }) => setActiveId(active.id)}
-      onDragEnd={handleDragEnd}
-      onDragCancel={() => setActiveId(null)}
-    >
+    <DroppableColumn id={columnId}>
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
         <div className="space-y-4">
           {modules.map(m => {
@@ -74,6 +81,7 @@ function ModuleColumn({
                 defaultOpen={meta.defaultOpen}
                 onRename={canManage ? (nextTitle) => onRename(m.id, nextTitle) : null}
                 onDelete={canManage ? () => onDelete(m) : null}
+                onExpand={() => onExpand(m)}
               >
                 <Comp hubId={hubId} moduleId={m.id} />
               </SortableModuleCard>
@@ -81,20 +89,30 @@ function ModuleColumn({
           })}
         </div>
       </SortableContext>
-      <DragOverlay dropAnimation={{ duration: 180, easing: 'ease' }}>
-        {activeId && (() => {
-          const m = modules.find(x => x.id === activeId)
-          const meta = m && KIND_META[m.kind]
-          if (!m || !meta) return null
-          return (
-            <div className="shadow-elevated rounded-2xl scale-[1.01]">
-              <HubModuleCard title={m.title} icon={meta.icon} color={meta.color} defaultOpen={meta.defaultOpen} />
-            </div>
-          )
-        })()}
-      </DragOverlay>
-    </DndContext>
+    </DroppableColumn>
   )
+}
+
+// Find which column id (col-0/1/2) a draggable id belongs to inside the
+// current local layout. Returns the column id when the id IS the column
+// (drop on empty column) or when it's a module within that column.
+function findColumnFor(id, columns) {
+  if (typeof id === 'string' && id.startsWith('col-')) return id
+  for (let i = 0; i < columns.length; i++) {
+    if (columns[i].some(m => m.id === id)) return COLUMN_IDS[i]
+  }
+  return null
+}
+
+// Custom collision detection: prefer a pointer-within hit on a column,
+// fall back to closestCorners against module rows. This keeps cross-column
+// drops snappy without weird "jumps to top of empty column" behavior.
+function moduleCollisionDetection(args) {
+  const pointerHits = pointerWithin(args)
+  if (pointerHits.length > 0) return pointerHits
+  const intersect = rectIntersection(args)
+  if (intersect.length > 0) return intersect
+  return closestCorners(args)
 }
 
 function HubDashboard({ hubId }) {
@@ -106,15 +124,101 @@ function HubDashboard({ hubId }) {
   const [activeId, setActiveId] = useState(null)
   const [showAddModule, setShowAddModule] = useState(false)
   const [pendingDelete, setPendingDelete] = useState(null)
+  const [expandedModule, setExpandedModule] = useState(null)
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [savingName, setSavingName] = useState(false)
   const nameInputRef = useRef(null)
 
+  // Local mirror of the columns from useHubModules. Drag handlers mutate
+  // this optimistically (so the UI reflects the move during drag), and
+  // the persistent save fires on drop. When the upstream `columns` change
+  // (realtime / refetch / saveLayout's optimistic reflect), sync into
+  // local state — but skip the sync mid-drag so we don't fight ourselves.
+  const [localColumns, setLocalColumns] = useState(columns)
+  const draggingRef = useRef(false)
+  useEffect(() => {
+    if (!draggingRef.current) setLocalColumns(columns)
+  }, [columns])
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
   )
+
+  function handleDragStart(event) {
+    draggingRef.current = true
+    setActiveId(event.active.id)
+  }
+
+  function handleDragOver(event) {
+    const { active, over } = event
+    if (!over) return
+    const activeColId = findColumnFor(active.id, localColumns)
+    const overColId   = findColumnFor(over.id, localColumns)
+    if (!activeColId || !overColId) return
+    if (activeColId === overColId) return
+
+    setLocalColumns(prev => {
+      const fromIdx = COLUMN_IDS.indexOf(activeColId)
+      const toIdx   = COLUMN_IDS.indexOf(overColId)
+      if (fromIdx === -1 || toIdx === -1) return prev
+      const fromCol = [...prev[fromIdx]]
+      const toCol   = [...prev[toIdx]]
+      const movingIdx = fromCol.findIndex(m => m.id === active.id)
+      if (movingIdx === -1) return prev
+      const [moved] = fromCol.splice(movingIdx, 1)
+
+      // Drop position in target column. If hovering over a module row,
+      // insert above it; if over the column body itself, append to bottom.
+      let insertAt = toCol.length
+      if (over.id !== overColId) {
+        const overIdxInTarget = toCol.findIndex(m => m.id === over.id)
+        if (overIdxInTarget !== -1) insertAt = overIdxInTarget
+      }
+      toCol.splice(insertAt, 0, moved)
+
+      const next = [prev[0], prev[1], prev[2]]
+      next[fromIdx] = fromCol
+      next[toIdx]   = toCol
+      return next
+    })
+  }
+
+  function handleDragEnd(event) {
+    draggingRef.current = false
+    const { active, over } = event
+    setActiveId(null)
+    if (!over) return
+
+    const activeColId = findColumnFor(active.id, localColumns)
+    const overColId   = findColumnFor(over.id, localColumns)
+    if (!activeColId || !overColId) return
+
+    let next = localColumns
+    if (activeColId === overColId) {
+      const colIdx = COLUMN_IDS.indexOf(activeColId)
+      const col = localColumns[colIdx]
+      const oldIdx = col.findIndex(m => m.id === active.id)
+      // When over.id is the column container itself (empty drop area), no
+      // intra-column reorder needed.
+      const newIdx = over.id === overColId ? oldIdx : col.findIndex(m => m.id === over.id)
+      if (newIdx !== -1 && oldIdx !== newIdx) {
+        next = [...localColumns]
+        next[colIdx] = arrayMove(col, oldIdx, newIdx)
+        setLocalColumns(next)
+      }
+    }
+    // Persist current local layout (covers same-column reorder + the
+    // cross-column move that handleDragOver already applied).
+    saveLayout(next)
+  }
+
+  function handleDragCancel() {
+    draggingRef.current = false
+    setActiveId(null)
+    setLocalColumns(columns) // revert any optimistic dragOver moves
+  }
 
   const hub = hubs.find(h => h.id === hubId)
   const hubName = hub?.name || 'Hub'
@@ -223,31 +327,46 @@ function HubDashboard({ hubId }) {
         </div>
       </div>
 
-      {/* 3-column free-flow grid (Basecamp-style). Stacks on mobile. */}
+      {/* 3-column free-flow grid (Basecamp-style). Stacks on mobile.
+          One DndContext wraps all three columns so modules drag freely
+          across columns. */}
       <div className="p-4 sm:p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {[0, 1, 2].map(ci => (
-            <div key={ci} className="min-w-0">
+        <DndContext
+          sensors={sensors}
+          collisionDetection={moduleCollisionDetection}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
+            {[0, 1, 2].map(ci => (
               <ModuleColumn
-                columnIndex={ci}
-                modules={columns[ci] || []}
+                key={ci}
+                columnId={COLUMN_IDS[ci]}
+                modules={localColumns[ci] || []}
                 hubId={hubId}
-                sensors={sensors}
-                activeId={activeId}
-                setActiveId={setActiveId}
                 canManage={canRenameHub}
-                onReorder={(idx, reordered) => {
-                  // Build the full 3-column array with this column replaced.
-                  const next = [columns[0], columns[1], columns[2]]
-                  next[idx] = reordered
-                  saveLayout(next)
-                }}
                 onRename={renameModule}
                 onDelete={(m) => setPendingDelete(m)}
+                onExpand={(m) => setExpandedModule(m)}
               />
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+          <DragOverlay dropAnimation={{ duration: 180, easing: 'ease' }}>
+            {activeId && (() => {
+              const all = [...localColumns[0], ...localColumns[1], ...localColumns[2]]
+              const m = all.find(x => x.id === activeId)
+              const meta = m && KIND_META[m.kind]
+              if (!m || !meta) return null
+              return (
+                <div className="shadow-elevated rounded-2xl scale-[1.01]">
+                  <HubModuleCard title={m.title} icon={meta.icon} color={meta.color} defaultOpen={meta.defaultOpen} />
+                </div>
+              )
+            })()}
+          </DragOverlay>
+        </DndContext>
 
         {canRenameHub && (
           <div className="mt-4 flex justify-center">
@@ -262,6 +381,15 @@ function HubDashboard({ hubId }) {
           </div>
         )}
       </div>
+
+      {expandedModule && (
+        <ExpandedModuleModal
+          module={expandedModule}
+          hubId={hubId}
+          kindMeta={KIND_META[expandedModule.kind]}
+          onClose={() => setExpandedModule(null)}
+        />
+      )}
 
       <AddModuleModal
         isOpen={showAddModule}

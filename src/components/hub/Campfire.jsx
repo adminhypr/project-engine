@@ -6,7 +6,7 @@ import ChatMessage from './ChatMessage'
 import ChatInput from './ChatInput'
 import DateSeparator, { isSameDay } from '../ui/DateSeparator'
 
-function Campfire({ hubId, moduleId }) {
+function Campfire({ hubId, moduleId, expanded = false }) {
   const { profile } = useAuth()
   const { messages, loading, sendMessage, deleteMessage, loadMore, hasMore } = useHubChat(moduleId)
   const bottomRef = useRef(null)
@@ -22,7 +22,13 @@ function Campfire({ hubId, moduleId }) {
   if (loading) return <div className="py-8 flex justify-center"><Spinner /></div>
 
   return (
-    <div className="flex flex-col" style={{ maxHeight: 400 }}>
+    <div
+      className="flex flex-col"
+      // In expanded mode let the parent container dictate height (the
+      // modal already has min-height + overflow handling). Inline mode
+      // keeps the original 400px cap so the dashboard card stays compact.
+      style={expanded ? { height: '100%', minHeight: '60vh' } : { maxHeight: 400 }}
+    >
       <div ref={containerRef} className="flex-1 overflow-y-auto space-y-1 pr-1" style={{ minHeight: 0 }}>
         {hasMore && (
           <button onClick={loadMore} className="btn btn-ghost text-xs w-full mb-2">
