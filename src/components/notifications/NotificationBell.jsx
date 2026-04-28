@@ -44,7 +44,7 @@ function getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInv
       })
       return
     }
-    const moduleLabel = { chat: 'Campfire', message: 'Message Board', message_reply: 'Message Board', check_in_response: 'Check-ins', todo_note: 'To-dos', todo_comment: 'To-dos', todo_list: 'To-dos' }[m.entity_type] || 'Hub'
+    const moduleLabel = { chat: 'Campfire', message: 'Message Board', message_reply: 'Message Board', todo_note: 'To-dos', todo_comment: 'To-dos', todo_list: 'To-dos' }[m.entity_type] || 'Hub'
     notifications.push({
       id: `hub-mention-${m.id}`,
       type: 'hub-mention',

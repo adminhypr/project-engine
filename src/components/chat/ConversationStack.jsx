@@ -91,7 +91,7 @@ export default function ConversationStack({
   function Tab({ id }) {
     const conv = byId.get(id)
     if (!conv) return null
-    const isGroup = conv.kind === 'group'
+    const isGroup = conv.kind === 'group' || conv.kind === 'hub'
     const other = conv.other_profile
     const online = !isGroup && (presence.get(conv.other_user_id)?.online || false)
     const initial = (other?.full_name || '?').charAt(0).toUpperCase()

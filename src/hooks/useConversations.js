@@ -17,7 +17,7 @@ import { isExternal } from '../lib/roleHelpers'
 async function fetchConversationsForUser(userId) {
   const { data: myRows, error: myErr } = await supabase
     .from('conversation_participants')
-    .select('conversation_id, last_read_at, muted, conversation:conversations!inner(id, kind, title, team_id, task_id, last_message_at, last_message_preview)')
+    .select('conversation_id, last_read_at, muted, conversation:conversations!inner(id, kind, title, team_id, task_id, hub_id, last_message_at, last_message_preview)')
     .eq('user_id', userId)
   if (myErr) throw myErr
   if (!myRows || myRows.length === 0) return []
@@ -195,16 +195,17 @@ export function useConversations() {
     ))
   }, [])
 
-  // Externals (Agent/Client) only ever see their team group conversations
-  // and task chats they're part of — no DMs, no custom groups. This is
-  // defense-in-depth: the widget itself is already gated on !isExternal in
-  // App.jsx, but this filter ensures any future caller of the hook honors
-  // the same rule. Task chats match migration 046 RLS (externals can
-  // participate when they're assignees).
+  // Externals (Agent/Client) only ever see their team group conversations,
+  // task chats they're part of, and hub conversations they're members of —
+  // no DMs, no custom groups. This is defense-in-depth: the widget itself
+  // is already gated on !isExternal in App.jsx, but this filter ensures
+  // any future caller of the hook honors the same rule. Task chats match
+  // migration 046 RLS; hub chats match migration 064 RLS (externals are
+  // participants iff they're hub_members).
   const visibleConversations = useMemo(() => {
     if (!isExternal(profile)) return conversations
     return conversations.filter(c =>
-      (c.kind === 'group' && c.team_id) || c.kind === 'task'
+      (c.kind === 'group' && c.team_id) || c.kind === 'task' || c.kind === 'hub'
     )
   }, [conversations, profile])
 

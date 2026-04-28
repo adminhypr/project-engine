@@ -7,11 +7,11 @@ import FileUploadZone from './FileUploadZone'
 import CreateFolderModal from './CreateFolderModal'
 import { FolderPlus } from 'lucide-react'
 
-export default function DocsFiles({ hubId }) {
+export default function DocsFiles({ hubId, moduleId }) {
   const [folderPath, setFolderPath] = useState([]) // [{ id, name }, ...]
   const currentFolderId = folderPath.length > 0 ? folderPath[folderPath.length - 1].id : null
 
-  const { files, folders, loading, uploadFiles, createFolder, deleteFile, deleteFolder, getFileUrl } = useHubFiles(hubId, currentFolderId)
+  const { files, folders, loading, uploadFiles, createFolder, deleteFile, deleteFolder, getFileUrl } = useHubFiles(hubId, currentFolderId, moduleId)
   const [showNewFolder, setShowNewFolder] = useState(false)
 
   function navigateToFolder(folder) {

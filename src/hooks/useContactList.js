@@ -18,8 +18,10 @@ export function useContactList(searchQuery = '') {
     return bucketContacts({ profiles, conversations: dmConversations, myId: profile.id, myTeamIds })
   }, [profile?.id, profile?.team_ids, profile?.team_id, profiles, conversations])
 
+  // Includes hub conversations alongside team/custom groups — they share
+  // the same row shape and member-list UX (migration 064).
   const groups = useMemo(() => {
-    const raw = (conversations || []).filter(c => c.kind === 'group')
+    const raw = (conversations || []).filter(c => c.kind === 'group' || c.kind === 'hub')
     const q = (searchQuery || '').trim().toLowerCase()
     const list = q
       ? raw.filter(g => groupDisplayName(g).toLowerCase().includes(q))

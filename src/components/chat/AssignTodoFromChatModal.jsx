@@ -44,7 +44,7 @@ export default function AssignTodoFromChatModal({ conversation, onClose }) {
     const memberIds = new Set(hubMembers.map(m => m.profile_id))
     const parts = conversation.participants || []
     const me = profile?.id
-    const fromConv = conversation.kind === 'group'
+    const fromConv = (conversation.kind === 'group' || conversation.kind === 'hub')
       ? parts.filter(p => p.id && p.id !== me).map(p => p.id)
       : (conversation.other_user_id ? [conversation.other_user_id] : [])
     return fromConv.filter(id => memberIds.has(id))

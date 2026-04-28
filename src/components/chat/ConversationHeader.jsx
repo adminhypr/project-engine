@@ -31,7 +31,7 @@ export default function ConversationHeader({
   dragHandleProps, isMaximized, onToggleMaximize, onOpenMembers,
 }) {
   const navigate = useNavigate()
-  const isGroup = conversation?.kind === 'group'
+  const isGroup = conversation?.kind === 'group' || conversation?.kind === 'hub'
   const isTask = conversation?.kind === 'task'
   const name = isTask
     ? truncate(conversation.task_title || conversation.title || 'Task', 32)

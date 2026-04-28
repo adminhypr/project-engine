@@ -45,6 +45,10 @@ export function useMentionNotifications() {
 
     // 1. dm_messages where I'm mentioned (jsonb contains this user_id).
     //    Filter by conversation kind='task' via the inner join.
+    //
+    //    Note: supabase-js's .contains() does Array.join(',') for arrays,
+    //    which produces "[object Object]" for arrays of objects. For jsonb
+    //    containment we have to hand it a pre-serialized JSON string.
     const { data: msgs } = await supabase
       .from('dm_messages')
       .select(`
@@ -52,7 +56,7 @@ export function useMentionNotifications() {
         conversation:conversations!inner(id, kind, task_id),
         author:profiles!dm_messages_author_id_fkey(full_name, avatar_url)
       `)
-      .contains('mentions', [{ user_id: profile.id }])
+      .filter('mentions', 'cs', JSON.stringify([{ user_id: profile.id }]))
       .eq('conversation.kind', 'task')
       .is('deleted_at', null)
       .order('created_at', { ascending: false })

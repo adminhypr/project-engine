@@ -6,8 +6,8 @@ import { ArrowRight } from 'lucide-react'
 
 const PREVIEW_LIMIT = 5
 
-export default function TodosModuleCard({ hubId }) {
-  const { lists, items, loading } = useHubTodos(hubId)
+export default function TodosModuleCard({ hubId, moduleId }) {
+  const { lists, items, loading } = useHubTodos(hubId, moduleId)
 
   if (loading) return <div className="py-6 flex justify-center"><Spinner /></div>
 

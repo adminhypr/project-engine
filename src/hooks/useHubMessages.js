@@ -3,23 +3,29 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { showToast } from '../components/ui/index'
 
-export function useHubMessages(hubId) {
+export function useHubMessages(hubId, moduleId = null) {
   const { profile } = useAuth()
   const [messages, setMessages] = useState([])
   const [loading, setLoading]   = useState(true)
   const hubRef = useRef(hubId)
   hubRef.current = hubId
+  const modRef = useRef(moduleId)
+  modRef.current = moduleId
 
   const fetchMessages = useCallback(async () => {
     if (!hubRef.current) return
-    const { data, error } = await supabase
+    let q = supabase
       .from('hub_messages')
       .select('*, author:profiles!hub_messages_author_id_fkey(id, full_name, avatar_url), reply_count:hub_messages!parent_id(count)')
-      .eq('hub_id', hubRef.current)
       .is('parent_id', null)
       .order('pinned', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(30)
+    // Scope by module when caller passes one (multi-instance aware).
+    // Fall back to hub_id for legacy callers / pre-066 data.
+    if (modRef.current) q = q.eq('module_id', modRef.current)
+    else q = q.eq('hub_id', hubRef.current)
+    const { data, error } = await q
     if (error) showToast('Failed to load messages', 'error')
     const normalized = (data || []).map(m => ({
       ...m,
@@ -34,24 +40,29 @@ export function useHubMessages(hubId) {
     setLoading(true)
     setMessages([])
     fetchMessages()
-  }, [hubId, fetchMessages])
+  }, [hubId, moduleId, fetchMessages])
 
   useEffect(() => {
     if (!hubId) return
+    // Realtime filter must match the scope. The Supabase realtime filter
+    // string only supports a single eq on one column, so we filter by the
+    // narrower scope (module_id when present).
+    const filter = moduleId ? `module_id=eq.${moduleId}` : `hub_id=eq.${hubId}`
     const channel = supabase
-      .channel(`hub-messages-${hubId}`)
+      .channel(`hub-messages-${moduleId || hubId}`)
       .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'hub_messages', filter: `hub_id=eq.${hubId}` },
+        { event: '*', schema: 'public', table: 'hub_messages', filter },
         () => fetchMessages()
       )
       .subscribe()
     return () => supabase.removeChannel(channel)
-  }, [hubId, fetchMessages])
+  }, [hubId, moduleId, fetchMessages])
 
   const postMessage = useCallback(async (title, content, mentions = [], inlineImages = []) => {
     if (!hubRef.current || !profile?.id) return false
     const { data, error } = await supabase.from('hub_messages').insert({
       hub_id: hubRef.current,
+      module_id: modRef.current || null,
       author_id: profile.id,
       title, content,
       mentions,

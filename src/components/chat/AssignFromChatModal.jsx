@@ -12,7 +12,7 @@ export default function AssignFromChatModal({ conversation, onClose, onPosted })
   const { assignTask } = useTaskActions()
   const navigate = useNavigate()
 
-  const isGroup = conversation.kind === 'group'
+  const isGroup = conversation.kind === 'group' || conversation.kind === 'hub'
   const profileById = useMemo(
     () => new Map(profiles.map(p => [p.id, p])),
     [profiles]

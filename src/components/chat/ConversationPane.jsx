@@ -32,7 +32,7 @@ export default function ConversationPane({
   const { profile, isExternal } = useAuth()
   const { messages, loading, hasMore, sendMessage, deleteMessage, loadMore } =
     useConversation(conversation.id)
-  const isGroup = conversation.kind === 'group'
+  const isGroup = conversation.kind === 'group' || conversation.kind === 'hub'
   // Typing + read receipts are DM-only for this pass. In groups they'd need
   // multi-user reasoning; we disable them cleanly via null IDs so the hooks
   // short-circuit on the first line of their effects.
@@ -168,9 +168,9 @@ export default function ConversationPane({
             conversation={conversation}
             otherProfile={conversation.other_profile}
             online={online}
-            canAssignTask={!isExternal && (conversation.kind === 'dm' || conversation.kind === 'group')}
+            canAssignTask={!isExternal && (conversation.kind === 'dm' || conversation.kind === 'group' || conversation.kind === 'hub')}
             onAssignTask={() => onAssignTask?.(conversation)}
-            canAddTodo={isExternal && (conversation.kind === 'dm' || conversation.kind === 'group')}
+            canAddTodo={isExternal && (conversation.kind === 'dm' || conversation.kind === 'group' || conversation.kind === 'hub')}
             onAddTodo={() => setTodoOpen(true)}
             onMinimize={() => onMinimize?.(conversation.id)}
             onClose={() => onClose?.(conversation.id)}

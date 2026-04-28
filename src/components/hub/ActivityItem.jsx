@@ -1,12 +1,10 @@
 import {
-  MessageSquare, CheckCircle, Calendar, Flame, ClipboardCheck, FileText, UserPlus
+  MessageSquare, CheckCircle, Flame, FileText, UserPlus
 } from 'lucide-react'
 
 const EVENT_ICONS = {
   message_posted:    { icon: MessageSquare,  color: 'text-brand-500' },
   message_reply:     { icon: MessageSquare,  color: 'text-brand-400' },
-  check_in_response: { icon: ClipboardCheck, color: 'text-emerald-500' },
-  event_created:     { icon: Calendar,       color: 'text-amber-500' },
   chat_message:      { icon: Flame,          color: 'text-orange-500' },
   task_created:      { icon: FileText,       color: 'text-sky-500' },
   task_completed:    { icon: CheckCircle,    color: 'text-green-500' },

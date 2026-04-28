@@ -46,15 +46,16 @@ export function shapeConversationRow({ row, participantsByConv, profileById, unr
       task_last_updated: task?.last_updated ?? null,
     }
   }
-  if (kind === 'group') {
+  if (kind === 'group' || kind === 'hub') {
     const participants = allIds
       .map(id => profileById.get(id))
       .filter(Boolean)
     return {
       id: row.conversation_id,
-      kind: 'group',
-      title: conv.title || 'Group',
+      kind,
+      title: conv.title || (kind === 'hub' ? 'Hub' : 'Group'),
       team_id: conv.team_id || null,
+      hub_id: conv.hub_id || null,
       last_message_at: conv.last_message_at,
       last_message_preview: conv.last_message_preview,
       last_read_at: row.last_read_at,

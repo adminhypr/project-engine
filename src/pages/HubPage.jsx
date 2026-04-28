@@ -1,63 +1,53 @@
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { DndContext, DragOverlay, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { useHubs } from '../hooks/useHubs'
 import { useAuth } from '../hooks/useAuth'
 import { showToast } from '../components/ui'
-import { useHubModuleOrder } from '../hooks/useHubModuleOrder'
+import { useHubModules } from '../hooks/useHubModules'
 import { PageTransition } from '../components/ui/animations'
 import { LoadingScreen } from '../components/ui/index'
 import HubList from '../components/hub/HubList'
 import HubModuleCard from '../components/hub/HubModuleCard'
 import SortableModuleCard from '../components/hub/SortableModuleCard'
 import HubMembersPanel from '../components/hub/HubMembersPanel'
-import ActivityFeed from '../components/hub/ActivityFeed'
 import Attendance from '../components/hub/Attendance'
 import Campfire from '../components/hub/Campfire'
 import MessageBoard from '../components/hub/MessageBoard'
-import CheckIns from '../components/hub/CheckIns'
-import Schedule from '../components/hub/Schedule'
 import DocsFiles from '../components/hub/DocsFiles'
 import TodosModuleCard from '../components/hub/todos/TodosModuleCard'
+import AddModuleModal from '../components/hub/AddModuleModal'
 import {
-  Activity, Users, Flame, MessageSquare, ClipboardCheck,
-  Calendar, FolderOpen, ArrowLeft, CheckSquare, Pencil, Check, X as XIcon
+  Users, Flame, MessageSquare, FolderOpen, ArrowLeft, CheckSquare,
+  Pencil, Check, X as XIcon, Plus,
 } from 'lucide-react'
 
 const DEFAULT_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4']
 
-const MODULE_DEFS = {
-  'message-board': { title: 'Message Board', icon: MessageSquare, color: '#7c3aed', defaultOpen: true },
-  'to-dos':        { title: 'To-Dos',        icon: CheckSquare,    color: '#8b5cf6', defaultOpen: true },
-  'check-ins':     { title: 'Check-ins',     icon: ClipboardCheck, color: '#059669', defaultOpen: true },
-  'schedule':      { title: 'Schedule',       icon: Calendar,       color: '#d97706', defaultOpen: false },
-  'docs-files':    { title: 'Docs & Files',   icon: FolderOpen,     color: '#0284c7', defaultOpen: false },
-  'campfire':      { title: 'Campfire',       icon: Flame,          color: '#dc2626', defaultOpen: true },
-  'whos-here':     { title: "Who's Here",     icon: Users,          color: '#8b5cf6', defaultOpen: true },
-  'activity':      { title: 'Activity',       icon: Activity,       color: '#64748b', defaultOpen: false },
+// Per-kind visual config and component mapping. Title comes from the
+// hub_modules row (renameable); these stay constant per kind.
+const KIND_META = {
+  'message-board':   { icon: MessageSquare, color: '#7c3aed', defaultOpen: true,  Comp: MessageBoard },
+  'to-dos':          { icon: CheckSquare,   color: '#8b5cf6', defaultOpen: true,  Comp: TodosModuleCard },
+  'docs-files':      { icon: FolderOpen,    color: '#0284c7', defaultOpen: false, Comp: DocsFiles },
+  'campfire':        { icon: Flame,         color: '#dc2626', defaultOpen: true,  Comp: Campfire },
+  'attendance-room': { icon: Users,         color: '#8b5cf6', defaultOpen: true,  Comp: Attendance },
 }
 
-const MODULE_COMPONENTS = {
-  'message-board': MessageBoard,
-  'to-dos':        TodosModuleCard,
-  'check-ins':     CheckIns,
-  'schedule':      Schedule,
-  'docs-files':    DocsFiles,
-  'campfire':      Campfire,
-  'whos-here':     Attendance,
-  'activity':      ActivityFeed,
-}
+function ModuleColumn({
+  columnIndex, modules, hubId, sensors, activeId, setActiveId,
+  canManage, onReorder, onRename, onDelete,
+}) {
+  const ids = modules.map(m => m.id)
 
-function SortableColumn({ columnKey, items, moduleOrder, saveModuleOrder, hubId, sensors, activeId, setActiveId }) {
   function handleDragEnd({ active, over }) {
     setActiveId(null)
     if (!over || active.id === over.id) return
-    const oldOrder = moduleOrder[columnKey]
-    const oldIdx = oldOrder.indexOf(active.id)
-    const newIdx = oldOrder.indexOf(over.id)
+    const oldIdx = ids.indexOf(active.id)
+    const newIdx = ids.indexOf(over.id)
     if (oldIdx === -1 || newIdx === -1) return
-    saveModuleOrder({ ...moduleOrder, [columnKey]: arrayMove(oldOrder, oldIdx, newIdx) })
+    onReorder(columnIndex, arrayMove(modules, oldIdx, newIdx))
   }
 
   return (
@@ -68,24 +58,40 @@ function SortableColumn({ columnKey, items, moduleOrder, saveModuleOrder, hubId,
       onDragEnd={handleDragEnd}
       onDragCancel={() => setActiveId(null)}
     >
-      <SortableContext items={items} strategy={verticalListSortingStrategy}>
-        {items.map(id => {
-          const def = MODULE_DEFS[id]
-          const Comp = MODULE_COMPONENTS[id]
-          if (!def || !Comp) return null
-          return (
-            <SortableModuleCard key={id} id={id} title={def.title} icon={def.icon} color={def.color} defaultOpen={def.defaultOpen}>
-              <Comp hubId={hubId} />
-            </SortableModuleCard>
-          )
-        })}
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        <div className="space-y-4">
+          {modules.map(m => {
+            const meta = KIND_META[m.kind]
+            if (!meta) return null
+            const Comp = meta.Comp
+            return (
+              <SortableModuleCard
+                key={m.id}
+                id={m.id}
+                title={m.title}
+                icon={meta.icon}
+                color={meta.color}
+                defaultOpen={meta.defaultOpen}
+                onRename={canManage ? (nextTitle) => onRename(m.id, nextTitle) : null}
+                onDelete={canManage ? () => onDelete(m) : null}
+              >
+                <Comp hubId={hubId} moduleId={m.id} />
+              </SortableModuleCard>
+            )
+          })}
+        </div>
       </SortableContext>
       <DragOverlay dropAnimation={{ duration: 180, easing: 'ease' }}>
-        {activeId && MODULE_DEFS[activeId] && (
-          <div className="shadow-elevated rounded-2xl scale-[1.01]">
-            <HubModuleCard {...MODULE_DEFS[activeId]} />
-          </div>
-        )}
+        {activeId && (() => {
+          const m = modules.find(x => x.id === activeId)
+          const meta = m && KIND_META[m.kind]
+          if (!m || !meta) return null
+          return (
+            <div className="shadow-elevated rounded-2xl scale-[1.01]">
+              <HubModuleCard title={m.title} icon={meta.icon} color={meta.color} defaultOpen={meta.defaultOpen} />
+            </div>
+          )
+        })()}
       </DragOverlay>
     </DndContext>
   )
@@ -94,10 +100,12 @@ function SortableColumn({ columnKey, items, moduleOrder, saveModuleOrder, hubId,
 function HubDashboard({ hubId }) {
   const { hubs, loading, updateHub } = useHubs()
   const { isAdmin } = useAuth()
-  const { moduleOrder, saveModuleOrder } = useHubModuleOrder(hubId)
+  const { columns, addModule, renameModule, deleteModule, saveLayout, loading: modulesLoading } = useHubModules(hubId)
   const navigate = useNavigate()
   const [showMembers, setShowMembers] = useState(false)
   const [activeId, setActiveId] = useState(null)
+  const [showAddModule, setShowAddModule] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState(null)
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [savingName, setSavingName] = useState(false)
@@ -215,36 +223,66 @@ function HubDashboard({ hubId }) {
         </div>
       </div>
 
-      {/* Two-column layout */}
-      <div className="flex flex-col lg:flex-row">
-        {/* Left — main work tools */}
-        <div className="flex-1 min-w-0 p-4 sm:p-6 space-y-4">
-          <SortableColumn
-            columnKey="left"
-            items={moduleOrder.left}
-            moduleOrder={moduleOrder}
-            saveModuleOrder={saveModuleOrder}
-            hubId={hubId}
-            sensors={sensors}
-            activeId={activeId}
-            setActiveId={setActiveId}
-          />
+      {/* 3-column free-flow grid (Basecamp-style). Stacks on mobile. */}
+      <div className="p-4 sm:p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {[0, 1, 2].map(ci => (
+            <div key={ci} className="min-w-0">
+              <ModuleColumn
+                columnIndex={ci}
+                modules={columns[ci] || []}
+                hubId={hubId}
+                sensors={sensors}
+                activeId={activeId}
+                setActiveId={setActiveId}
+                canManage={canRenameHub}
+                onReorder={(idx, reordered) => {
+                  // Build the full 3-column array with this column replaced.
+                  const next = [columns[0], columns[1], columns[2]]
+                  next[idx] = reordered
+                  saveLayout(next)
+                }}
+                onRename={renameModule}
+                onDelete={(m) => setPendingDelete(m)}
+              />
+            </div>
+          ))}
         </div>
 
-        {/* Right sidebar — chat, presence, activity */}
-        <div className="w-full lg:w-80 xl:w-96 shrink-0 border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-dark-border p-4 space-y-4">
-          <SortableColumn
-            columnKey="sidebar"
-            items={moduleOrder.sidebar}
-            moduleOrder={moduleOrder}
-            saveModuleOrder={saveModuleOrder}
-            hubId={hubId}
-            sensors={sensors}
-            activeId={activeId}
-            setActiveId={setActiveId}
-          />
-        </div>
+        {canRenameHub && (
+          <div className="mt-4 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setShowAddModule(true)}
+              className="btn btn-secondary text-sm px-4 inline-flex items-center gap-1.5"
+            >
+              <Plus size={14} />
+              Add module
+            </button>
+          </div>
+        )}
       </div>
+
+      <AddModuleModal
+        isOpen={showAddModule}
+        onClose={() => setShowAddModule(false)}
+        onSubmit={async ({ kind, title, columnIndex }) => {
+          const created = await addModule(kind, title, columnIndex)
+          return !!created
+        }}
+      />
+
+      {pendingDelete && (
+        <ConfirmDeleteModule
+          module={pendingDelete}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={async () => {
+            const ok = await deleteModule(pendingDelete.id)
+            setPendingDelete(null)
+            if (ok) showToast('Module deleted')
+          }}
+        />
+      )}
 
       <HubMembersPanel
         hubId={hubId}
@@ -253,6 +291,33 @@ function HubDashboard({ hubId }) {
         myRole={myRole}
       />
     </PageTransition>
+  )
+}
+
+function ConfirmDeleteModule({ module, onCancel, onConfirm }) {
+  const [busy, setBusy] = useState(false)
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50" onClick={onCancel}>
+      <div
+        className="bg-white dark:bg-dark-card rounded-2xl shadow-elevated p-5 w-full max-w-sm"
+        onClick={e => e.stopPropagation()}
+      >
+        <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">Delete this module?</h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+          <strong>{module.title}</strong> and everything inside it will be permanently removed for everyone in this hub. This cannot be undone.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button onClick={onCancel} className="btn btn-ghost text-sm px-4" disabled={busy}>Cancel</button>
+          <button
+            onClick={async () => { setBusy(true); await onConfirm() }}
+            disabled={busy}
+            className="btn text-sm px-4 bg-red-500 hover:bg-red-600 text-white"
+          >
+            {busy ? 'Deleting…' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 

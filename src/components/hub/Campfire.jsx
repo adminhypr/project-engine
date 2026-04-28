@@ -6,9 +6,9 @@ import ChatMessage from './ChatMessage'
 import ChatInput from './ChatInput'
 import DateSeparator, { isSameDay } from '../ui/DateSeparator'
 
-function Campfire({ hubId }) {
+function Campfire({ hubId, moduleId }) {
   const { profile } = useAuth()
-  const { messages, loading, sendMessage, deleteMessage, loadMore, hasMore } = useHubChat(hubId)
+  const { messages, loading, sendMessage, deleteMessage, loadMore, hasMore } = useHubChat(moduleId)
   const bottomRef = useRef(null)
   const containerRef = useRef(null)
 

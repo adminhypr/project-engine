@@ -108,7 +108,9 @@ function renderDigestHtml(rows: OutboxRow[], userName: string): { subject: strin
   section('Mentions in chat', chatMentions, (r) => {
     const where = r.payload.conversation_kind === 'task'
       ? `task <strong>${escape(r.payload.task_title || 'a task')}</strong>`
-      : `group <strong>${escape(r.payload.group_title || 'a group')}</strong>`
+      : r.payload.conversation_kind === 'hub'
+        ? `hub <strong>${escape(r.payload.hub_name || r.payload.group_title || 'a hub')}</strong>`
+        : `group <strong>${escape(r.payload.group_title || 'a group')}</strong>`
     return `<strong>${escape(r.payload.actor_name || 'Someone')}</strong> mentioned you in ${where}: <em style="color:#6b7280;">${escape(r.payload.snippet || '').slice(0, 100)}</em>`
   })
 
@@ -116,7 +118,9 @@ function renderDigestHtml(rows: OutboxRow[], userName: string): { subject: strin
   section('Chat activity', chatActivity, (r) => {
     const where = r.payload.conversation_kind === 'task'
       ? `task <strong>${escape(r.payload.task_title || 'a task')}</strong>`
-      : `group <strong>${escape(r.payload.group_title || 'a group')}</strong>`
+      : r.payload.conversation_kind === 'hub'
+        ? `hub <strong>${escape(r.payload.hub_name || r.payload.group_title || 'a hub')}</strong>`
+        : `group <strong>${escape(r.payload.group_title || 'a group')}</strong>`
     return `<strong>${escape(r.payload.actor_name || 'Someone')}</strong> in ${where}: <em style="color:#6b7280;">${escape(r.payload.snippet || '').slice(0, 100)}</em>`
   })
 

@@ -3,100 +3,122 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { showToast } from '../components/ui/index'
 import { useDocumentVisible } from '../lib/useDocumentVisible'
+import { onMessage as onDmMessage } from '../lib/dmEventBus'
 
 const PAGE_SIZE = 50
 
-export function useHubChat(hubId) {
+const MSG_SELECT =
+  '*, author:profiles!dm_messages_author_id_fkey(id, full_name, avatar_url)'
+
+// Hub Campfire chat. Migration 066 made campfires module-scoped — each
+// 'campfire' kind row in hub_modules maps to one kind='hub' conversation
+// in the conversations table. This hook resolves the conversation id from
+// the module id (via get_hub_module_conversation), then mirrors the per-
+// conversation hook (useConversation) for fetch / realtime / send / delete.
+//
+// Side benefit: notifications, digest emails, mentions-only group emails,
+// reactions, threads, presence — all handled by the DM infrastructure
+// without duplicate paths.
+export function useHubChat(moduleId) {
   const { profile } = useAuth()
+  const [conversationId, setConversationId] = useState(null)
   const [messages, setMessages] = useState([])
   const [loading, setLoading]   = useState(true)
   const [hasMore, setHasMore]   = useState(true)
-  const hubRef = useRef(hubId)
-  hubRef.current = hubId
+  const cidRef = useRef(null)
+  cidRef.current = conversationId
 
-  const fetchMessages = useCallback(async (cursor) => {
-    if (!hubRef.current) return []
-    let query = supabase
-      .from('hub_chat_messages')
-      .select('*, author:profiles!hub_chat_messages_author_id_fkey(id, full_name, avatar_url)')
-      .eq('hub_id', hubRef.current)
+  // Resolve the campfire module's conversation id. Trigger
+  // create_hub_chat_on_module_insert created the conversation when the
+  // module row was inserted; this just reads it back.
+  useEffect(() => {
+    let cancelled = false
+    if (!moduleId) { setConversationId(null); return }
+    setConversationId(null)
+    setLoading(true)
+    setMessages([])
+    setHasMore(true)
+    supabase.rpc('get_hub_module_conversation', { mod_id: moduleId })
+      .then(({ data, error }) => {
+        if (cancelled) return
+        if (error) { showToast('Failed to load chat', 'error'); setLoading(false); return }
+        setConversationId(data || null)
+      })
+    return () => { cancelled = true }
+  }, [moduleId])
+
+  const fetchPage = useCallback(async (cursor) => {
+    if (!cidRef.current) return []
+    let q = supabase
+      .from('dm_messages')
+      .select(MSG_SELECT)
+      .eq('conversation_id', cidRef.current)
+      // Threads (mig 037) are scoped to per-message side panels; the main
+      // Campfire stream shows only roots.
+      .is('thread_root_id', null)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(PAGE_SIZE)
-    if (cursor) query = query.lt('created_at', cursor)
-    const { data, error } = await query
+    if (cursor) q = q.lt('created_at', cursor)
+    const { data, error } = await q
     if (error) { showToast('Failed to load chat', 'error'); return [] }
     return (data || []).reverse()
   }, [])
 
+  // Initial page once the conversation id is known.
   useEffect(() => {
-    if (!hubId) return
-    setLoading(true)
-    setMessages([])
-    setHasMore(true)
-    fetchMessages().then(data => {
-      setMessages(data)
-      setHasMore(data.length === PAGE_SIZE)
+    if (!conversationId) return
+    let cancelled = false
+    fetchPage().then(rows => {
+      if (cancelled) return
+      setMessages(rows)
+      setHasMore(rows.length === PAGE_SIZE)
       setLoading(false)
     })
-  }, [hubId, fetchMessages])
+    return () => { cancelled = true }
+  }, [conversationId, fetchPage])
 
+  // Realtime: piggyback on the global dmEventBus (one socket, fanned out
+  // by useDmRealtime) instead of opening a per-hub channel.
   useEffect(() => {
-    if (!hubId) return
-    const channel = supabase
-      .channel(`hub-chat-${hubId}`)
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'hub_chat_messages', filter: `hub_id=eq.${hubId}` },
-        async (payload) => {
-          const { data } = await supabase
-            .from('hub_chat_messages')
-            .select('*, author:profiles!hub_chat_messages_author_id_fkey(id, full_name, avatar_url)')
-            .eq('id', payload.new.id)
-            .single()
-          if (data) setMessages(prev => (prev.some(m => m.id === data.id) ? prev : [...prev, data]))
-        }
-      )
-      .subscribe()
-    return () => supabase.removeChannel(channel)
-  }, [hubId])
+    if (!conversationId) return
+    return onDmMessage(({ conversationId: cid, message }) => {
+      if (cid !== conversationId) return
+      if (message.thread_root_id) return
+      if (message.deleted_at) return
+      setMessages(prev => (prev.some(m => m.id === message.id) ? prev : [...prev, message]))
+    })
+  }, [conversationId])
 
   const sendMessage = useCallback(async (content, mentions = [], inlineImages = []) => {
-    if (!hubRef.current || !profile?.id || !content.trim()) return false
-    const { data, error } = await supabase.from('hub_chat_messages').insert({
-      hub_id: hubRef.current,
-      author_id: profile.id,
-      content: content.trim(),
-      mentions,
-      inline_images: inlineImages.map(({ preview, ...rest }) => rest),
-    }).select('*, author:profiles!hub_chat_messages_author_id_fkey(id, full_name, avatar_url)').single()
-    if (error) { showToast('Failed to send message', 'error'); return false }
-
-    // Optimistic append so the bubble shows instantly even if the realtime
-    // socket is momentarily stale. The subscription dedupes by id.
-    if (data) setMessages(prev => (prev.some(m => m.id === data.id) ? prev : [...prev, data]))
-
-    // Insert hub_mentions for each unique mentioned user
-    if (data && mentions.length > 0) {
-      const uniqueUsers = [...new Map(mentions.map(m => [m.user_id, m])).values()]
-        .filter(m => m.user_id !== profile.id)
-      if (uniqueUsers.length > 0) {
-        await supabase.from('hub_mentions').insert(
-          uniqueUsers.map(m => ({
-            hub_id: hubRef.current,
-            mentioned_by: profile.id,
-            mentioned_user: m.user_id,
-            entity_type: 'chat',
-            entity_id: data.id,
-          }))
-        )
-      }
-    }
+    const cid = cidRef.current
+    if (!cid || !profile?.id) return false
+    const trimmed = (content || '').trim()
+    const hasImages = Array.isArray(inlineImages) && inlineImages.length > 0
+    if (!trimmed && !hasImages) return false
+    const { data, error } = await supabase
+      .from('dm_messages')
+      .insert({
+        conversation_id: cid,
+        author_id: profile.id,
+        kind: 'user',
+        content: trimmed,
+        inline_images: inlineImages.map(({ preview, ...rest }) => rest),
+        mentions: Array.isArray(mentions) ? mentions : [],
+      })
+      .select(MSG_SELECT)
+      .single()
+    if (error || !data) { showToast('Failed to send message', 'error'); return false }
+    // Optimistic append; realtime echo is dedup'd by id.
+    setMessages(prev => (prev.some(m => m.id === data.id) ? prev : [...prev, data]))
     return true
   }, [profile?.id])
 
   const deleteMessage = useCallback(async (messageId) => {
-    // Clean up mentions
-    await supabase.from('hub_mentions').delete().eq('entity_type', 'chat').eq('entity_id', messageId)
-    const { error } = await supabase.from('hub_chat_messages').delete().eq('id', messageId)
+    const { error } = await supabase
+      .from('dm_messages')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', messageId)
     if (error) { showToast('Failed to delete message', 'error'); return }
     setMessages(prev => prev.filter(m => m.id !== messageId))
   }, [])
@@ -104,30 +126,22 @@ export function useHubChat(hubId) {
   const loadMore = useCallback(async () => {
     if (!hasMore || messages.length === 0) return
     const cursor = messages[0].created_at
-    let query = supabase
-      .from('hub_chat_messages')
-      .select('*, author:profiles!hub_chat_messages_author_id_fkey(id, full_name, avatar_url)')
-      .eq('hub_id', hubRef.current)
-      .order('created_at', { ascending: false })
-      .limit(PAGE_SIZE)
-      .lt('created_at', cursor)
-    const { data } = await query
-    const older = (data || []).reverse()
+    const older = await fetchPage(cursor)
     setMessages(prev => [...older, ...prev])
     setHasMore(older.length === PAGE_SIZE)
-  }, [hasMore, messages])
+  }, [hasMore, messages, fetchPage])
 
-  // Resync on tab-visible — same reasoning as the DM hook.
+  // Resync on tab-visible — same reasoning as the per-conversation hook.
   const resync = useCallback(async () => {
-    if (!hubRef.current) return
-    const latest = await fetchMessages()
+    if (!cidRef.current) return
+    const latest = await fetchPage()
     setMessages(prev => {
       if (prev.length === 0) return latest
       const byId = new Map(prev.map(m => [m.id, m]))
       for (const m of latest) if (!byId.has(m.id)) byId.set(m.id, m)
       return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at))
     })
-  }, [fetchMessages])
+  }, [fetchPage])
   useDocumentVisible(resync)
 
   return { messages, loading, sendMessage, deleteMessage, loadMore, hasMore }

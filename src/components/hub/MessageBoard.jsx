@@ -6,9 +6,9 @@ import MessageThread from './MessageThread'
 import MessageComposer from './MessageComposer'
 import { Plus, Pin } from 'lucide-react'
 
-function MessageBoard({ hubId }) {
+function MessageBoard({ hubId, moduleId }) {
   const { profile, isManager } = useAuth()
-  const { messages, loading, postMessage, replyToMessage, deleteMessage, togglePin, getReplies } = useHubMessages(hubId)
+  const { messages, loading, postMessage, replyToMessage, deleteMessage, togglePin, getReplies } = useHubMessages(hubId, moduleId)
   const [showComposer, setShowComposer] = useState(false)
 
   if (loading) return <div className="py-8 flex justify-center"><Spinner /></div>

@@ -5,29 +5,38 @@ import { showToast } from '../components/ui/index'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
 
-export function useHubFiles(hubId, folderId = null) {
+export function useHubFiles(hubId, folderId = null, moduleId = null) {
   const { profile } = useAuth()
   const [files, setFiles]       = useState([])
   const [folders, setFolders]   = useState([])
   const [loading, setLoading]   = useState(true)
   const hubRef = useRef(hubId)
   hubRef.current = hubId
+  const modRef = useRef(moduleId)
+  modRef.current = moduleId
 
   const fetchContents = useCallback(async () => {
     if (!hubRef.current) return
     let folderQuery = supabase
       .from('hub_folders')
       .select('*, creator:profiles!hub_folders_created_by_fkey(id, full_name)')
-      .eq('hub_id', hubRef.current)
       .order('name')
-    if (folderId) folderQuery = folderQuery.eq('parent_id', folderId)
-    else folderQuery = folderQuery.is('parent_id', null)
-
     let fileQuery = supabase
       .from('hub_files')
       .select('*, uploader:profiles!hub_files_uploaded_by_fkey(id, full_name, avatar_url)')
-      .eq('hub_id', hubRef.current)
       .order('created_at', { ascending: false })
+    // Module-aware scoping. When moduleId is set, scope rows to that module
+    // and rely on parent_id for tree navigation. When moduleId is null,
+    // fall back to hub_id (legacy / pre-066 path).
+    if (modRef.current) {
+      folderQuery = folderQuery.eq('module_id', modRef.current)
+      fileQuery   = fileQuery.eq('module_id', modRef.current)
+    } else {
+      folderQuery = folderQuery.eq('hub_id', hubRef.current)
+      fileQuery   = fileQuery.eq('hub_id', hubRef.current)
+    }
+    if (folderId) folderQuery = folderQuery.eq('parent_id', folderId)
+    else folderQuery = folderQuery.is('parent_id', null)
     if (folderId) fileQuery = fileQuery.eq('folder_id', folderId)
     else fileQuery = fileQuery.is('folder_id', null)
 
@@ -64,6 +73,7 @@ export function useHubFiles(hubId, folderId = null) {
 
       const { data, error: dbErr } = await supabase.from('hub_files').insert({
         hub_id: hubRef.current,
+        module_id: modRef.current || null,
         folder_id: folderId || null,
         uploaded_by: profile.id,
         file_name: file.name,
@@ -90,6 +100,7 @@ export function useHubFiles(hubId, folderId = null) {
     if (!hubRef.current || !profile?.id) return false
     const { error } = await supabase.from('hub_folders').insert({
       hub_id: hubRef.current,
+      module_id: modRef.current || null,
       parent_id: folderId || null,
       name: name.trim(),
       color: color || null,

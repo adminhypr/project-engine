@@ -3,31 +3,40 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { showToast } from '../components/ui/index'
 
-export function useHubTodos(hubId) {
+export function useHubTodos(hubId, moduleId = null) {
   const { profile } = useAuth()
   const [lists, setLists]   = useState([])
   const [items, setItems]   = useState([])
   const [loading, setLoading] = useState(true)
   const hubRef = useRef(hubId)
   hubRef.current = hubId
+  const modRef = useRef(moduleId)
+  modRef.current = moduleId
 
   /* ── Fetch ── */
   const fetchData = useCallback(async () => {
     if (!hubRef.current) return
-    const [{ data: listData, error: lErr }, { data: itemData, error: iErr }] = await Promise.all([
-      supabase
-        .from('hub_todo_lists')
-        .select('*, creator:profiles!hub_todo_lists_created_by_fkey(id, full_name, avatar_url)')
-        .eq('hub_id', hubRef.current)
-        .is('deleted_at', null)
-        .order('position'),
-      supabase
-        .from('hub_todo_items')
-        .select('*, creator:profiles!hub_todo_items_created_by_fkey(id, full_name, avatar_url), completer:profiles!hub_todo_items_completed_by_fkey(id, full_name), hub_todo_item_assignees(profile_id, profiles(id, full_name, avatar_url))')
-        .eq('hub_id', hubRef.current)
-        .is('deleted_at', null)
-        .order('position')
-    ])
+    let listQ = supabase
+      .from('hub_todo_lists')
+      .select('*, creator:profiles!hub_todo_lists_created_by_fkey(id, full_name, avatar_url)')
+      .is('deleted_at', null)
+      .order('position')
+    let itemQ = supabase
+      .from('hub_todo_items')
+      .select('*, creator:profiles!hub_todo_items_created_by_fkey(id, full_name, avatar_url), completer:profiles!hub_todo_items_completed_by_fkey(id, full_name), hub_todo_item_assignees(profile_id, profiles(id, full_name, avatar_url))')
+      .is('deleted_at', null)
+      .order('position')
+    // Lists scope by module_id; items scope by hub_id (joined to lists in the
+    // UI). Mixing list-level scoping with hub-level item scoping is fine —
+    // the UI groups items by list, so any items whose list isn't in `lists`
+    // are silently ignored.
+    if (modRef.current) {
+      listQ = listQ.eq('module_id', modRef.current)
+    } else {
+      listQ = listQ.eq('hub_id', hubRef.current)
+    }
+    itemQ = itemQ.eq('hub_id', hubRef.current)
+    const [{ data: listData, error: lErr }, { data: itemData, error: iErr }] = await Promise.all([listQ, itemQ])
     if (lErr || iErr) showToast('Failed to load to-dos', 'error')
     setLists(listData || [])
     setItems(itemData || [])
@@ -40,15 +49,16 @@ export function useHubTodos(hubId) {
     setLists([])
     setItems([])
     fetchData()
-  }, [hubId, fetchData])
+  }, [hubId, moduleId, fetchData])
 
   /* ── Realtime ── */
   useEffect(() => {
     if (!hubId) return
+    const listFilter = moduleId ? `module_id=eq.${moduleId}` : `hub_id=eq.${hubId}`
     const channel = supabase
-      .channel(`hub-todos-${hubId}`)
+      .channel(`hub-todos-${moduleId || hubId}`)
       .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'hub_todo_lists', filter: `hub_id=eq.${hubId}` },
+        { event: '*', schema: 'public', table: 'hub_todo_lists', filter: listFilter },
         () => fetchData()
       )
       .on('postgres_changes',
@@ -57,7 +67,7 @@ export function useHubTodos(hubId) {
       )
       .subscribe()
     return () => supabase.removeChannel(channel)
-  }, [hubId, fetchData])
+  }, [hubId, moduleId, fetchData])
 
   /* ── List mutations ── */
   const createList = useCallback(async (input) => {
@@ -68,7 +78,9 @@ export function useHubTodos(hubId) {
     if (!title?.trim()) return null
     const position = lists.length
     const { data, error } = await supabase.from('hub_todo_lists').insert({
-      hub_id: hubRef.current, created_by: profile.id,
+      hub_id: hubRef.current,
+      module_id: modRef.current || null,
+      created_by: profile.id,
       title: title.trim(), description, color,
       attachments: attachments.map(({ preview, ...rest }) => rest),
       position
