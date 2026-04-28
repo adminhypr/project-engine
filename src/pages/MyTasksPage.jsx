@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, Profiler } from 'react'
+import { useState, useEffect, useCallback, useRef, Profiler, useMemo } from 'react'
 import { logRender } from '../lib/refreshDiagnostic'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTasks, useTaskActions, useProfiles } from '../hooks/useTasks'
@@ -41,7 +41,20 @@ export default function MyTasksPage() {
   }) // 'mine' | 'assigned' | 'recurring'
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'list') // 'list' | 'board'
   const [filters,    setFilters]    = useState({ statuses: ['Not Started', 'In Progress', 'Blocked'] })
-  const [activeTaskId, setActiveTaskId] = useState(null)
+  // Open-task is mirrored to ?task=<id> so it survives navigation away and
+  // back. Without this, leaving /my-tasks unmounts the panel and the user
+  // loses their place when they return.
+  const activeTaskId = useMemo(() => {
+    const v = new URLSearchParams(location.search).get('task')
+    return v || null
+  }, [location.search])
+  const setActiveTaskId = useCallback((id) => {
+    const params = new URLSearchParams(location.search)
+    if (id) params.set('task', id)
+    else params.delete('task')
+    const next = params.toString()
+    navigate({ pathname: location.pathname, search: next ? `?${next}` : '' }, { replace: true })
+  }, [location.pathname, location.search, navigate])
   const [declineTarget, setDeclineTarget] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [showBulkDelete, setShowBulkDelete] = useState(false)
@@ -63,28 +76,37 @@ export default function MyTasksPage() {
   const assignedByMe = tasks.filter(t => t.assigned_by === profile?.id && t.assigned_to !== profile?.id)
   const activeTasks = tab === 'mine' ? myTasks : assignedByMe
 
-  // Open task panel from notification click or ?task= query param.
-  // Accept either the DB uuid (tasks.id) or the human-readable task_id,
-  // so links from chat system messages work in both forms. When the target
-  // isn't in the already-loaded tasks array (e.g. a just-assigned task
-  // clicked from a chat card before realtime propagated), trigger one
-  // silent refetch so we don't need a hard page reload to pick it up.
+  // Two sources of "open this task":
+  //   • location.state.openTaskId — pushed by NotificationBell when the user
+  //     clicks a notification from another page. We mirror it into the URL
+  //     so subsequent navigation preserves the panel.
+  //   • ?task= query param — already wired into activeTaskId above. The only
+  //     thing we need to handle here is the human-readable task_id form
+  //     (e.g. PED-123) used by chat-card links: rewrite to the DB uuid so
+  //     the panel keeps working after a refresh.
+  // When the target task isn't in the already-loaded tasks array, trigger
+  // one silent refetch so we don't need a hard page reload to pick it up.
   const refetchedForIdsRef = useRef(new Set())
   useEffect(() => {
-    const openTaskId = location.state?.openTaskId || new URLSearchParams(location.search).get('task')
-    if (!openTaskId) return
-    if (tasks.length === 0) return
-    const task = tasks.find(t => t.id === openTaskId || t.task_id === openTaskId)
-    if (task) {
-      setActiveTaskId(task.id)
-      navigate(location.pathname, { replace: true, state: {} })
+    const stateOpenId = location.state?.openTaskId
+    if (stateOpenId) {
+      setActiveTaskId(stateOpenId)
+      navigate(location.pathname + location.search, { replace: true, state: {} })
       return
     }
-    if (!refetchedForIdsRef.current.has(openTaskId)) {
-      refetchedForIdsRef.current.add(openTaskId)
+    if (!activeTaskId) return
+    if (tasks.length === 0) return
+    const task = tasks.find(t => t.id === activeTaskId || t.task_id === activeTaskId)
+    if (task && task.id !== activeTaskId) {
+      // URL had the human-readable task_id; rewrite to the uuid.
+      setActiveTaskId(task.id)
+      return
+    }
+    if (!task && !refetchedForIdsRef.current.has(activeTaskId)) {
+      refetchedForIdsRef.current.add(activeTaskId)
       refetch(true)
     }
-  }, [location.state?.openTaskId, location.search, tasks, refetch])
+  }, [location.state?.openTaskId, location.pathname, location.search, activeTaskId, tasks, refetch, setActiveTaskId, navigate])
 
   // Listen for the chat widget's "Open task →" link. The header dispatches a
   // window-level open-task CustomEvent with { taskId }; we set activeTaskId so
