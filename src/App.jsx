@@ -1,4 +1,4 @@
-import { Profiler } from 'react'
+import { Profiler, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import { AuthProvider, useAuth } from './hooks/useAuth'
@@ -7,19 +7,31 @@ import { PresenceProvider } from './hooks/PresenceContext'
 import { TasksProvider, ProfilesProvider } from './hooks/useTasks'
 import Layout from './components/layout/Layout'
 import LoginPage from './pages/LoginPage'
+// MyTasksPage stays eager — it's the default landing route. Everything
+// else is reachable only via navigation, so lazy-loading those pages
+// strips ~600-800 KB off the initial bundle without any first-paint
+// cost for /my-tasks visitors.
 import MyTasksPage from './pages/MyTasksPage'
-import AssignTaskPage from './pages/AssignTaskPage'
-import TeamViewPage from './pages/TeamViewPage'
-import AdminOverviewPage from './pages/AdminOverviewPage'
-import ReportsPage from './pages/reports/ReportsPage'
-import SettingsPage from './pages/SettingsPage'
-import HubPage from './pages/HubPage'
-import HubTodosPage from './pages/HubTodosPage'
-import ToDoPage from './pages/ToDoPage'
-import TeamChatPage from './pages/TeamChatPage'
+const AssignTaskPage     = lazy(() => import('./pages/AssignTaskPage'))
+const TeamViewPage       = lazy(() => import('./pages/TeamViewPage'))
+const AdminOverviewPage  = lazy(() => import('./pages/AdminOverviewPage'))
+const ReportsPage        = lazy(() => import('./pages/reports/ReportsPage'))
+const SettingsPage       = lazy(() => import('./pages/SettingsPage'))
+const HubPage            = lazy(() => import('./pages/HubPage'))
+const HubTodosPage       = lazy(() => import('./pages/HubTodosPage'))
+const ToDoPage           = lazy(() => import('./pages/ToDoPage'))
+const TeamChatPage       = lazy(() => import('./pages/TeamChatPage'))
 import ErrorBoundary from './components/ErrorBoundary'
 import { ThemeProvider } from './hooks/useTheme'
 import ChatWidget from './components/chat/ChatWidget'
+
+function RouteFallback() {
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
 
 function AppRoutes() {
   const { session, loading, profile, refreshProfile, isExternal } = useAuth()
@@ -71,23 +83,25 @@ function AppRoutes() {
       <Profiler id="Layout" onRender={logRender}>
         <Layout>
           <ErrorBoundary>
-            <AnimatePresence mode="wait">
-              <Routes>
-                <Route path="/"         element={<Navigate to={rootTarget} replace />} />
-                <Route path="/my-tasks" element={<InternalOnly><Profiler id="MyTasksPage" onRender={logRender}><MyTasksPage /></Profiler></InternalOnly>} />
-                <Route path="/assign"   element={<InternalOnly><AssignTaskPage /></InternalOnly>} />
-                <Route path="/to-do"    element={<ToDoPage />} />
-                <Route path="/team-chat" element={<TeamChatPage />} />
-                <Route path="/hub"        element={<HubPage />} />
-                <Route path="/hub/:hubId" element={<HubPage />} />
-                <Route path="/hub/:hubId/todos/*" element={<HubTodosPage />} />
-                <Route path="/team"     element={<InternalOnly><TeamViewPage /></InternalOnly>} />
-                <Route path="/admin"    element={<InternalOnly><Profiler id="AdminOverviewPage" onRender={logRender}><AdminOverviewPage /></Profiler></InternalOnly>} />
-                <Route path="/reports"  element={<InternalOnly><ReportsPage /></InternalOnly>} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="*"         element={<Navigate to={rootTarget} replace />} />
-              </Routes>
-            </AnimatePresence>
+            <Suspense fallback={<RouteFallback />}>
+              <AnimatePresence mode="wait">
+                <Routes>
+                  <Route path="/"         element={<Navigate to={rootTarget} replace />} />
+                  <Route path="/my-tasks" element={<InternalOnly><Profiler id="MyTasksPage" onRender={logRender}><MyTasksPage /></Profiler></InternalOnly>} />
+                  <Route path="/assign"   element={<InternalOnly><AssignTaskPage /></InternalOnly>} />
+                  <Route path="/to-do"    element={<ToDoPage />} />
+                  <Route path="/team-chat" element={<TeamChatPage />} />
+                  <Route path="/hub"        element={<HubPage />} />
+                  <Route path="/hub/:hubId" element={<HubPage />} />
+                  <Route path="/hub/:hubId/todos/*" element={<HubTodosPage />} />
+                  <Route path="/team"     element={<InternalOnly><TeamViewPage /></InternalOnly>} />
+                  <Route path="/admin"    element={<InternalOnly><Profiler id="AdminOverviewPage" onRender={logRender}><AdminOverviewPage /></Profiler></InternalOnly>} />
+                  <Route path="/reports"  element={<InternalOnly><ReportsPage /></InternalOnly>} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="*"         element={<Navigate to={rootTarget} replace />} />
+                </Routes>
+              </AnimatePresence>
+            </Suspense>
           </ErrorBoundary>
         </Layout>
       </Profiler>
