@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Profiler } from 'react'
+import { logRender } from '../lib/refreshDiagnostic'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTasks, useTaskActions, useProfiles } from '../hooks/useTasks'
 import { useAuth } from '../hooks/useAuth'
@@ -404,12 +405,14 @@ export default function MyTasksPage() {
         )}
 
         {activeTask && (
-          <TaskDetailPanel
-            task={activeTask}
-            tasks={tasks}
-            onClose={() => setActiveTaskId(null)}
-            onUpdated={() => { refetch(true); setActiveTaskId(null) }}
-          />
+          <Profiler id="TaskDetailPanel" onRender={logRender}>
+            <TaskDetailPanel
+              task={activeTask}
+              tasks={tasks}
+              onClose={() => setActiveTaskId(null)}
+              onUpdated={() => { refetch(true); setActiveTaskId(null) }}
+            />
+          </Profiler>
         )}
 
         <DeclineModal

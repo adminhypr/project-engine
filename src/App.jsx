@@ -1,6 +1,8 @@
+import { Profiler } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import { AuthProvider, useAuth } from './hooks/useAuth'
+import { logRender } from './lib/refreshDiagnostic'
 import { PresenceProvider } from './hooks/PresenceContext'
 import Layout from './components/layout/Layout'
 import LoginPage from './pages/LoginPage'
@@ -64,30 +66,36 @@ function AppRoutes() {
   }
 
   return (
-    <>
-      <Layout>
-        <ErrorBoundary>
-          <AnimatePresence mode="wait">
-            <Routes>
-              <Route path="/"         element={<Navigate to={rootTarget} replace />} />
-              <Route path="/my-tasks" element={<InternalOnly><MyTasksPage /></InternalOnly>} />
-              <Route path="/assign"   element={<InternalOnly><AssignTaskPage /></InternalOnly>} />
-              <Route path="/to-do"    element={<ToDoPage />} />
-              <Route path="/team-chat" element={<TeamChatPage />} />
-              <Route path="/hub"        element={<HubPage />} />
-              <Route path="/hub/:hubId" element={<HubPage />} />
-              <Route path="/hub/:hubId/todos/*" element={<HubTodosPage />} />
-              <Route path="/team"     element={<InternalOnly><TeamViewPage /></InternalOnly>} />
-              <Route path="/admin"    element={<InternalOnly><AdminOverviewPage /></InternalOnly>} />
-              <Route path="/reports"  element={<InternalOnly><ReportsPage /></InternalOnly>} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="*"         element={<Navigate to={rootTarget} replace />} />
-            </Routes>
-          </AnimatePresence>
-        </ErrorBoundary>
-      </Layout>
-      {!isExternal && <ChatWidget />}
-    </>
+    <Profiler id="AppRoutes" onRender={logRender}>
+      <Profiler id="Layout" onRender={logRender}>
+        <Layout>
+          <ErrorBoundary>
+            <AnimatePresence mode="wait">
+              <Routes>
+                <Route path="/"         element={<Navigate to={rootTarget} replace />} />
+                <Route path="/my-tasks" element={<InternalOnly><Profiler id="MyTasksPage" onRender={logRender}><MyTasksPage /></Profiler></InternalOnly>} />
+                <Route path="/assign"   element={<InternalOnly><AssignTaskPage /></InternalOnly>} />
+                <Route path="/to-do"    element={<ToDoPage />} />
+                <Route path="/team-chat" element={<TeamChatPage />} />
+                <Route path="/hub"        element={<HubPage />} />
+                <Route path="/hub/:hubId" element={<HubPage />} />
+                <Route path="/hub/:hubId/todos/*" element={<HubTodosPage />} />
+                <Route path="/team"     element={<InternalOnly><TeamViewPage /></InternalOnly>} />
+                <Route path="/admin"    element={<InternalOnly><Profiler id="AdminOverviewPage" onRender={logRender}><AdminOverviewPage /></Profiler></InternalOnly>} />
+                <Route path="/reports"  element={<InternalOnly><ReportsPage /></InternalOnly>} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="*"         element={<Navigate to={rootTarget} replace />} />
+              </Routes>
+            </AnimatePresence>
+          </ErrorBoundary>
+        </Layout>
+      </Profiler>
+      {!isExternal && (
+        <Profiler id="ChatWidget" onRender={logRender}>
+          <ChatWidget />
+        </Profiler>
+      )}
+    </Profiler>
   )
 }
 

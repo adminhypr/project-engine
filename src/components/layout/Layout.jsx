@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, Profiler } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
+import { logRender } from '../../lib/refreshDiagnostic'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../hooks/useAuth'
 import { signOut } from '../../lib/auth'
@@ -181,12 +182,16 @@ export default function Layout({ children }) {
             <Menu size={20} />
           </button>
           <h1 className="text-sm font-bold text-slate-900 dark:text-white">Hypr Task</h1>
-          <NotificationBell onTaskClick={(taskId) => { navigate('/my-tasks', { state: { openTaskId: taskId } }); setSidebarOpen(false) }} />
+          <Profiler id="NotificationBell-mobile" onRender={logRender}>
+            <NotificationBell onTaskClick={(taskId) => { navigate('/my-tasks', { state: { openTaskId: taskId } }); setSidebarOpen(false) }} />
+          </Profiler>
         </div>
 
         {/* Desktop notification bell */}
         <div className="fixed top-4 right-5 z-30 hidden md:block">
-          <NotificationBell onTaskClick={(taskId) => navigate('/my-tasks', { state: { openTaskId: taskId } })} />
+          <Profiler id="NotificationBell" onRender={logRender}>
+            <NotificationBell onTaskClick={(taskId) => navigate('/my-tasks', { state: { openTaskId: taskId } })} />
+          </Profiler>
         </div>
         {children}
       </main>
