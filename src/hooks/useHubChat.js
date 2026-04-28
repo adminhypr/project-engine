@@ -131,14 +131,20 @@ export function useHubChat(moduleId) {
     setHasMore(older.length === PAGE_SIZE)
   }, [hasMore, messages, fetchPage])
 
-  // Resync on tab-visible — same reasoning as the per-conversation hook.
+  // Resync on tab-visible — same reasoning as useConversation. Bail out
+  // with the existing array reference when no new messages arrived so the
+  // Campfire thread doesn't re-render every tab return.
   const resync = useCallback(async () => {
     if (!cidRef.current) return
     const latest = await fetchPage()
     setMessages(prev => {
       if (prev.length === 0) return latest
       const byId = new Map(prev.map(m => [m.id, m]))
-      for (const m of latest) if (!byId.has(m.id)) byId.set(m.id, m)
+      let changed = false
+      for (const m of latest) {
+        if (!byId.has(m.id)) { byId.set(m.id, m); changed = true }
+      }
+      if (!changed) return prev
       return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at))
     })
   }, [fetchPage])

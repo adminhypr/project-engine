@@ -77,6 +77,14 @@ export function useGlobalPresence(profile) {
         const next = new Map()
         for (const [userId, metas] of Object.entries(state)) {
           if (!metas || metas.length === 0) continue
+          // Skip OURSELVES. The current user is obviously online whenever
+          // they're using the app — no consumer cares about their own dot.
+          // Including the self-entry meant every browser-tab hide/show
+          // toggled our own track() state, which changed the Map, which
+          // changed the AuthContext value, which re-rendered every page
+          // and panel that calls useAuth(). That's the "task page
+          // refreshes when I switch back to the tab" report.
+          if (userId === profile.id) continue
           // Pick the freshest meta for a display timestamp; presence from
           // *any* active tab of this user is enough to show them online.
           const latest = metas[metas.length - 1]
@@ -91,10 +99,24 @@ export function useGlobalPresence(profile) {
         // to what we already have — that's the single biggest source of
         // the "page refreshes every ~10 seconds" perception.
         setPresence(prev => {
-          if (prev.size !== next.size) return next
+          if (prev.size !== next.size) {
+            if (typeof window !== 'undefined' && window.__pe_debug) {
+              console.log('[pe-debug] presence sync DIFFERENT (size changed)', { prev: prev.size, next: next.size })
+            }
+            return next
+          }
           for (const [k, v] of next) {
             const p = prev.get(k)
-            if (!p || p.onlineAt !== v.onlineAt) return next
+            if (!p || p.onlineAt !== v.onlineAt) {
+              if (typeof window !== 'undefined' && window.__pe_debug) {
+                console.log('[pe-debug] presence sync DIFFERENT (entry changed)', k)
+              }
+              return next
+            }
+          }
+          if (typeof window !== 'undefined' && window.__pe_debug) {
+            // Don't spam — but we want to know when sync fires with no changes.
+            console.log('[pe-debug] presence sync UNCHANGED (skipped)')
           }
           return prev
         })

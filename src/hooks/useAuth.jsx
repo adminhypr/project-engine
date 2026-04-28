@@ -218,10 +218,16 @@ export function AuthProvider({ children }) {
     // of the "page refreshes when I switch back to it" perception.
     let lastSetToken = null
     function handleVisibility() {
+      if (typeof window !== 'undefined' && window.__pe_debug) {
+        console.log('[pe-debug] visibility', document.visibilityState, 'at', new Date().toISOString())
+      }
       if (document.visibilityState !== 'visible') return
       supabase.auth.getSession().then(({ data }) => {
         const token = data?.session?.access_token
         if (token && token !== lastSetToken) {
+          if (typeof window !== 'undefined' && window.__pe_debug) {
+            console.log('[pe-debug] setAuth on visible (token changed)')
+          }
           try { supabase.realtime.setAuth(token); lastSetToken = token } catch { /* noop */ }
         }
       })
@@ -308,7 +314,12 @@ export function AuthProvider({ children }) {
     }
   }, [profile?.id])
 
-  const value = {
+  // Memoize the context value so consumers don't see a fresh reference on
+  // every AuthProvider render. Without this, anything React does that
+  // re-renders AuthProvider (parent re-render, an unrelated state hook
+  // tick) would propagate as a new context object to every useAuth()
+  // consumer in the tree — basically every page and panel.
+  const value = useMemo(() => ({
     session,
     profile,
     loading,
@@ -322,8 +333,11 @@ export function AuthProvider({ children }) {
     isExternal: isExternal(profile),
     isManagerForTeam,
     activeTeamId,
-    setActiveTeamId
-  }
+    setActiveTeamId,
+  }), [
+    session, profile, loading, refreshProfile, presence,
+    isManagerForTeam, activeTeamId,
+  ])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

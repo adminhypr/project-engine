@@ -176,6 +176,9 @@ export function useTasks() {
       }
     })
 
+    if (typeof window !== 'undefined' && window.__pe_debug) {
+      console.log('[pe-debug] setTasks', enriched.length, 'rows · silent=', silent, 'at', new Date().toISOString())
+    }
     setTasks(enriched)
     setLoading(false)
   }, []) // profile/isAdmin/isManager accessed via refs to keep identity stable

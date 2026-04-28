@@ -122,13 +122,20 @@ export function useConversation(conversationId) {
 
   // If the realtime socket was asleep while the tab was hidden, messages may
   // have been missed. On tab-visible, pull anything newer than what we have.
+  // Crucially, return the same array reference when no new messages arrived
+  // — otherwise every tab return swaps the messages array identity (even
+  // though contents are identical) and re-renders the whole thread.
   const resync = useCallback(async () => {
     if (!cidRef.current) return
     const latest = await fetchPage()
     setMessages(prev => {
       if (prev.length === 0) return latest
       const byId = new Map(prev.map(m => [m.id, m]))
-      for (const m of latest) if (!byId.has(m.id)) byId.set(m.id, m)
+      let changed = false
+      for (const m of latest) {
+        if (!byId.has(m.id)) { byId.set(m.id, m); changed = true }
+      }
+      if (!changed) return prev
       return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at))
     })
   }, [fetchPage])
