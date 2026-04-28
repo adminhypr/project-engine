@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Loader2 } from 'lucide-react'
+import { X, Loader2, Paperclip } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { useHubMembers } from '../../hooks/useHubMembers'
@@ -26,6 +26,7 @@ export default function RichInput({
   const { profile } = useAuth()
   const { members } = useHubMembers(hubId)
   const textareaRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   // Mention state
   const [mentionState, setMentionState] = useState({ active: false, query: '', startIndex: -1 })
@@ -262,6 +263,17 @@ export default function RichInput({
 
   const hasImages = inlineImages.length > 0 || uploading.length > 0
 
+  function handlePickerChange(e) {
+    if (!enableImages) return
+    const files = e.target.files
+    if (!files) return
+    for (const file of files) {
+      if (file.type.startsWith('image/')) uploadImage(file)
+    }
+    // Reset so picking the same file twice still fires onChange.
+    e.target.value = ''
+  }
+
   return (
     <div className="relative">
       <div
@@ -278,8 +290,29 @@ export default function RichInput({
           onPaste={handlePaste}
           placeholder={placeholder}
           rows={singleLine ? 1 : rows}
-          className={`form-input w-full resize-none text-sm ${singleLine ? 'py-1.5' : ''} ${className}`}
+          className={`form-input w-full resize-none text-sm ${singleLine ? 'py-1.5 pr-9' : 'pr-9'} ${className}`}
         />
+        {enableImages && (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              onChange={handlePickerChange}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="absolute right-2 bottom-2 p-1 rounded text-slate-400 hover:text-brand-600 dark:text-slate-500 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-dark-hover"
+              aria-label="Attach image"
+              title="Attach image (max 5 MB)"
+            >
+              <Paperclip size={15} />
+            </button>
+          </>
+        )}
       </div>
 
       {mentionState.active && filteredMembers.length > 0 && createPortal(
