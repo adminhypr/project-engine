@@ -70,6 +70,11 @@ export function useTasks() {
     isManagerRef.current = isManager
   }, [profile, isAdmin, isManager])
 
+  // Mirror the current tasks array so realtime handlers can answer
+  // "is this row in my list?" without re-subscribing on every change.
+  const tasksRef = useRef([])
+  useEffect(() => { tasksRef.current = tasks }, [tasks])
+
   const fetchTasks = useCallback(async (silent = false) => {
     if (!profileRef.current) return
     if (!silent) setLoading(true)
@@ -195,8 +200,24 @@ export function useTasks() {
   // Without (2), the recipient of a multi-owner assignment had to refresh
   // the page before the new task appeared — which is what users were
   // reporting.
+  //
+  // Refetches are coalesced through scheduleRefetch() so a burst of events
+  // from one logical action (e.g. assigning a task with 4 assignees writes
+  // 1 tasks row + 4 task_assignees rows in milliseconds) collapses to a
+  // single fetch. Events that don't affect the current user's visible task
+  // list are dropped entirely — that's the fix for the "page auto-refreshes
+  // whenever something changes elsewhere" UX bug.
   useEffect(() => {
     if (!profileId) return
+
+    let refetchTimer = null
+    function scheduleRefetch() {
+      if (refetchTimer) return
+      refetchTimer = setTimeout(() => {
+        refetchTimer = null
+        fetchTasks(true)
+      }, 250)
+    }
 
     // Reconnect-aware status tracking: the first SUBSCRIBED is the initial
     // connect (no refetch — we've just fetched). Each subsequent transition
@@ -205,7 +226,7 @@ export function useTasks() {
     let everConnected = false
     function onStatus(status) {
       if (status === 'SUBSCRIBED') {
-        if (everConnected) fetchTasks(true)
+        if (everConnected) scheduleRefetch()
         everConnected = true
       } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         everConnected = false
@@ -213,45 +234,61 @@ export function useTasks() {
     }
 
     // Tasks channel — primary assignees / task creators / managers see events
-    // directly through RLS.
+    // directly through RLS. Even with RLS, an admin/manager sees changes for
+    // tasks they don't actively care about (e.g. another team member's notes
+    // tweak). Filter to "involves me OR already in my list" so unrelated
+    // backend churn doesn't redraw the page.
     const tasksChannel = supabase
       .channel('tasks-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' },
         (payload) => {
-          fetchTasks(true)
-          if (payload.eventType === 'INSERT') {
-            const row = payload.new
-            if (row && row.assigned_to === profileId && row.assigned_by !== profileId) {
-              playTaskSound()
-            }
+          const newRow = payload.new
+          const oldRow = payload.old
+          const row = newRow || oldRow
+          if (!row) return
+
+          const involvesMe =
+            newRow?.assigned_to === profileId || newRow?.assigned_by === profileId ||
+            oldRow?.assigned_to === profileId || oldRow?.assigned_by === profileId
+          const inMyList = tasksRef.current.some(t => t.id === row.id)
+          if (!involvesMe && !inMyList) return
+
+          if (payload.eventType === 'INSERT' && newRow?.assigned_to === profileId && newRow?.assigned_by !== profileId) {
+            playTaskSound()
           }
+          scheduleRefetch()
         })
       .subscribe(onStatus)
 
     // Task-assignees channel — secondary assignees land here (tasks INSERT is
     // suppressed by RLS until their junction row exists).
     //
-    // Deliberately UNFILTERED on profile_id. Server-side realtime filters on
-    // composite-PK tables are known to drop events under some conditions; a
-    // client-side filter is unconditionally reliable and the volume is
-    // negligible (a handful of rows per assignment in the whole company).
+    // Deliberately UNFILTERED on profile_id at the subscription level —
+    // server-side realtime filters on composite-PK tables are known to drop
+    // events under some conditions. We filter client-side instead, where the
+    // logic is "row references me OR row references a task I can already
+    // see". The earlier version refetched on every event and was the loudest
+    // source of the spurious-refresh bug.
     const assigneesChannel = supabase
       .channel('task-assignees-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'task_assignees' },
         (payload) => {
-          const row = payload.new || payload.old
+          const newRow = payload.new
+          const oldRow = payload.old
+          const row = newRow || oldRow
           if (!row) return
+
+          const involvesMe = newRow?.profile_id === profileId || oldRow?.profile_id === profileId
+          const inMyList = tasksRef.current.some(t => t.id === row.task_id)
+          if (!involvesMe && !inMyList) return
+
           // Sound only on NEW assignments to the current user.
           if (payload.eventType === 'INSERT' && !row.is_primary && row.profile_id === profileId) {
             playTaskSound()
           }
-          // Refetch on any task_assignees change we receive. Previously this
-          // skipped non-matching profile_ids, which broke the per-assignee
-          // completion UI: when an assigner toggled another user's checkbox,
-          // their own client never refetched and the UI stayed stuck.
-          fetchTasks(true)
+          scheduleRefetch()
         }
       )
       .subscribe()
@@ -264,62 +301,66 @@ export function useTasks() {
       .channel(`user:${profileId}:task-poke`, { config: { broadcast: { self: false } } })
       .on('broadcast', { event: 'task-changed' }, () => {
         playTaskSound()
-        fetchTasks(true)
+        scheduleRefetch()
       })
       .subscribe()
 
     return () => {
+      if (refetchTimer) { clearTimeout(refetchTimer); refetchTimer = null }
       supabase.removeChannel(tasksChannel)
       supabase.removeChannel(assigneesChannel)
       supabase.removeChannel(pokeChannel)
     }
   }, [profileId, fetchTasks])
 
-  // Polling safety net — one silent refetch every 30s while the tab is in
-  // the foreground. If realtime works, this is a cheap no-op; if ANY event
-  // is dropped for any reason (stale socket, filter quirk, RLS edge case),
-  // the next tick corrects within 30s. Stopped when the tab is hidden so
-  // we don't hammer the DB on idle backgrounds.
-  useEffect(() => {
-    if (!profileId) return
-    let interval = null
-    function start() {
-      if (interval) return
-      interval = setInterval(() => {
-        if (document.visibilityState === 'visible') fetchTasks(true)
-      }, 30000)
-    }
-    function stop() {
-      if (interval) { clearInterval(interval); interval = null }
-    }
-    function handle() {
-      if (document.visibilityState === 'visible') start()
-      else stop()
-    }
-    handle()
-    document.addEventListener('visibilitychange', handle)
-    return () => { document.removeEventListener('visibilitychange', handle); stop() }
-  }, [profileId, fetchTasks])
-
   // Silent refetch on tab-visible — catches task inserts/updates that happened
-  // while the realtime socket was asleep.
+  // while the realtime socket was asleep. This is the safety net that
+  // replaces the old 30s polling timer.
   useDocumentVisible(useCallback(() => {
     if (profileRef.current) fetchTasks(true)
   }, [fetchTasks]))
 
   // Refresh unread_chat_count when DM messages arrive. The global
   // useDmRealtime subscription fires dmEventBus "message" events for any
-  // conversation the user participates in — including task chats. A single
-  // debounced refetch coalesces bursts (e.g. paste-multiple messages).
+  // conversation the user participates in — including task chats. We only
+  // need the unread counts here, so run the unread-counts RPC alone and
+  // patch tasks in place; full fetchTasks would re-render every row for a
+  // single-column update. Debounced to coalesce paste-multiple bursts.
   useEffect(() => {
     if (!profileId) return
     let timer = null
     const unsub = onMessage(() => {
       if (timer) clearTimeout(timer)
-      timer = setTimeout(() => { fetchTasks(true) }, 500)
+      timer = setTimeout(async () => {
+        const ids = tasksRef.current.map(t => t.id).filter(Boolean)
+        if (ids.length === 0) return
+        const { data: rows, error: err } = await supabase
+          .rpc('get_user_task_chat_unreads', { p_task_ids: ids })
+        if (err) {
+          console.warn('get_user_task_chat_unreads (dm refresh) failed:', err.message)
+          return
+        }
+        const unreadByTaskId = new Map()
+        for (const r of rows || []) {
+          unreadByTaskId.set(r.task_id, Number(r.unread_count) || 0)
+        }
+        // Patch only the unread_chat_count column. Bail out with the
+        // existing array reference if no row's count actually changed, so
+        // unrelated subscribers don't see a state-update notification.
+        setTasks(prev => {
+          let changed = false
+          const next = prev.map(t => {
+            const newCount = unreadByTaskId.get(t.id) || 0
+            if ((t.unread_chat_count || 0) === newCount) return t
+            changed = true
+            return { ...t, unread_chat_count: newCount }
+          })
+          return changed ? next : prev
+        })
+      }, 500)
     })
     return () => { if (timer) clearTimeout(timer); unsub() }
-  }, [profileId, fetchTasks])
+  }, [profileId])
 
   // My tasks only (primary + secondary assignee)
   const myTasks = tasks.filter(t =>
