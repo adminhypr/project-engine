@@ -124,11 +124,18 @@ export function useMentionNotifications() {
       )
       .subscribe()
 
-    // Any new dm_message may be a task-chat mention of me; refetch.
-    // postgres_changes can't filter on jsonb containment, so we rely on
-    // the existing global dm_messages subscription (via dmEventBus) and
-    // just refetch on any event. Cheap — mentions are rare.
-    const offDm = onMessage(() => fetchTaskMentions())
+    // Any new dm_message MAY be a task-chat mention of me. Cheap pre-check:
+    // the message payload carries a `mentions` jsonb array of
+    // `{user_id, display_name}` entries — if my id isn't there, skip the
+    // (4-table) refetch entirely. Without this guard, every DM in the
+    // workspace triggered a fetchTaskMentions, which is the most common
+    // source of "the page just refreshed for no reason" complaints.
+    const offDm = onMessage(({ message }) => {
+      const mentions = Array.isArray(message?.mentions) ? message.mentions : []
+      const mentionsMe = mentions.some(m => (m?.user_id || m?.id) === profile.id)
+      if (!mentionsMe) return
+      fetchTaskMentions()
+    })
 
     // When the viewer opens a task chat, mark_conversation_read updates
     // their last_read_at. Subscribe to their conversation_participants

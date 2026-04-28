@@ -47,15 +47,54 @@ export function useRecurrences() {
   // Initial fetch + refetch when the user's profile is ready.
   useEffect(() => { fetchAll() }, [profile?.id, fetchAll])
 
-  // Realtime — refetch on any change to either table.
+  // Mirror current templates so the realtime handler can answer
+  // "is this row in my visible list?" without re-subscribing.
+  const templatesRef = useRef([])
+  useEffect(() => { templatesRef.current = templates }, [templates])
+
+  // Realtime — coalesce bursts and only refetch when the changing row
+  // actually affects the current viewer. Without this, the spawn-recurring
+  // cron + any other user's edits caused a full template list refetch on
+  // every event the viewer had RLS access to (i.e. all templates for an
+  // admin), which churned every consumer (MyTasksPage, AssignTaskPage,
+  // RecurringList) unnecessarily.
   useEffect(() => {
     if (!profile?.id) return
+    let timer = null
+    function scheduleRefetch() {
+      if (timer) return
+      timer = setTimeout(() => { timer = null; fetchAll() }, 250)
+    }
+    function isRelevantTemplateChange(payload) {
+      const me = profileIdRef.current
+      const newRow = payload.new
+      const oldRow = payload.old
+      const row = newRow || oldRow
+      if (!row) return false
+      if (newRow?.created_by === me || oldRow?.created_by === me) return true
+      return templatesRef.current.some(t => t.id === row.id)
+    }
+    function isRelevantAssigneeChange(payload) {
+      const me = profileIdRef.current
+      const newRow = payload.new
+      const oldRow = payload.old
+      const row = newRow || oldRow
+      if (!row) return false
+      if (newRow?.profile_id === me || oldRow?.profile_id === me) return true
+      return templatesRef.current.some(t => t.id === row.recurrence_id)
+    }
+
     const ch = supabase
       .channel('task-recurrences-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_recurrences' }, () => fetchAll())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_recurrence_assignees' }, () => fetchAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_recurrences' },
+        (payload) => { if (isRelevantTemplateChange(payload)) scheduleRefetch() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_recurrence_assignees' },
+        (payload) => { if (isRelevantAssigneeChange(payload)) scheduleRefetch() })
       .subscribe()
-    return () => { supabase.removeChannel(ch) }
+    return () => {
+      if (timer) { clearTimeout(timer); timer = null }
+      supabase.removeChannel(ch)
+    }
   }, [profile?.id, fetchAll])
 
   const createTemplate = useCallback(async (draft) => {

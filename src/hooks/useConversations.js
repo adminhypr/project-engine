@@ -131,14 +131,21 @@ export function useConversations() {
     })
   }, [profile?.id, refetch])
 
-  // Tasks realtime: when a task's status flips (e.g. to Done) or the task
-  // is deleted, the widget's Tasks section needs to re-evaluate. Without
-  // this, the row hangs around until the next message arrives or the user
-  // refreshes the page.
+  // Tasks realtime: when a task's status flips into/out of Done, or the
+  // task is deleted, the widget's Tasks section needs to re-evaluate
+  // (Done tasks are filtered out of the active list). Without this, the
+  // row hangs around until the next message arrives or the user reloads.
+  //
+  // We refetch ONLY on those membership-affecting events. Plain edits
+  // (notes/title/urgency/due_date/etc.) used to also refetch — that
+  // caused the chat widget to re-render every time someone edited any
+  // task in the org, which in turn re-rendered NotificationBell and the
+  // contact list. Tightening this is the largest single source of the
+  // "page randomly refreshes" complaints.
   //
   // Re-subscribe only when the set of tracked task-conversation ids
-  // changes — `conversations.length` is a cheap-enough proxy since task
-  // convs are a small subset and the handler reads from the ref anyway.
+  // changes — `taskConvCount` is a cheap-enough proxy since task convs
+  // are a small subset and the handler reads from the ref anyway.
   const taskConvCount = useMemo(
     () => conversations.filter(c => c.kind === 'task').length,
     [conversations]
@@ -157,7 +164,15 @@ export function useConversations() {
           const tracked = convsRef.current.some(
             c => c.kind === 'task' && c.task_id === id
           )
-          if (tracked) refetch()
+          if (!tracked) return
+
+          if (payload.eventType === 'DELETE') { refetch(); return }
+          if (payload.eventType === 'INSERT') return // not relevant to existing list
+
+          // UPDATE: only meaningful if status crosses the Done boundary.
+          const wasDone = payload.old?.status === 'Done'
+          const isDone  = payload.new?.status === 'Done'
+          if (wasDone !== isDone) refetch()
         }
       )
       .subscribe()
