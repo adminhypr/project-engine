@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronDown, Pencil, Trash2, Check, X as XIcon, Maximize2 } from 'lucide-react'
+import { ChevronDown, Pencil, Trash2, Check, X as XIcon, Maximize2, GripVertical } from 'lucide-react'
 
 // `onRename(nextTitle)` and `onDelete()` are optional. When provided, the
 // card shows owner-only inline rename + a delete button on hover. Pages
@@ -11,7 +11,7 @@ import { ChevronDown, Pencil, Trash2, Check, X as XIcon, Maximize2 } from 'lucid
 // (Basecamp-style). Available to anyone, not just owners.
 export default function HubModuleCard({
   title, icon: Icon, children, defaultOpen = true, badge, color = '#6366f1',
-  onRename, onDelete, onExpand,
+  onRename, onDelete, onExpand, dragHandleProps,
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const [editing, setEditing] = useState(false)
@@ -31,6 +31,24 @@ export default function HubModuleCard({
   return (
     <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-dark-border rounded-2xl overflow-hidden shadow-card dark:shadow-none group/module">
       <div className="w-full flex items-center gap-3 px-5 py-4">
+        {/* Drag handle — left side, in flow, hover-revealed. Lives outside
+            the card body so it can't collide with the action row on the
+            right (Expand / Rename / Delete). Negative margin pulls it into
+            the card's edge gutter so it doesn't compete with the icon. */}
+        {dragHandleProps && (
+          <button
+            type="button"
+            {...dragHandleProps}
+            className="shrink-0 -ml-3 p-1 rounded cursor-grab active:cursor-grabbing
+                       text-slate-300 hover:text-slate-500 dark:text-slate-600 dark:hover:text-slate-400
+                       opacity-0 group-hover/module:opacity-100 transition-opacity"
+            title="Drag to reorder"
+            onClick={e => e.stopPropagation()}
+            aria-label="Drag to reorder"
+          >
+            <GripVertical size={14} />
+          </button>
+        )}
         {Icon && (
           <div
             className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
