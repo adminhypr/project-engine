@@ -17,13 +17,23 @@ function readCollapsedState() {
   } catch { return {} }
 }
 
+function persist(next) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch { /* noop */ }
+  return next
+}
+
 function useCollapsedSections() {
   const [state, setState] = useState(readCollapsedState)
   const toggle = useCallback((key) => {
+    setState(prev => persist({ ...prev, [key]: !prev[key] }))
+  }, [])
+  // "Collapse/expand all" against the currently-visible sections only.
+  // If any visible section is expanded → collapse all. Otherwise expand all.
+  const setAll = useCallback((visibleKeys, collapsed) => {
     setState(prev => {
-      const next = { ...prev, [key]: !prev[key] }
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch { /* noop */ }
-      return next
+      const next = { ...prev }
+      for (const k of visibleKeys) next[k] = collapsed
+      return persist(next)
     })
   }, [])
   // Listen for cross-tab updates so opening the widget on two tabs stays
@@ -36,7 +46,7 @@ function useCollapsedSections() {
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
   }, [])
-  return [state, toggle]
+  return [state, toggle, setAll]
 }
 
 function SectionHeader({ title, count, collapsed, onToggle }) {
@@ -225,7 +235,7 @@ export default function ContactList({
   sections, groups = [], tasks = [], presence, onOpen, onOpenGroup, onOpenTask, onCreateGroup,
 }) {
   const { isExternal } = useAuth()
-  const [collapsed, toggle] = useCollapsedSections()
+  const [collapsed, toggle, setAll] = useCollapsedSections()
 
   const empty =
     sections.recent.length === 0 &&
@@ -233,6 +243,21 @@ export default function ContactList({
     sections.company.length === 0 &&
     groups.length === 0 &&
     tasks.length === 0
+
+  // The set of section keys that actually render (non-empty). Used by
+  // the "Collapse / Expand all" toggle so it only acts on what the user
+  // can see.
+  const visibleKeys = []
+  if (groups.length)             visibleKeys.push('groups')
+  if (tasks.length)              visibleKeys.push('tasks')
+  if (!isExternal && sections.recent.length)    visibleKeys.push('recent')
+  if (!isExternal && sections.teammates.length) visibleKeys.push('teammates')
+  if (!isExternal && sections.company.length)   visibleKeys.push('company')
+
+  // If at least one visible section is expanded, the next click should
+  // collapse everything. Once all are collapsed, the same button expands.
+  const anyExpanded = visibleKeys.some(k => !collapsed[k])
+  const handleToggleAll = () => setAll(visibleKeys, anyExpanded)
 
   return (
     <div className="py-1">
@@ -254,6 +279,17 @@ export default function ContactList({
         </div>
       ) : (
         <>
+          {visibleKeys.length > 1 && (
+            <div className="px-3 pt-2 pb-1 flex justify-end">
+              <button
+                type="button"
+                onClick={handleToggleAll}
+                className="text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              >
+                {anyExpanded ? 'Collapse all' : 'Expand all'}
+              </button>
+            </div>
+          )}
           <GroupsSection
             groups={groups}
             onOpenGroup={onOpenGroup}
