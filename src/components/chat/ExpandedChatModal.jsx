@@ -18,6 +18,7 @@ export default function ExpandedChatModal({
   // Contact list inputs (same shape useContactList returns)
   sections,
   groups,
+  campfires,
   tasks,
   conversations,
   presence,
@@ -146,10 +147,12 @@ export default function ExpandedChatModal({
                 <ContactList
                   sections={sections}
                   groups={groups}
+                  campfires={campfires}
                   tasks={tasks}
                   presence={presence}
                   onOpen={handleOpenContact}
                   onOpenGroup={selectConversation}
+                  onOpenCampfire={selectConversation}
                   onOpenTask={selectConversation}
                   onCreateGroup={onCreateGroup}
                 />

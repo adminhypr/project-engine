@@ -53,7 +53,7 @@ export default function ChatWidget() {
     return () => window.removeEventListener('pe-chat-open', handler)
   }, [])
 
-  const { sections, groups, tasks, conversations, presence, createOrOpen, createGroup, markRead } =
+  const { sections, groups, campfires, tasks, conversations, presence, createOrOpen, createGroup, markRead } =
     useContactList(query)
   const total = sumUnread(conversations)
 
@@ -204,10 +204,12 @@ export default function ChatWidget() {
               <ContactList
                 sections={sections}
                 groups={groups}
+                campfires={campfires}
                 tasks={tasks}
                 presence={presence}
                 onOpen={openOne}
                 onOpenGroup={openConversationById}
+                onOpenCampfire={openConversationById}
                 onOpenTask={openConversationById}
                 onCreateGroup={() => setCreateGroupOpen(true)}
               />
@@ -224,6 +226,7 @@ export default function ChatWidget() {
         <ExpandedChatModal
           sections={sections}
           groups={groups}
+          campfires={campfires}
           tasks={tasks}
           conversations={conversations}
           presence={presence}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Users, ClipboardList, ChevronDown } from 'lucide-react'
+import { Plus, Users, Flame, ClipboardList, ChevronDown } from 'lucide-react'
 import ContactRow from './ContactRow'
 import { groupDisplayName, memberCountLabel } from '../../lib/groupConversations'
 import { useAuth } from '../../hooks/useAuth'
@@ -133,7 +133,9 @@ function PeopleSection({ sectionKey, title, rows, presence, onOpen, collapsed, o
   )
 }
 
-function GroupRow({ conversation, onClick }) {
+// Used for both Groups (Users icon) and Campfires (Flame icon, warmer tint).
+// Campfires are kind='hub' conversations — one per project hub, named by hub.
+function GroupRow({ conversation, onClick, Icon = Users, iconClass = 'bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-200' }) {
   const unread = conversation.unread || 0
   const preview = conversation.last_message_preview
   return (
@@ -143,8 +145,8 @@ function GroupRow({ conversation, onClick }) {
       className="w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-left"
     >
       <div className="relative w-9 h-9 flex-shrink-0">
-        <div className="w-9 h-9 rounded-full bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-200 flex items-center justify-center">
-          <Users className="w-4 h-4" />
+        <div className={`w-9 h-9 rounded-full ${iconClass} flex items-center justify-center`}>
+          <Icon className="w-4 h-4" />
         </div>
       </div>
       <div className="flex-1 min-w-0">
@@ -163,6 +165,26 @@ function GroupRow({ conversation, onClick }) {
         </div>
       </div>
     </button>
+  )
+}
+
+function CampfiresSection({ campfires, onOpenCampfire, collapsed, onToggle }) {
+  if (!campfires || campfires.length === 0) return null
+  return (
+    <div className="mb-2">
+      <SectionHeader title="Campfires" count={campfires.length} collapsed={collapsed} onToggle={() => onToggle('campfires')} />
+      <CollapsibleBody collapsed={collapsed}>
+        {campfires.map(c => (
+          <GroupRow
+            key={c.id}
+            conversation={c}
+            onClick={onOpenCampfire}
+            Icon={Flame}
+            iconClass="bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-300"
+          />
+        ))}
+      </CollapsibleBody>
+    </div>
   )
 }
 
@@ -232,22 +254,28 @@ function TasksSection({ tasks, onOpenTask, collapsed, onToggle }) {
 }
 
 export default function ContactList({
-  sections, groups = [], tasks = [], presence, onOpen, onOpenGroup, onOpenTask, onCreateGroup,
+  sections, groups = [], campfires = [], tasks = [], presence, onOpen, onOpenGroup, onOpenCampfire, onOpenTask, onCreateGroup,
 }) {
   const { isExternal } = useAuth()
   const [collapsed, toggle, setAll] = useCollapsedSections()
+  // Backward compat: callers that haven't been updated yet still pass a single
+  // onOpenGroup. Hubs and groups go through the same conversation-id open
+  // path, so falling back is safe.
+  const handleOpenCampfire = onOpenCampfire || onOpenGroup
 
   const empty =
     sections.recent.length === 0 &&
     sections.teammates.length === 0 &&
     sections.company.length === 0 &&
     groups.length === 0 &&
+    campfires.length === 0 &&
     tasks.length === 0
 
   // The set of section keys that actually render (non-empty). Used by
   // the "Collapse / Expand all" toggle so it only acts on what the user
   // can see.
   const visibleKeys = []
+  if (campfires.length)          visibleKeys.push('campfires')
   if (groups.length)             visibleKeys.push('groups')
   if (tasks.length)              visibleKeys.push('tasks')
   if (!isExternal && sections.recent.length)    visibleKeys.push('recent')
@@ -290,6 +318,12 @@ export default function ContactList({
               </button>
             </div>
           )}
+          <CampfiresSection
+            campfires={campfires}
+            onOpenCampfire={handleOpenCampfire}
+            collapsed={!!collapsed.campfires}
+            onToggle={toggle}
+          />
           <GroupsSection
             groups={groups}
             onOpenGroup={onOpenGroup}

@@ -20,16 +20,23 @@ export function useContactList(searchQuery = '') {
     return bucketContacts({ profiles, conversations: dmConversations, myId: profile.id, myTeamIds })
   }, [profile?.id, profile?.team_ids, profile?.team_id, profiles, conversations])
 
-  // Includes hub conversations alongside team/custom groups — they share
-  // the same row shape and member-list UX (migration 064).
-  const groups = useMemo(() => {
-    const raw = (conversations || []).filter(c => c.kind === 'group' || c.kind === 'hub')
+  // Hub campfires (kind='hub', wired via migration 064) and explicit groups
+  // (kind='group', team-default + custom) are bucketed separately. They
+  // share row shape + member-list UX but live in different sections so
+  // users can find the project chat vs. their team chat without scanning.
+  const filterByQuery = (list) => {
     const q = (searchQuery || '').trim().toLowerCase()
-    const list = q
-      ? raw.filter(g => groupDisplayName(g).toLowerCase().includes(q))
-      : raw
-    return list
-  }, [conversations, searchQuery])
+    if (!q) return list
+    return list.filter(c => groupDisplayName(c).toLowerCase().includes(q))
+  }
+  const campfires = useMemo(
+    () => filterByQuery((conversations || []).filter(c => c.kind === 'hub')),
+    [conversations, searchQuery],
+  )
+  const groups = useMemo(
+    () => filterByQuery((conversations || []).filter(c => c.kind === 'group')),
+    [conversations, searchQuery],
+  )
 
   const filtered = useMemo(
     () => filterContactsBySearch(sections, searchQuery),
@@ -39,6 +46,7 @@ export function useContactList(searchQuery = '') {
   return {
     sections: filtered,
     groups,
+    campfires,
     tasks: tasks || [],
     conversations,
     presence: presence || new Map(),
