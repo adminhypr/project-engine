@@ -176,61 +176,73 @@ export function useTasks() {
       }
     })
 
-    // Bail out cheaply when the fetched data is identical to what's
-    // already on screen. This is the common case for refetches triggered
-    // by realtime events that don't actually change anything material —
-    // and on the admin dashboard with 100+ tasks, swapping the entire
-    // array reference (and thus every task object identity) for an
-    // identical payload was causing the whole list to re-render on
-    // every backend write anywhere in the org.
+    // Surgically merge new data with current state so unchanged rows keep
+    // their previous object identity. fetchTasks always rebuilds enriched
+    // task objects fresh, so naive `setTasks(enriched)` gives every task —
+    // even ones whose data didn't change — a new identity, and React then
+    // re-renders every TaskTable row. With 100+ tasks open on the admin
+    // dashboard, that's the visible "refresh" the user reported on tab
+    // return when even a single task elsewhere in the org got an update.
+    //
+    // Strategy: build the result by walking enriched in order, and for
+    // each row, compare against the same id in prev. If they're equal on
+    // every field that drives the visible UI, reuse prev's object. If
+    // anything visible changed, take the new object. If lengths and
+    // every reference still match the previous array, return prev itself
+    // (no state update at all → no re-render).
     setTasks(prev => {
-      if (prev.length === enriched.length) {
-        let identical = true
-        // Tasks come back ordered by date_assigned DESC — same order
-        // pretty much always — so positional comparison is safe and fast.
-        for (let i = 0; i < enriched.length; i++) {
-          const a = prev[i], b = enriched[i]
-          if (
-            a.id !== b.id ||
-            a.last_updated !== b.last_updated ||
-            a.status !== b.status ||
-            a.urgency !== b.urgency ||
-            a.due_date !== b.due_date ||
-            a.title !== b.title ||
-            a.acceptance_status !== b.acceptance_status ||
-            a.assigned_to !== b.assigned_to ||
-            (a.comment_count || 0) !== (b.comment_count || 0) ||
-            (a.unread_chat_count || 0) !== (b.unread_chat_count || 0) ||
-            (a.subtask_count || 0) !== (b.subtask_count || 0) ||
-            (a.open_subtask_count || 0) !== (b.open_subtask_count || 0) ||
-            (a.assignees?.length || 0) !== (b.assignees?.length || 0)
-          ) {
-            identical = false
-            break
-          }
-          // Per-assignee completion is the other dimension that matters
-          // for the row UI (the progress chip). Cheap to compare.
-          if (a.assignees && b.assignees) {
-            for (let j = 0; j < a.assignees.length; j++) {
-              if (
-                a.assignees[j].id !== b.assignees[j].id ||
-                a.assignees[j].completed_at !== b.assignees[j].completed_at
-              ) { identical = false; break }
-            }
-            if (!identical) break
+      const prevById = new Map(prev.map(t => [t.id, t]))
+      let differs = enriched.length !== prev.length
+      const next = enriched.map((b, i) => {
+        const a = prevById.get(b.id)
+        if (!a) { differs = true; return b }
+        const sameMeta = (
+          a.last_updated === b.last_updated &&
+          a.status === b.status &&
+          a.urgency === b.urgency &&
+          a.due_date === b.due_date &&
+          a.title === b.title &&
+          a.notes === b.notes &&
+          a.icon === b.icon &&
+          a.acceptance_status === b.acceptance_status &&
+          a.assigned_to === b.assigned_to &&
+          a.assigned_by === b.assigned_by &&
+          a.team_id === b.team_id &&
+          a.priority === b.priority &&
+          (a.comment_count || 0) === (b.comment_count || 0) &&
+          (a.unread_chat_count || 0) === (b.unread_chat_count || 0) &&
+          (a.subtask_count || 0) === (b.subtask_count || 0) &&
+          (a.open_subtask_count || 0) === (b.open_subtask_count || 0) &&
+          (a.assignees?.length || 0) === (b.assignees?.length || 0)
+        )
+        let sameAssignees = sameMeta
+        if (sameMeta && a.assignees && b.assignees) {
+          for (let j = 0; j < a.assignees.length; j++) {
+            if (
+              a.assignees[j].id !== b.assignees[j].id ||
+              a.assignees[j].completed_at !== b.assignees[j].completed_at
+            ) { sameAssignees = false; break }
           }
         }
-        if (identical) {
-          if (typeof window !== 'undefined' && window.__pe_debug) {
-            console.log('[pe-debug] setTasks NO-OP (data identical)')
-          }
-          return prev
+        // Position in the array also matters — same id at a different
+        // index means the row order changed, which IS visible. Force a
+        // new array in that case even if the row itself is unchanged.
+        const samePosition = prev[i]?.id === a.id
+        if (sameAssignees && samePosition) return a
+        differs = true
+        return b
+      })
+      if (!differs) {
+        if (typeof window !== 'undefined' && window.__pe_debug) {
+          console.log('[pe-debug] setTasks NO-OP (every row unchanged)')
         }
+        return prev
       }
       if (typeof window !== 'undefined' && window.__pe_debug) {
-        console.log('[pe-debug] setTasks', enriched.length, 'rows silent=', silent)
+        const changedCount = next.reduce((acc, t, i) => acc + (t === prev[i] ? 0 : 1), 0)
+        console.log('[pe-debug] setTasks', enriched.length, 'rows ·', changedCount, 'changed · silent=', silent)
       }
-      return enriched
+      return next
     })
     setLoading(false)
   }, []) // profile/isAdmin/isManager accessed via refs to keep identity stable
