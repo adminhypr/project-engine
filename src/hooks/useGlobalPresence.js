@@ -82,7 +82,22 @@ export function useGlobalPresence(profile) {
           const latest = metas[metas.length - 1]
           next.set(userId, { online: true, onlineAt: latest?.online_at })
         }
-        setPresence(next)
+        // Supabase emits a `sync` event roughly every 10s even when no
+        // user actually came/went online. If we unconditionally call
+        // setPresence with a fresh Map, the new reference cascades
+        // through useAuth().presence and re-renders every consumer
+        // (NotificationBell, ChatWidget, ContactList, page layouts). Skip
+        // the update when the membership and timestamps are identical
+        // to what we already have — that's the single biggest source of
+        // the "page refreshes every ~10 seconds" perception.
+        setPresence(prev => {
+          if (prev.size !== next.size) return next
+          for (const [k, v] of next) {
+            const p = prev.get(k)
+            if (!p || p.onlineAt !== v.onlineAt) return next
+          }
+          return prev
+        })
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {

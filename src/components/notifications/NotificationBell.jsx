@@ -282,10 +282,27 @@ export default function NotificationBell({ onTaskClick }) {
     }
     fetchUnsetup()
 
-    // Re-check when profiles table changes (new signup)
+    // Re-check when profiles table changes (new signup) or team membership
+    // changes. Critically, IGNORE updates that only touch `last_seen_at` —
+    // every online user emits a 60s heartbeat that bumps that column, which
+    // for an admin/manager would otherwise trigger fetchUnsetup once per
+    // active user per minute (~every 8-12s of perceived activity, matching
+    // the "page refreshes every 8-10s" complaint).
     const channel = supabase
       .channel('profiles-admin-notif')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => fetchUnsetup())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload) => {
+        if (payload.eventType === 'UPDATE') {
+          const o = payload.old || {}
+          const n = payload.new || {}
+          const changedKeys = Object.keys(n).filter(k => o[k] !== n[k])
+          // Only refetch when something the unsetup-users predicate reads
+          // (team_id, role, full_name, email) actually changed. Heartbeats
+          // and avatar uploads are noise here.
+          const RELEVANT = new Set(['team_id', 'role', 'full_name', 'email', 'reports_to'])
+          if (changedKeys.length > 0 && !changedKeys.some(k => RELEVANT.has(k))) return
+        }
+        fetchUnsetup()
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profile_teams' }, () => fetchUnsetup())
       .subscribe()
     return () => supabase.removeChannel(channel)

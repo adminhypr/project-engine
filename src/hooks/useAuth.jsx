@@ -210,12 +210,19 @@ export function AuthProvider({ children }) {
     // When the tab becomes visible again after sleep/inactivity, reassert auth
     // on the realtime socket. Supabase-js reconnects the transport on its own,
     // but the channel-level JWT may be stale if it was refreshed while hidden.
+    //
+    // Cache the last token we set so repeated visibility flips with an
+    // unchanged JWT don't trigger redundant setAuth → channel reconnect →
+    // SUBSCRIBED-status events that downstream hooks read as "we just
+    // reconnected, refetch everything". This was the second-biggest source
+    // of the "page refreshes when I switch back to it" perception.
+    let lastSetToken = null
     function handleVisibility() {
       if (document.visibilityState !== 'visible') return
       supabase.auth.getSession().then(({ data }) => {
         const token = data?.session?.access_token
-        if (token) {
-          try { supabase.realtime.setAuth(token) } catch { /* noop */ }
+        if (token && token !== lastSetToken) {
+          try { supabase.realtime.setAuth(token); lastSetToken = token } catch { /* noop */ }
         }
       })
     }
