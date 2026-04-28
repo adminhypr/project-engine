@@ -177,7 +177,7 @@ export function useTasks() {
     })
 
     if (typeof window !== 'undefined' && window.__pe_debug) {
-      console.log('[pe-debug] setTasks', enriched.length, 'rows · silent=', silent, 'at', new Date().toISOString())
+      console.log('[pe-debug] setTasks', enriched.length, 'rows silent=', silent)
     }
     setTasks(enriched)
     setLoading(false)

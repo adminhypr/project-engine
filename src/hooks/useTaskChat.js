@@ -110,6 +110,16 @@ export function useTaskChat(taskId) {
       .order('created_at', { ascending: true })
     if (error || !data) return
     setMessages(prev => {
+      // Both empty — overwhelmingly the common case for a quiet chat,
+      // and the bug we just hunted with Playwright. Returning a fresh
+      // empty array gives every consumer a new prop reference and
+      // re-renders the whole thread on every tab return.
+      if (prev.length === 0 && data.length === 0) {
+        if (typeof window !== 'undefined' && window.__pe_debug) {
+          console.log('[pe-debug] useTaskChat resync — both empty, bailing')
+        }
+        return prev
+      }
       if (prev.length === 0) return data
       const byId = new Map(prev.map(m => [m.id, m]))
       let changed = false

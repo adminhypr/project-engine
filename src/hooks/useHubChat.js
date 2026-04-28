@@ -138,6 +138,7 @@ export function useHubChat(moduleId) {
     if (!cidRef.current) return
     const latest = await fetchPage()
     setMessages(prev => {
+      if (prev.length === 0 && latest.length === 0) return prev
       if (prev.length === 0) return latest
       const byId = new Map(prev.map(m => [m.id, m]))
       let changed = false
