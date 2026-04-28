@@ -1,7 +1,86 @@
-import { Plus, Users, ClipboardList } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Plus, Users, ClipboardList, ChevronDown } from 'lucide-react'
 import ContactRow from './ContactRow'
 import { groupDisplayName, memberCountLabel } from '../../lib/groupConversations'
 import { useAuth } from '../../hooks/useAuth'
+
+// Per-user collapsed state for each section in the chat widget.
+// Persisted under `pe-chat-section-collapsed` so the user's choice
+// survives reloads. Default = expanded for every section.
+const STORAGE_KEY = 'pe-chat-section-collapsed'
+
+function readCollapsedState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch { return {} }
+}
+
+function useCollapsedSections() {
+  const [state, setState] = useState(readCollapsedState)
+  const toggle = useCallback((key) => {
+    setState(prev => {
+      const next = { ...prev, [key]: !prev[key] }
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch { /* noop */ }
+      return next
+    })
+  }, [])
+  // Listen for cross-tab updates so opening the widget on two tabs stays
+  // consistent. Cheap; only fires when localStorage actually changes.
+  useEffect(() => {
+    function onStorage(e) {
+      if (e.key !== STORAGE_KEY) return
+      setState(readCollapsedState())
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+  return [state, toggle]
+}
+
+function SectionHeader({ title, count, collapsed, onToggle }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="w-full flex items-center gap-1.5 px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 select-none"
+      aria-expanded={!collapsed}
+    >
+      <motion.span
+        animate={{ rotate: collapsed ? -90 : 0 }}
+        transition={{ duration: 0.15 }}
+        className="inline-flex"
+      >
+        <ChevronDown size={11} />
+      </motion.span>
+      <span>{title}</span>
+      {typeof count === 'number' && count > 0 && (
+        <span className="text-[10px] font-medium text-slate-400 normal-case tracking-normal">
+          ({count})
+        </span>
+      )}
+    </button>
+  )
+}
+
+function CollapsibleBody({ collapsed, children }) {
+  return (
+    <AnimatePresence initial={false}>
+      {!collapsed && (
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.18, ease: 'easeOut' }}
+          style={{ overflow: 'hidden' }}
+        >
+          {children}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
 
 // Small colored dot derived from task urgency. Mirrors the UrgencyBadge colors
 // in src/components/ui/index.jsx but as a compact circle suitable for a row.
@@ -25,21 +104,21 @@ function truncate(s, n) {
   return s.length > n ? s.slice(0, n - 1) + '…' : s
 }
 
-function Section({ title, rows, presence, onOpen }) {
+function PeopleSection({ sectionKey, title, rows, presence, onOpen, collapsed, onToggle }) {
   if (!rows || rows.length === 0) return null
   return (
     <div className="mb-2">
-      <div className="px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        {title}
-      </div>
-      {rows.map(row => (
-        <ContactRow
-          key={row.profile.id}
-          row={row}
-          online={presence.get(row.profile.id)?.online || false}
-          onClick={onOpen}
-        />
-      ))}
+      <SectionHeader title={title} count={rows.length} collapsed={collapsed} onToggle={() => onToggle(sectionKey)} />
+      <CollapsibleBody collapsed={collapsed}>
+        {rows.map(row => (
+          <ContactRow
+            key={row.profile.id}
+            row={row}
+            online={presence.get(row.profile.id)?.online || false}
+            onClick={onOpen}
+          />
+        ))}
+      </CollapsibleBody>
     </div>
   )
 }
@@ -77,16 +156,16 @@ function GroupRow({ conversation, onClick }) {
   )
 }
 
-function GroupsSection({ groups, onOpenGroup }) {
+function GroupsSection({ groups, onOpenGroup, collapsed, onToggle }) {
   if (!groups || groups.length === 0) return null
   return (
     <div className="mb-2">
-      <div className="px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        Groups
-      </div>
-      {groups.map(g => (
-        <GroupRow key={g.id} conversation={g} onClick={onOpenGroup} />
-      ))}
+      <SectionHeader title="Groups" count={groups.length} collapsed={collapsed} onToggle={() => onToggle('groups')} />
+      <CollapsibleBody collapsed={collapsed}>
+        {groups.map(g => (
+          <GroupRow key={g.id} conversation={g} onClick={onOpenGroup} />
+        ))}
+      </CollapsibleBody>
     </div>
   )
 }
@@ -128,16 +207,16 @@ function TaskRow({ conversation, onClick }) {
   )
 }
 
-function TasksSection({ tasks, onOpenTask }) {
+function TasksSection({ tasks, onOpenTask, collapsed, onToggle }) {
   if (!tasks || tasks.length === 0) return null
   return (
     <div className="mb-2">
-      <div className="px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        Tasks
-      </div>
-      {tasks.map(t => (
-        <TaskRow key={t.id} conversation={t} onClick={onOpenTask} />
-      ))}
+      <SectionHeader title="Tasks" count={tasks.length} collapsed={collapsed} onToggle={() => onToggle('tasks')} />
+      <CollapsibleBody collapsed={collapsed}>
+        {tasks.map(t => (
+          <TaskRow key={t.id} conversation={t} onClick={onOpenTask} />
+        ))}
+      </CollapsibleBody>
     </div>
   )
 }
@@ -146,6 +225,7 @@ export default function ContactList({
   sections, groups = [], tasks = [], presence, onOpen, onOpenGroup, onOpenTask, onCreateGroup,
 }) {
   const { isExternal } = useAuth()
+  const [collapsed, toggle] = useCollapsedSections()
 
   const empty =
     sections.recent.length === 0 &&
@@ -174,13 +254,47 @@ export default function ContactList({
         </div>
       ) : (
         <>
-          <GroupsSection groups={groups} onOpenGroup={onOpenGroup} />
-          <TasksSection tasks={tasks} onOpenTask={onOpenTask} />
+          <GroupsSection
+            groups={groups}
+            onOpenGroup={onOpenGroup}
+            collapsed={!!collapsed.groups}
+            onToggle={toggle}
+          />
+          <TasksSection
+            tasks={tasks}
+            onOpenTask={onOpenTask}
+            collapsed={!!collapsed.tasks}
+            onToggle={toggle}
+          />
           {!isExternal && (
             <>
-              <Section title="Recent"    rows={sections.recent}    presence={presence} onOpen={onOpen} />
-              <Section title="Teammates" rows={sections.teammates} presence={presence} onOpen={onOpen} />
-              <Section title="Company"   rows={sections.company}   presence={presence} onOpen={onOpen} />
+              <PeopleSection
+                sectionKey="recent"
+                title="Recent"
+                rows={sections.recent}
+                presence={presence}
+                onOpen={onOpen}
+                collapsed={!!collapsed.recent}
+                onToggle={toggle}
+              />
+              <PeopleSection
+                sectionKey="teammates"
+                title="Teammates"
+                rows={sections.teammates}
+                presence={presence}
+                onOpen={onOpen}
+                collapsed={!!collapsed.teammates}
+                onToggle={toggle}
+              />
+              <PeopleSection
+                sectionKey="company"
+                title="Company"
+                rows={sections.company}
+                presence={presence}
+                onOpen={onOpen}
+                collapsed={!!collapsed.company}
+                onToggle={toggle}
+              />
             </>
           )}
         </>
