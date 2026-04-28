@@ -176,10 +176,62 @@ export function useTasks() {
       }
     })
 
-    if (typeof window !== 'undefined' && window.__pe_debug) {
-      console.log('[pe-debug] setTasks', enriched.length, 'rows silent=', silent)
-    }
-    setTasks(enriched)
+    // Bail out cheaply when the fetched data is identical to what's
+    // already on screen. This is the common case for refetches triggered
+    // by realtime events that don't actually change anything material —
+    // and on the admin dashboard with 100+ tasks, swapping the entire
+    // array reference (and thus every task object identity) for an
+    // identical payload was causing the whole list to re-render on
+    // every backend write anywhere in the org.
+    setTasks(prev => {
+      if (prev.length === enriched.length) {
+        let identical = true
+        // Tasks come back ordered by date_assigned DESC — same order
+        // pretty much always — so positional comparison is safe and fast.
+        for (let i = 0; i < enriched.length; i++) {
+          const a = prev[i], b = enriched[i]
+          if (
+            a.id !== b.id ||
+            a.last_updated !== b.last_updated ||
+            a.status !== b.status ||
+            a.urgency !== b.urgency ||
+            a.due_date !== b.due_date ||
+            a.title !== b.title ||
+            a.acceptance_status !== b.acceptance_status ||
+            a.assigned_to !== b.assigned_to ||
+            (a.comment_count || 0) !== (b.comment_count || 0) ||
+            (a.unread_chat_count || 0) !== (b.unread_chat_count || 0) ||
+            (a.subtask_count || 0) !== (b.subtask_count || 0) ||
+            (a.open_subtask_count || 0) !== (b.open_subtask_count || 0) ||
+            (a.assignees?.length || 0) !== (b.assignees?.length || 0)
+          ) {
+            identical = false
+            break
+          }
+          // Per-assignee completion is the other dimension that matters
+          // for the row UI (the progress chip). Cheap to compare.
+          if (a.assignees && b.assignees) {
+            for (let j = 0; j < a.assignees.length; j++) {
+              if (
+                a.assignees[j].id !== b.assignees[j].id ||
+                a.assignees[j].completed_at !== b.assignees[j].completed_at
+              ) { identical = false; break }
+            }
+            if (!identical) break
+          }
+        }
+        if (identical) {
+          if (typeof window !== 'undefined' && window.__pe_debug) {
+            console.log('[pe-debug] setTasks NO-OP (data identical)')
+          }
+          return prev
+        }
+      }
+      if (typeof window !== 'undefined' && window.__pe_debug) {
+        console.log('[pe-debug] setTasks', enriched.length, 'rows silent=', silent)
+      }
+      return enriched
+    })
     setLoading(false)
   }, []) // profile/isAdmin/isManager accessed via refs to keep identity stable
 
