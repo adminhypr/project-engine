@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { usePresence } from '../hooks/PresenceContext'
 import { useConversations } from '../hooks/useConversations'
 import ConversationPane from '../components/chat/ConversationPane'
 
@@ -13,7 +14,8 @@ import ConversationPane from '../components/chat/ConversationPane'
 // If the RPC returns an id that isn't in useConversations yet, we call
 // refetch() so the membership trigger (migration 033) has a chance to land.
 export default function TeamChatPage() {
-  const { activeTeamId, presence } = useAuth()
+  const { activeTeamId } = useAuth()
+  const presence = usePresence()
   const { conversations, refetch, markRead } = useConversations()
   const [conversationId, setConversationId] = useState(null)
   const [loading, setLoading] = useState(true)

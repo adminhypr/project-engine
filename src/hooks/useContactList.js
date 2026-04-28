@@ -1,12 +1,14 @@
 import { useMemo } from 'react'
 import { useAuth } from './useAuth'
+import { usePresence } from './PresenceContext'
 import { useProfiles } from './useTasks'
 import { useConversations } from './useConversations'
 import { bucketContacts, filterContactsBySearch } from '../lib/dmContacts'
 import { groupDisplayName } from '../lib/groupConversations'
 
 export function useContactList(searchQuery = '') {
-  const { profile, presence } = useAuth()
+  const { profile } = useAuth()
+  const presence = usePresence()
   const { profiles, loading: profilesLoading } = useProfiles()
   const { conversations, tasks, loading: convsLoading, createOrOpen, createGroup, markRead } = useConversations()
 

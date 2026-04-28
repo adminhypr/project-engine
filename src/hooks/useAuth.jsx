@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { useGlobalPresence } from './useGlobalPresence'
 import { useDmRealtime } from './useDmRealtime'
 import { isAgent, isClient, isExternal } from '../lib/roleHelpers'
 import { getStoredActiveTeamId, setStoredActiveTeamId, pickDefaultTeam } from '../lib/activeTeamStorage'
@@ -283,7 +282,6 @@ export function AuthProvider({ children }) {
     if (profile?.id) setStoredActiveTeamId(profile.id, teamId)
   }, [profile?.id])
 
-  const presence = useGlobalPresence(profile)
   useDmRealtime(profile?.id)
 
   // Presence heartbeat — bumps profiles.last_seen_at so the notification
@@ -324,7 +322,6 @@ export function AuthProvider({ children }) {
     profile,
     loading,
     refreshProfile,
-    presence,
     isAdmin:    profile?.role === 'Admin',
     isManager:  profile?.role === 'Manager' || profile?.role === 'Admin',
     isStaff:    profile?.role === 'Staff',
@@ -335,7 +332,7 @@ export function AuthProvider({ children }) {
     activeTeamId,
     setActiveTeamId,
   }), [
-    session, profile, loading, refreshProfile, presence,
+    session, profile, loading, refreshProfile,
     isManagerForTeam, activeTeamId,
   ])
 

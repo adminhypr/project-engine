@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import { AuthProvider, useAuth } from './hooks/useAuth'
+import { PresenceProvider } from './hooks/PresenceContext'
 import Layout from './components/layout/Layout'
 import LoginPage from './pages/LoginPage'
 import MyTasksPage from './pages/MyTasksPage'
@@ -95,7 +96,9 @@ export default function App() {
     <ThemeProvider>
       <BrowserRouter>
         <AuthProvider>
-          <AppRoutes />
+          <PresenceProvider>
+            <AppRoutes />
+          </PresenceProvider>
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>
