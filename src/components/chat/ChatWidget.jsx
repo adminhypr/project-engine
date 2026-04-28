@@ -12,6 +12,7 @@ import ContactList from './ContactList'
 import ConversationStack from './ConversationStack'
 import AssignFromChatModal from './AssignFromChatModal'
 import CreateGroupModal from './CreateGroupModal'
+import ExpandedChatModal from './ExpandedChatModal'
 
 export default function ChatWidget() {
   const { profile } = useAuth()
@@ -21,6 +22,10 @@ export default function ChatWidget() {
   const [createGroupOpen, setCreateGroupOpen] = useState(false)
   // Maximize state is deliberately in-memory only — resets on reload.
   const [maximizedId, setMaximizedId] = useState(null)
+  // Full-screen "focus mode" toggle — also in-memory only. The user opens
+  // it intentionally for a reading session; persisting across reload would
+  // confuse anyone landing on the page mid-task.
+  const [fullExpanded, setFullExpanded] = useState(false)
   // Single global thread state — only one thread can be open across the
   // whole widget. Keyed { convId, rootMessage }. Lifted up here so the
   // ConversationStack can focus this pane (same as maximize) and the
@@ -78,8 +83,9 @@ export default function ChatWidget() {
 
   const openOne = useCallback(async (otherUserId) => {
     const convId = await createOrOpen(otherUserId)
-    if (!convId) return
+    if (!convId) return null
     openConversationById(convId)
+    return convId
   }, [createOrOpen, openConversationById])
 
   const closeOne = useCallback((convId) => {
@@ -155,48 +161,87 @@ export default function ChatWidget() {
   // contact list, or persisted-expanded panel ever appears.
   if (isExternal(profile)) return null
 
+  // Pick the conversation the modal should open with — preference order:
+  //   maximized → most-recent open non-minimized → null. Computed lazily so
+  //   the modal opens on whatever the user was last looking at.
+  const pickInitialModalConvId = () => {
+    if (maximizedId) return maximizedId
+    const open = state.openConversationIds.filter(id => !state.minimizedIds.includes(id))
+    return open[open.length - 1] || null
+  }
+
   return (
     <>
-      <div className="fixed bottom-4 right-4 z-40 flex items-end gap-3">
-        <ConversationStack
-          openConversationIds={state.openConversationIds}
-          minimizedIds={state.minimizedIds}
+      {/* Bottom-right widget — hidden while in full-expanded focus mode so we
+          don't render the same conversation in two places. */}
+      {!fullExpanded && (
+        <div className="fixed bottom-4 right-4 z-40 flex items-end gap-3">
+          <ConversationStack
+            openConversationIds={state.openConversationIds}
+            minimizedIds={state.minimizedIds}
+            conversations={conversations}
+            presence={presence}
+            maximizedId={maximizedId}
+            threadState={threadState}
+            onClose={closeOne}
+            onMinimize={minimizeOne}
+            onRestore={restoreOne}
+            onMarkRead={markRead}
+            onAssignTask={conv => setAssignForConversation(conv)}
+            onReorder={reorderOpen}
+            onToggleMaximize={toggleMaximize}
+            onOpenThread={openThread}
+            onCloseThread={closeThread}
+          />
+          {state.expanded && (
+            <ChatPanel
+              onClose={() => setState(s => ({ ...s, expanded: false }))}
+              onExpand={() => setFullExpanded(true)}
+            >
+              <div className="p-3">
+                <ContactSearch value={query} onChange={setQuery} />
+              </div>
+              <ContactList
+                sections={sections}
+                groups={groups}
+                tasks={tasks}
+                presence={presence}
+                onOpen={openOne}
+                onOpenGroup={openConversationById}
+                onOpenTask={openConversationById}
+                onCreateGroup={() => setCreateGroupOpen(true)}
+              />
+            </ChatPanel>
+          )}
+          <ChatLauncher
+            totalUnread={total}
+            onClick={() => setState(s => ({ ...s, expanded: !s.expanded }))}
+          />
+        </div>
+      )}
+
+      {fullExpanded && (
+        <ExpandedChatModal
+          sections={sections}
+          groups={groups}
+          tasks={tasks}
           conversations={conversations}
           presence={presence}
-          maximizedId={maximizedId}
-          threadState={threadState}
-          onClose={closeOne}
-          onMinimize={minimizeOne}
-          onRestore={restoreOne}
+          query={query}
+          onQueryChange={setQuery}
+          onOpenContact={openOne}
+          onOpenConversation={openConversationById}
           onMarkRead={markRead}
           onAssignTask={conv => setAssignForConversation(conv)}
-          onReorder={reorderOpen}
-          onToggleMaximize={toggleMaximize}
+          onCreateGroup={() => setCreateGroupOpen(true)}
+          initialActiveConvId={pickInitialModalConvId()}
+          threadState={threadState}
           onOpenThread={openThread}
           onCloseThread={closeThread}
+          onClose={() => setFullExpanded(false)}
         />
-        {state.expanded && (
-          <ChatPanel onClose={() => setState(s => ({ ...s, expanded: false }))}>
-            <div className="p-3">
-              <ContactSearch value={query} onChange={setQuery} />
-            </div>
-            <ContactList
-              sections={sections}
-              groups={groups}
-              tasks={tasks}
-              presence={presence}
-              onOpen={openOne}
-              onOpenGroup={openConversationById}
-              onOpenTask={openConversationById}
-              onCreateGroup={() => setCreateGroupOpen(true)}
-            />
-          </ChatPanel>
-        )}
-        <ChatLauncher
-          totalUnread={total}
-          onClick={() => setState(s => ({ ...s, expanded: !s.expanded }))}
-        />
-      </div>
+      )}
+
       {assignForConversation && (
         <AssignFromChatModal
           conversation={assignForConversation}
