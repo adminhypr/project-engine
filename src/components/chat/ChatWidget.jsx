@@ -229,8 +229,7 @@ export default function ChatWidget() {
           presence={presence}
           query={query}
           onQueryChange={setQuery}
-          onOpenContact={openOne}
-          onOpenConversation={openConversationById}
+          createOrOpenDm={createOrOpen}
           onMarkRead={markRead}
           onAssignTask={conv => setAssignForConversation(conv)}
           onCreateGroup={() => setCreateGroupOpen(true)}

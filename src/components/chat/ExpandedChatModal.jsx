@@ -23,9 +23,11 @@ export default function ExpandedChatModal({
   presence,
   query,
   onQueryChange,
-  // Conversation actions (same callbacks ChatWidget already wires)
-  onOpenContact,
-  onOpenConversation,
+  // Conversation actions. Modal selections are SCOPED to the modal — they
+  // don't touch the bottom-right widget's open stack. createOrOpenDm only
+  // resolves a DM conversation id without registering it as "open"; group
+  // and task selections likewise just set the modal's active pane.
+  createOrOpenDm,
   onMarkRead,
   onAssignTask,
   onCreateGroup,
@@ -63,13 +65,14 @@ export default function ExpandedChatModal({
   function selectConversation(convId) {
     if (!convId) return
     setActiveConvId(convId)
-    // Also tell the widget to track this id in openConversationIds so when
-    // the user closes the modal the chat is in their bottom-right stack.
-    onOpenConversation?.(convId)
   }
 
   async function handleOpenContact(otherUserId) {
-    const convId = await onOpenContact?.(otherUserId)
+    // Resolve (or create) the DM conversation id, but do NOT register it
+    // in the bottom-right widget's open stack. The modal is its own
+    // session; whether the chat appears bottom-right is the user's call,
+    // not a side effect of clicking a contact in here.
+    const convId = await createOrOpenDm?.(otherUserId)
     if (convId) setActiveConvId(convId)
   }
 
