@@ -4,6 +4,7 @@ import { AnimatePresence } from 'framer-motion'
 import { AuthProvider, useAuth } from './hooks/useAuth'
 import { logRender } from './lib/refreshDiagnostic'
 import { PresenceProvider } from './hooks/PresenceContext'
+import { TasksProvider, ProfilesProvider } from './hooks/useTasks'
 import Layout from './components/layout/Layout'
 import LoginPage from './pages/LoginPage'
 import MyTasksPage from './pages/MyTasksPage'
@@ -105,7 +106,11 @@ export default function App() {
       <BrowserRouter>
         <AuthProvider>
           <PresenceProvider>
-            <AppRoutes />
+            <ProfilesProvider>
+              <TasksProvider>
+                <AppRoutes />
+              </TasksProvider>
+            </ProfilesProvider>
           </PresenceProvider>
         </AuthProvider>
       </BrowserRouter>

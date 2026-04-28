@@ -36,14 +36,23 @@ async function fetchProfileDirect(userId, accessToken) {
     const rows = await res.json()
     const profile = rows?.[0] || null
 
-    // Fetch multi-team memberships separately (avoids PostgREST ambiguity)
+    // profile_teams + manager-name resolution can run in parallel — neither
+    // depends on the other. Profile-teams uses just the userId; manager
+    // lookup depends on profile.reports_to from the response above. Running
+    // sequentially used to add ~150-300ms to every cold start.
     if (profile) {
+      const ptUrl = `${SUPABASE_URL}/rest/v1/profile_teams?profile_id=eq.${userId}&select=team_id,is_primary,role,team:teams(id,name)`
+      const mgrUrl = profile.reports_to
+        ? `${SUPABASE_URL}/rest/v1/profiles?id=eq.${profile.reports_to}&select=id,full_name`
+        : null
+
+      const [ptRes, mgrRes] = await Promise.all([
+        fetch(ptUrl, { headers }).catch(() => null),
+        mgrUrl ? fetch(mgrUrl, { headers }).catch(() => null) : Promise.resolve(null),
+      ])
+
       try {
-        const ptRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/profile_teams?profile_id=eq.${userId}&select=team_id,is_primary,role,team:teams(id,name)`,
-          { headers }
-        )
-        if (ptRes.ok) {
+        if (ptRes?.ok) {
           const pt = await ptRes.json()
           if (pt.length > 0) {
             profile.team_ids = pt.map(r => r.team_id)
@@ -55,32 +64,17 @@ async function fetchProfileDirect(userId, accessToken) {
               profile.team_id = primary.team_id
             }
           } else {
-            // No profile_teams rows — fall back to legacy team_id
             profile.team_ids = profile.team_id ? [profile.team_id] : []
             profile.all_teams = profile.teams ? [{ ...profile.teams, is_primary: true, role: profile.role === 'Admin' ? 'Manager' : profile.role }] : []
             profile.team_roles = profile.team_id ? { [profile.team_id]: profile.role === 'Admin' ? 'Manager' : profile.role } : {}
           }
         }
       } catch {
-        // Non-critical — falls back to legacy teams relation
+        // Non-critical
       }
-    }
 
-    // Resolve reporting manager name if reports_to is set
-    if (profile?.reports_to) {
       try {
-        const mgrRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/profiles?id=eq.${profile.reports_to}&select=id,full_name`,
-          {
-            headers: {
-              'apikey': SUPABASE_KEY,
-              'Authorization': `Bearer ${accessToken}`,
-              'Accept': 'application/json',
-              'Accept-Profile': 'public',
-            },
-          }
-        )
-        if (mgrRes.ok) {
+        if (mgrRes?.ok) {
           const mgrRows = await mgrRes.json()
           profile.manager = mgrRows?.[0] || null
         }
@@ -104,14 +98,34 @@ export function AuthProvider({ children }) {
   const [activeTeamId, setActiveTeamIdState] = useState(null)
   const initDone = useRef(false)
 
+  // Cold-load used to fire fetchProfileDirect 2-3 times: once from init() and
+  // once from onAuthStateChange's INITIAL_SESSION (and sometimes a 3rd from
+  // a TOKEN_REFRESHED that triggered a refetch). Each fetchProfileDirect is
+  // 2 round-trips minimum. Dedupe by tracking the loaded user id and the
+  // in-flight promise — repeat callers return the same promise.
+  const loadedUserIdRef = useRef(null)
+  const inFlightRef = useRef(null)
+
   const loadProfile = useCallback(async (sess) => {
     if (!sess?.access_token || !sess?.user?.id) return false
-    const data = await fetchProfileDirect(sess.user.id, sess.access_token)
-    if (data) {
-      setProfile(data)
-      return true
+    const uid = sess.user.id
+    if (loadedUserIdRef.current === uid) return true
+    if (inFlightRef.current?.uid === uid) return inFlightRef.current.promise
+    const promise = (async () => {
+      const data = await fetchProfileDirect(uid, sess.access_token)
+      if (data) {
+        loadedUserIdRef.current = uid
+        setProfile(data)
+        return true
+      }
+      return false
+    })()
+    inFlightRef.current = { uid, promise }
+    try {
+      return await promise
+    } finally {
+      if (inFlightRef.current?.promise === promise) inFlightRef.current = null
     }
-    return false
   }, [])
 
   useEffect(() => {
@@ -154,7 +168,7 @@ export function AuthProvider({ children }) {
             } else {
               console.warn('Refresh failed, signing out')
               await supabase.auth.signOut().catch(() => {})
-              if (mounted) { setSession(null); setProfile(null); setLoading(false) }
+              if (mounted) { loadedUserIdRef.current = null; setSession(null); setProfile(null); setLoading(false) }
               return
             }
           } catch {
@@ -200,6 +214,7 @@ export function AuthProvider({ children }) {
         if (newSession) {
           await loadProfile(newSession)
         } else {
+          loadedUserIdRef.current = null
           setProfile(null)
         }
         setLoading(false)
@@ -243,6 +258,8 @@ export function AuthProvider({ children }) {
   const refreshProfile = useCallback(async () => {
     if (!session) return
     setLoading(true)
+    // Bust the dedupe cache — caller explicitly wants a fresh fetch.
+    loadedUserIdRef.current = null
     const ok = await loadProfile(session)
     if (!ok) {
       // Try refreshing the session first

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, createContext, useContext, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { getPriority } from '../lib/priority'
 import { getAssignmentType } from '../lib/assignmentType'
@@ -53,7 +53,16 @@ const TASK_SELECT_FALLBACK = `
   team:teams(id, name)
 `
 
-export function useTasks() {
+// Shared task state. Mounted once via <TasksProvider>; every useTasks() call
+// reads from this context instead of spawning its own fetch/realtime channel.
+// Before: NotificationBell + MyTasksPage each ran the full enrichment chain
+// (tasks SELECT + comment_counts RPC + chat_unreads RPC + assignees lookup
+// + manager lookup) on initial load AND on every realtime tick. The cold-load
+// fetch volume was ~76 round-trips on a fresh page; lifting to a singleton
+// halves that without changing the hook's public shape.
+const TasksContext = createContext(null)
+
+function useTasksImpl() {
   const { profile, isAdmin, isManager } = useAuth()
   const [tasks,   setTasks]   = useState([])
   const [loading, setLoading] = useState(true)
@@ -445,7 +454,26 @@ export function useTasks() {
       })
     : []
 
-  return { tasks, myTasks, teamTasks, loading, error, refetch: fetchTasks }
+  return useMemo(
+    () => ({ tasks, myTasks, teamTasks, loading, error, refetch: fetchTasks }),
+    [tasks, myTasks, teamTasks, loading, error, fetchTasks]
+  )
+}
+
+export function TasksProvider({ children }) {
+  const value = useTasksImpl()
+  return <TasksContext.Provider value={value}>{children}</TasksContext.Provider>
+}
+
+export function useTasks() {
+  const ctx = useContext(TasksContext)
+  if (!ctx) {
+    // Fallback for callers mounted outside TasksProvider — degrades to
+    // local-state behavior (matches the old API). Should never happen in
+    // the deployed tree; this is just defensive.
+    return { tasks: [], myTasks: [], teamTasks: [], loading: false, error: null, refetch: async () => {} }
+  }
+  return ctx
 }
 
 export function useTaskActions() {
@@ -706,18 +734,27 @@ export function useTaskActions() {
   return { assignTask, updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask, deleteTask, deleteTasks, updateTasks, addAssignee, removeAssignee }
 }
 
-export function useProfiles({ excludeExternals = false } = {}) {
+// Shared profile/team state. Same singleton pattern as TasksContext —
+// the heavy `profiles` SELECT (with profile_teams + teams joins) used to
+// fire once per useProfiles() consumer. With 13+ consumers across the app
+// (TaskDetailPanel, ChatWidget, AssignTaskPage, NotificationBell, etc.)
+// that was 13+ identical fetches on cold load. Lifting to context fires
+// the SELECT once.
+const ProfilesContext = createContext(null)
+
+function useProfilesImpl() {
   const [profiles, setProfiles] = useState([])
   const [teams,    setTeams]    = useState([])
   const [loading,  setLoading]  = useState(true)
 
   useEffect(() => {
+    let cancelled = false
     async function load() {
       const [{ data: pData }, { data: tData }] = await Promise.all([
         supabase.from('profiles').select('*, teams!profiles_team_id_fkey(id, name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))').order('full_name'),
         supabase.from('teams').select('*').order('name')
       ])
-      // Resolve manager names + enrich with multi-team data
+      if (cancelled) return
       const profileList = pData || []
       const profileMap = Object.fromEntries(profileList.map(p => [p.id, p]))
       const enriched = profileList.map(p => {
@@ -730,15 +767,33 @@ export function useProfiles({ excludeExternals = false } = {}) {
           manager: p.reports_to ? { id: p.reports_to, full_name: profileMap[p.reports_to]?.full_name } : null
         }
       })
-      const filtered = excludeExternals
-        ? enriched.filter(p => p.role !== 'Agent' && p.role !== 'Client')
-        : enriched
-      setProfiles(filtered)
+      setProfiles(enriched)
       setTeams(tData || [])
       setLoading(false)
     }
     load()
-  }, [excludeExternals])
+    return () => { cancelled = true }
+  }, [])
 
-  return { profiles, teams, loading }
+  return useMemo(() => ({ profiles, teams, loading }), [profiles, teams, loading])
+}
+
+export function ProfilesProvider({ children }) {
+  const value = useProfilesImpl()
+  return <ProfilesContext.Provider value={value}>{children}</ProfilesContext.Provider>
+}
+
+export function useProfiles({ excludeExternals = false } = {}) {
+  const ctx = useContext(ProfilesContext)
+  // Filter is applied per-consumer (cheap memoized filter) so the singleton
+  // store doesn't have to maintain two parallel lists.
+  return useMemo(() => {
+    if (!ctx) return { profiles: [], teams: [], loading: false }
+    if (!excludeExternals) return ctx
+    return {
+      profiles: ctx.profiles.filter(p => p.role !== 'Agent' && p.role !== 'Client'),
+      teams: ctx.teams,
+      loading: ctx.loading,
+    }
+  }, [ctx, excludeExternals])
 }
