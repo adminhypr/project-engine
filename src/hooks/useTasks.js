@@ -4,7 +4,6 @@ import { getPriority } from '../lib/priority'
 import { getAssignmentType } from '../lib/assignmentType'
 import { generateTaskId } from '../lib/helpers'
 import { useAuth } from './useAuth'
-import { useDocumentVisible } from '../lib/useDocumentVisible'
 import { playTaskSound } from '../lib/notificationSounds'
 import { onMessage } from '../lib/dmEventBus'
 import { buildSubtaskCounts } from '../lib/subtasks'
@@ -313,12 +312,14 @@ export function useTasks() {
     }
   }, [profileId, fetchTasks])
 
-  // Silent refetch on tab-visible — catches task inserts/updates that happened
-  // while the realtime socket was asleep. This is the safety net that
-  // replaces the old 30s polling timer.
-  useDocumentVisible(useCallback(() => {
-    if (profileRef.current) fetchTasks(true)
-  }, [fetchTasks]))
+  // (Tab-visible refetch removed.) Browsers don't always tear down the
+  // websocket on background tabs, so a "silent" refetch on every visibility
+  // flip mostly does nothing — but it ALWAYS swaps the `tasks` array and
+  // every task object identity, which propagates as a new prop into
+  // TaskDetailPanel and causes a perceptible re-render burst on tab return.
+  // Missed events are already covered by the reconnect-aware refetch above
+  // (fires only when the realtime channel actually went down and came back),
+  // and by the user-scoped task-poke broadcast for new assignments.
 
   // Refresh unread_chat_count when DM messages arrive. The global
   // useDmRealtime subscription fires dmEventBus "message" events for any

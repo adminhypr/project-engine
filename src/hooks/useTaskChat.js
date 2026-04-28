@@ -94,9 +94,33 @@ export function useTaskChat(taskId) {
   // Tab-wake resync — mirrors useConversation. If the realtime socket was
   // asleep while the tab was hidden, a bus event may have been missed;
   // refetch root messages so the task panel catches up on visible.
-  useDocumentVisible(useCallback(() => {
-    if (cidRef.current) fetchMessages()
-  }, [fetchMessages]))
+  //
+  // Importantly, MERGE by id rather than replace the array. Replacing
+  // gives every existing message a new object identity and re-renders
+  // the entire chat thread on every tab return — exactly the "task page
+  // refreshes when I switch back" complaint.
+  const resync = useCallback(async () => {
+    const cid = cidRef.current
+    if (!cid) return
+    const { data, error } = await supabase
+      .from('dm_messages')
+      .select(MSG_SELECT)
+      .eq('conversation_id', cid)
+      .is('thread_root_id', null)
+      .order('created_at', { ascending: true })
+    if (error || !data) return
+    setMessages(prev => {
+      if (prev.length === 0) return data
+      const byId = new Map(prev.map(m => [m.id, m]))
+      let changed = false
+      for (const m of data) {
+        if (!byId.has(m.id)) { byId.set(m.id, m); changed = true }
+      }
+      if (!changed) return prev
+      return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at))
+    })
+  }, [])
+  useDocumentVisible(resync)
 
   // 4. Send — object signature per plan Task 4, insert shape per
   //    useConversation (real columns: mentions, inline_images, reply_to_*).
