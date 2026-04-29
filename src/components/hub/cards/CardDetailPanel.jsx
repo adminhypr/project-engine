@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { useHubCardColumns } from '../../../hooks/useHubCardColumns'
 import { useHubCards } from '../../../hooks/useHubCards'
 import { useHubMembers } from '../../../hooks/useHubMembers'
-import { SlidePanel } from '../../ui/animations'
 import { showToast } from '../../ui/index'
 import CardSteps from './CardSteps'
 import CardComments from './CardComments'
@@ -135,102 +135,148 @@ export default function CardDetailPanel({ moduleId, hubId }) {
     setParams(next)
   }
 
+  // Esc to close + lock body scroll while panel is open. Mirrors the
+  // ExpandedModuleModal pattern so card detail and module-expand feel
+  // alike — Basecamp's full-page card view rather than a side panel.
+  useEffect(() => {
+    if (!cardId) return
+    function onKey(e) { if (e.key === 'Escape') close() }
+    window.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [cardId])
+
   if (!cardId || !card) return null
 
   const assignedIds = (card.assignees || []).map(a => a.id)
 
   return (
-    <SlidePanel isOpen={!!cardId} onClose={close} width={640}>
-      <div className="p-5 max-w-2xl overflow-y-auto h-full">
-        <div className="flex items-start justify-between gap-2 mb-3">
-          <input
-            value={card.title}
-            onChange={e => setCard({ ...card, title: e.target.value })}
-            onBlur={() => updateCard(card.id, { title: card.title })}
-            className="text-xl font-bold bg-transparent w-full focus:outline-none focus:ring-0"
-          />
-          <button onClick={close} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-dark-hover">
-            <X size={16} />
-          </button>
-        </div>
-
-        <dl className="grid grid-cols-[100px_1fr] gap-y-3 text-sm mb-5">
-          <dt className="text-slate-500">Column</dt>
-          <dd>
-            <select
-              value={card.column_id}
-              onChange={async e => { await updateCard(card.id, { column_id: e.target.value }); setCard({ ...card, column_id: e.target.value }) }}
-              className="form-input py-1 text-sm"
+    <AnimatePresence>
+      <motion.div
+        key="card-detail-backdrop"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.15 }}
+        className="fixed inset-0 z-[100] bg-black/60 flex items-start justify-center overflow-y-auto p-4 sm:p-8"
+        onClick={close}
+      >
+        <motion.div
+          key="card-detail-panel"
+          initial={{ opacity: 0, y: 12, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0,  scale: 1 }}
+          exit={{ opacity: 0, y: 8,    scale: 0.98 }}
+          transition={{ duration: 0.18, ease: 'easeOut' }}
+          className="bg-white dark:bg-dark-card rounded-2xl shadow-elevated w-full max-w-3xl my-auto flex flex-col"
+          style={{ minHeight: '60vh', maxHeight: '92vh' }}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Header — close button only; title is editable below in the body */}
+          <div className="flex items-center justify-end px-5 py-3 border-b border-slate-100 dark:border-dark-border shrink-0">
+            <button
+              type="button"
+              onClick={close}
+              className="p-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-dark-hover"
+              title="Close (Esc)"
             >
-              {columns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </dd>
+              <X size={16} />
+            </button>
+          </div>
 
-          <dt className="text-slate-500">Due on</dt>
-          <dd>
+          {/* Body */}
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 sm:px-10 py-6">
             <input
-              type="date"
-              value={card.due_date || ''}
-              onChange={async e => {
-                const v = e.target.value || null
-                await updateCard(card.id, { due_date: v })
-                setCard({ ...card, due_date: v })
-              }}
-              className="form-input py-1 text-sm"
+              value={card.title}
+              onChange={e => setCard({ ...card, title: e.target.value })}
+              onBlur={() => updateCard(card.id, { title: card.title })}
+              placeholder="Card title"
+              aria-label="Card title"
+              className="text-2xl font-bold bg-transparent w-full focus:outline-none focus:ring-0 mb-5"
             />
-          </dd>
 
-          <dt className="text-slate-500">Assigned</dt>
-          <dd className="flex items-center gap-1 flex-wrap">
-            {(card.assignees || []).map(a => (
-              <span key={a.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 dark:bg-dark-hover rounded-full text-xs">
-                {a.full_name}
-                <button onClick={() => unassignCard(card.id, a.id)} className="text-slate-400 hover:text-red-500"><X size={11} /></button>
-              </span>
-            ))}
-            <AssigneePicker
-              hubId={hubId}
-              assignedIds={assignedIds}
-              onAdd={async (profileId) => { await assignCard(card.id, [profileId]) }}
-            />
-          </dd>
-        </dl>
+            <dl className="grid grid-cols-[110px_1fr] gap-y-3 text-sm mb-6">
+              <dt className="text-slate-500 self-center">Column</dt>
+              <dd>
+                <select
+                  value={card.column_id}
+                  onChange={async e => { await updateCard(card.id, { column_id: e.target.value }); setCard({ ...card, column_id: e.target.value }) }}
+                  className="form-input py-1 text-sm"
+                >
+                  {columns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </dd>
 
-        <section className="mb-5">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Notes</h4>
-          <textarea
-            value={card.notes || ''}
-            onChange={e => setCard({ ...card, notes: e.target.value })}
-            onBlur={() => updateCard(card.id, { notes: card.notes })}
-            placeholder="Add notes…"
-            rows={6}
-            className="form-input w-full text-sm"
-          />
-        </section>
+              <dt className="text-slate-500 self-center">Due on</dt>
+              <dd>
+                <input
+                  type="date"
+                  value={card.due_date || ''}
+                  onChange={async e => {
+                    const v = e.target.value || null
+                    await updateCard(card.id, { due_date: v })
+                    setCard({ ...card, due_date: v })
+                  }}
+                  className="form-input py-1 text-sm"
+                />
+              </dd>
 
-        <section className="mb-5">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Steps</h4>
-          <CardSteps cardId={card.id} />
-        </section>
+              <dt className="text-slate-500 self-center">Assigned</dt>
+              <dd className="flex items-center gap-1 flex-wrap">
+                {(card.assignees || []).map(a => (
+                  <span key={a.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 dark:bg-dark-hover rounded-full text-xs">
+                    {a.full_name}
+                    <button onClick={() => unassignCard(card.id, a.id)} className="text-slate-400 hover:text-red-500"><X size={11} /></button>
+                  </span>
+                ))}
+                <AssigneePicker
+                  hubId={hubId}
+                  assignedIds={assignedIds}
+                  onAdd={async (profileId) => { await assignCard(card.id, [profileId]) }}
+                />
+              </dd>
+            </dl>
 
-        <section className="mb-3">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Comments</h4>
-          <CardComments cardId={card.id} hubId={hubId} />
-        </section>
+            <section className="mb-6">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Notes</h4>
+              <textarea
+                value={card.notes || ''}
+                onChange={e => setCard({ ...card, notes: e.target.value })}
+                onBlur={() => updateCard(card.id, { notes: card.notes })}
+                placeholder="Add notes…"
+                rows={6}
+                className="form-input w-full text-sm"
+              />
+            </section>
 
-        <div className="pt-3 border-t border-slate-100 dark:border-dark-border flex justify-end">
-          <button
-            onClick={async () => {
-              if (!confirm('Delete this card?')) return
-              const ok = await deleteCard(card.id)
-              if (ok) { showToast('Card deleted'); close() }
-            }}
-            className="btn btn-ghost text-red-500 text-sm inline-flex items-center gap-1"
-          >
-            <Trash2 size={13} /> Delete card
-          </button>
-        </div>
-      </div>
-    </SlidePanel>
+            <section className="mb-6">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Steps</h4>
+              <CardSteps cardId={card.id} />
+            </section>
+
+            <section className="mb-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Comments</h4>
+              <CardComments cardId={card.id} hubId={hubId} />
+            </section>
+
+            <div className="pt-4 border-t border-slate-100 dark:border-dark-border flex justify-end">
+              <button
+                onClick={async () => {
+                  if (!confirm('Delete this card?')) return
+                  const ok = await deleteCard(card.id)
+                  if (ok) { showToast('Card deleted'); close() }
+                }}
+                className="btn btn-ghost text-red-500 text-sm inline-flex items-center gap-1"
+              >
+                <Trash2 size={13} /> Delete card
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   )
 }
