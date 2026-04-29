@@ -131,7 +131,11 @@ export default function RichInput({
   }
 
   function handleSubmit() {
-    if (!value.trim() && inlineImages.length === 0) return
+    // Chat-style surfaces (clearOnSubmit=true) bail on empty submit so the
+    // Post button doesn't fire a no-op message. Edit-in-place surfaces
+    // (clearOnSubmit=false) need to allow empty saves — clearing the notes
+    // back to nothing is a valid intent.
+    if (clearOnSubmit && !value.trim() && inlineImages.length === 0) return
     onSubmit?.({
       content: value.trim(),
       mentions,

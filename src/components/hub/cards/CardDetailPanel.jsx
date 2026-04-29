@@ -87,8 +87,11 @@ export default function CardDetailPanel({ moduleId, hubId }) {
   const cardId = params.get('card')
   const [card, setCard] = useState(null)
   // Local draft of the notes text. Decoupled from card.notes so realtime
-  // refetches don't clobber what the user is typing. Auto-saves on blur.
+  // refetches don't clobber what the user is typing. Save is explicit
+  // (button) AND fires on blur as a safety net.
   const [notesDraft, setNotesDraft] = useState('')
+  const [savingNotes, setSavingNotes] = useState(false)
+  const [notesJustSaved, setNotesJustSaved] = useState(false)
   const notesSubmitRef = useRef(null)
   const { columns } = useHubCardColumns(moduleId)
   const { updateCard, deleteCard, assignCard, unassignCard } = useHubCards(moduleId)
@@ -250,13 +253,31 @@ export default function CardDetailPanel({ moduleId, hubId }) {
             </dl>
 
             <section className="mb-6">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Notes</h4>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Notes</h4>
+                <div className="flex items-center gap-2">
+                  {notesJustSaved && (
+                    <span className="text-xs text-emerald-500 inline-flex items-center gap-1">
+                      <Check size={12} /> Saved
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => notesSubmitRef.current?.()}
+                    disabled={savingNotes}
+                    className="btn btn-primary text-xs px-3 py-1 disabled:opacity-50"
+                  >
+                    {savingNotes ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              </div>
 
               {/*
                 Single Basecamp-style notes block: one editor, saved inline
                 screenshots seeded into the editor's state via
-                `initialInlineImages`, auto-saves on blur via `onBlur`. The
-                `key={card.id}` keeps state in sync across card switches.
+                `initialInlineImages`. Save fires from the explicit Save
+                button or as a safety net on blur. `key={card.id}` keeps
+                state in sync across card switches.
               */}
               <RichInput
                 key={card.id}
@@ -264,17 +285,18 @@ export default function CardDetailPanel({ moduleId, hubId }) {
                 onChange={setNotesDraft}
                 onBlur={() => notesSubmitRef.current?.()}
                 onSubmit={async ({ content, inlineImages }) => {
-                  // No-op if nothing changed (RichInput's blur fires every
-                  // click-out, even when text is identical to the saved row).
                   const cleanedImages = (inlineImages || []).map(({ preview, ...rest }) => rest)
-                  const sameText = (content || '') === (card.notes || '')
-                  const sameImageCount = cleanedImages.length === (card.inline_images || []).length
-                  if (sameText && sameImageCount) return
+                  setSavingNotes(true)
                   const ok = await updateCard(card.id, {
                     notes: content,
                     inline_images: cleanedImages,
                   })
-                  if (ok) setCard(prev => prev ? { ...prev, notes: content, inline_images: cleanedImages } : prev)
+                  setSavingNotes(false)
+                  if (ok) {
+                    setCard(prev => prev ? { ...prev, notes: content, inline_images: cleanedImages } : prev)
+                    setNotesJustSaved(true)
+                    setTimeout(() => setNotesJustSaved(false), 1800)
+                  }
                 }}
                 submitRef={notesSubmitRef}
                 initialInlineImages={card.inline_images || []}
