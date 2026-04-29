@@ -85,7 +85,7 @@ export function useRecurrences() {
     }
 
     const ch = supabase
-      .channel('task-recurrences-realtime')
+      .channel(`task-recurrences-realtime:${profile.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'task_recurrences' },
         (payload) => { if (isRelevantTemplateChange(payload)) scheduleRefetch() })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'task_recurrence_assignees' },

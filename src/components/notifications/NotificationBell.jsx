@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useId } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Bell, CheckCircle, AlertTriangle, Clock, UserPlus, UserCog, MessageSquare, Boxes, AtSign, X } from 'lucide-react'
@@ -222,6 +222,10 @@ export default function NotificationBell({ onTaskClick }) {
     } catch { return [] }
   })
   const panelRef = useRef(null)
+  // Stable per-mount id so HMR / StrictMode double-mounts don't collide on
+  // the same realtime channel name (which would tear down the live
+  // subscription when one of the two unmounts).
+  const instanceId = useId()
 
   // Fetch recent comments on tasks I'm involved with (assignee or assigner), by other people
   // Use a ref to track task IDs so the effect only depends on profile, not the tasks array
@@ -260,7 +264,7 @@ export default function NotificationBell({ onTaskClick }) {
 
     // Realtime: refetch when new comments arrive
     const channel = supabase
-      .channel('comments-notif')
+      .channel(`comments-notif:${profile.id}:${instanceId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, () => fetchComments())
       .subscribe()
     return () => { clearTimeout(timer); supabase.removeChannel(channel) }
@@ -289,7 +293,7 @@ export default function NotificationBell({ onTaskClick }) {
     // active user per minute (~every 8-12s of perceived activity, matching
     // the "page refreshes every 8-10s" complaint).
     const channel = supabase
-      .channel('profiles-admin-notif')
+      .channel(`profiles-admin-notif:${profile?.id ?? 'anon'}:${instanceId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload) => {
         if (payload.eventType === 'UPDATE') {
           const o = payload.old || {}
@@ -330,7 +334,7 @@ export default function NotificationBell({ onTaskClick }) {
     fetchHubInvites()
 
     const channel = supabase
-      .channel('hub-invite-notif')
+      .channel(`hub-invite-notif:${profile.id}:${instanceId}`)
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'hub_members', filter: `profile_id=eq.${profile.id}` },
         () => fetchHubInvites()

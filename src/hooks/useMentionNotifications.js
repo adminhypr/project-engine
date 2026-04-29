@@ -117,7 +117,7 @@ export function useMentionNotifications() {
     fetchAll()
 
     const hubChannel = supabase
-      .channel('hub-mentions-notif')
+      .channel(`hub-mentions-notif:${profile.id}`)
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'hub_mentions', filter: `mentioned_user=eq.${profile.id}` },
         () => fetchHubMentions()
@@ -141,7 +141,7 @@ export function useMentionNotifications() {
     // their last_read_at. Subscribe to their conversation_participants
     // UPDATE events to prune seen mentions live.
     const partChannel = supabase
-      .channel('task-mentions-read')
+      .channel(`task-mentions-read:${profile.id}`)
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'conversation_participants', filter: `user_id=eq.${profile.id}` },
         () => fetchTaskMentions()

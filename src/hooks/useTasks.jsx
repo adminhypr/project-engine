@@ -314,7 +314,7 @@ function useTasksImpl() {
     // tweak). Filter to "involves me OR already in my list" so unrelated
     // backend churn doesn't redraw the page.
     const tasksChannel = supabase
-      .channel('tasks-realtime')
+      .channel(`tasks-realtime:${profileId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' },
         (payload) => {
           const newRow = payload.new
@@ -345,7 +345,7 @@ function useTasksImpl() {
     // see". The earlier version refetched on every event and was the loudest
     // source of the spurious-refresh bug.
     const assigneesChannel = supabase
-      .channel('task-assignees-realtime')
+      .channel(`task-assignees-realtime:${profileId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'task_assignees' },
