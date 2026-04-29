@@ -100,6 +100,22 @@ export default function ConversationPane({
     tick()
   }, [])
 
+  // Bridge from the global URL deep-link path: ChatWidget dispatches
+  // `pe-chat-scroll-to-message` after opening the conversation. Each pane
+  // listens and reuses its existing scrollToMessage machinery (history
+  // paging + highlight). Filtered to this pane's conversation id so other
+  // open panes don't all jump.
+  useEffect(() => {
+    function handler(e) {
+      if (e.detail?.conversationId !== conversation.id) return
+      const messageId = e.detail?.messageId
+      if (!messageId) return
+      scrollToMessage(messageId)
+    }
+    window.addEventListener('pe-chat-scroll-to-message', handler)
+    return () => window.removeEventListener('pe-chat-scroll-to-message', handler)
+  }, [conversation.id, scrollToMessage])
+
   // Profile lookup covers everyone who could appear as a reactor, mentioner,
   // or typer — group participants, the DM other party, and me. Consumed by
   // MessageReactions to show "Alice, Bob, You" on pill hover.
