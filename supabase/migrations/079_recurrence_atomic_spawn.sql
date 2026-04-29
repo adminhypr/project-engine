@@ -19,6 +19,23 @@
 -- Pre-spawn steps (assignee validation, deactivate-and-notify on zero
 -- valid assignees) remain in the edge function — only the
 -- post-validation insert+audit+advance block is moved into this RPC.
+--
+-- Known pre-existing failure modes inherited from migration 058 (the
+-- RPC behaves no worse than the prior edge-function flow, but rolls
+-- back cleanly instead of leaving a half-applied state):
+--   • template_urgency = 'Urgent' fails tasks.urgency CHECK
+--     (001:65-66 only allows Low/Med/High). Surfaces as
+--     `tasks_urgency_check` violation. Follow-up: extend tasks.urgency
+--     CHECK to include 'Urgent', or normalize at template-edit time.
+--   • A template whose creator was deleted has created_by = NULL
+--     (058:34, on delete set null). The RPC tries to insert
+--     assigned_by = NULL and fails the NOT NULL on tasks (001:60).
+--     Follow-up: either fall back to a system user, or skip + audit.
+--
+-- Telemetry note: the RPC returns NULL for three distinct reasons
+-- (advisory-lock contention, paused, race-loss to a sibling worker).
+-- For richer ops debugging the signature could be widened to a
+-- (uuid, text) composite. Acceptable for v1 single-replica cron.
 -- ─────────────────────────────────────────────
 
 create or replace function public.spawn_recurrence(
