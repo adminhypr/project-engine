@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { isExternal } from '../../lib/roleHelpers'
 import { useContactList } from '../../hooks/useContactList'
@@ -32,10 +33,54 @@ export default function ChatWidget() {
   // ConversationStack can focus this pane (same as maximize) and the
   // adjacent panes that wouldn't fit collapse to avatar tabs.
   const [threadState, setThreadState] = useState(null)
+  const location = useLocation()
+  const navigate = useNavigate()
 
   useEffect(() => { setState(readWidgetState(profile?.id)) }, [profile?.id])
   useEffect(() => { writeWidgetState(profile?.id, state) }, [profile?.id, state])
 
+  // Consume URL deep-link params (?dm=<convId>&message=<msgId>) on mount
+  // AND on URL change. Open the conversation; if a message id is provided
+  // fire a `pe-chat-scroll-to-message` follow-up event so the open pane
+  // scrolls + highlights it (existing pattern uses `data-message-id` +
+  // `pe-msg-highlight`). Then strip the params so back/forward doesn't
+  // re-trigger and so the URL stays clean.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const convId = params.get('dm')
+    if (!convId) return
+
+    const messageId = params.get('message')
+    setThreadState(null)
+    setState(s => ({
+      ...s,
+      expanded: true,
+      openConversationIds: s.openConversationIds.includes(convId)
+        ? s.openConversationIds
+        : [...s.openConversationIds, convId],
+      minimizedIds: s.minimizedIds.filter(id => id !== convId),
+    }))
+    if (messageId) {
+      // Defer so the pane has rendered before we ask it to scroll.
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('pe-chat-scroll-to-message', {
+          detail: { conversationId: convId, messageId },
+        }))
+      }, 200)
+    }
+    // Strip the params so the URL is clean after the deep-link is consumed.
+    const next = new URLSearchParams(location.search)
+    next.delete('dm')
+    next.delete('message')
+    const qs = next.toString()
+    navigate(
+      { pathname: location.pathname, search: qs ? `?${qs}` : '' },
+      { replace: true }
+    )
+  }, [location.search, location.pathname, navigate])
+
+  // Existing pe-chat-open listener — extended to forward messageId via the
+  // new pe-chat-scroll-to-message event when present.
   useEffect(() => {
     function handler(e) {
       const convId = e.detail?.conversationId
@@ -49,6 +94,14 @@ export default function ChatWidget() {
           : [...s.openConversationIds, convId],
         minimizedIds: s.minimizedIds.filter(id => id !== convId),
       }))
+      const messageId = e.detail?.messageId
+      if (messageId) {
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('pe-chat-scroll-to-message', {
+            detail: { conversationId: convId, messageId },
+          }))
+        }, 200)
+      }
     }
     window.addEventListener('pe-chat-open', handler)
     return () => window.removeEventListener('pe-chat-open', handler)
