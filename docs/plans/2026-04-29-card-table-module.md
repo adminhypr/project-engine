@@ -2081,6 +2081,41 @@ git commit -am "fix(card-table): smoke-test follow-ups"
 
 ---
 
+## Plan deviations during execution
+
+Documented for future readers diffing plan against shipped reality:
+
+1. **Migrations 070 + 071 added.** Plan called for migration 069 only.
+   - **070** — fixes for two criticals caught in 069's review: legacy `comments` INSERT policy was wide-open (any auth'd user could write any `card_id`), and the `enqueue_comment_notification` rewrite changed the digest payload shape and would have rendered every existing task-comment digest email blank. 070 retightens the legacy policy to `task_id IS NOT NULL` and restores the 062-compatible payload keys (`actor_name`, `task_title`, `snippet`) for both branches.
+   - **071** — `get_card_comment_counts(p_module_id)` RPC. Plan used PostgREST aggregate `comments.select('card_id, id.count()')`, which returns `PGRST123: "Use of aggregate functions is not allowed"` on the deployed Supabase. Replaced with a SECURITY INVOKER RPC mirroring the existing `get_user_task_chat_unreads` pattern from migration 052.
+
+2. **`RichInput` prop signature** in Task 7. Plan assumed `value/onChange/onMentionsChange/placeholder`. Real signature: `value/onChange/onSubmit/submitRef/hubId/enableMentions/enableImages/...`. Mentions arrive via `onSubmit({ content, mentions, inlineImages })`, where `mentions = [{ user_id, display_name }]`. `CardComments.jsx` uses a parent-held `submitRef` and maps `mentions.map(m => m.user_id)` into the `mentioned_ids` uuid[] column.
+
+3. **`SlidePanel` prop signature** in Task 7. Plan used `open` and `side="right"`. Real signature: `{ isOpen, onClose, children, width = 520 }`. No `side` prop — right side is hardcoded. `CardDetailPanel.jsx` uses `isOpen={!!cardId} width={640}`.
+
+4. **`AddModuleModal` did need a code change** in Task 8. Plan said it picks up the new kind for free via `HUB_MODULE_KINDS`, but the modal also has its own local `KIND_META` (for label/icon/color/desc) that crashes if iterating to a kind not in the local map. Added a `'card-table'` entry to that local map.
+
+5. **DnD + rename UX bugs** in Task 6. Four bugs caught in review and fixed:
+   - Drag listeners were on the wrapper `<div>` around the click `<button>`, so drop-release fired the button's `onClick` and opened the detail panel of the just-moved card. Now uses a dedicated `GripVertical` drag handle.
+   - Same-column downward moves landed one slot too high (the source card was still in the target list when computing `findIndex`).
+   - Optimistic `moveCard` left position collisions until the realtime refetch. Now re-numbers source + target column siblings.
+   - Inline rename inputs double-fired their save (Enter then onBlur). Use a `submittedRef` to dedupe.
+
+6. **`useHubCards`/`useHubCardColumns`/`useHubCardSteps` callback churn.** Plan's `addCard` / `addColumn` / `addStep` had `[<state-array>, profile?.id]` deps, which churned on every realtime tick. Patched mid-execution to use the `*Ref.current` pattern that `useHubModules` had already adopted.
+
+---
+
+## Known follow-ups (post-merge)
+
+Called out in the final integration review; NOT blockers for ship:
+
+1. **Smoke test for `enqueue_comment_notification`.** The 070 rewrite covers both task and card branches; a regression here would silently drop notifications across the whole app. SQL smoke: insert one row of each kind, assert outbox rows have the right `actor_name`/`task_title`/`card_title` keys.
+2. **Refactor `CardDetailPanel`'s data layer.** Currently instantiates a second `useHubCards(moduleId)` just for the mutation callbacks, which doubles the realtime subscription per open detail view. Factor mutations into `useCardMutations(moduleId)` that doesn't subscribe.
+3. **Surface `hub_card_audit_log`** in the card detail panel. Migration 069 writes to it on column-move / title-change / due-date change / assignee change, but nothing renders it yet.
+4. **Add `hub_name` to card notification payloads** so the digest email can render "<card_title> in <hub_name>" instead of just "<card_title>".
+
+---
+
 ## Future work (NOT in this plan)
 
 1. **Card-comment reactions** — same model as DM message reactions; small new table `comment_reactions` (polymorphic on comment id; gated by comments RLS).
