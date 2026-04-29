@@ -5,35 +5,16 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeadersFor, verifyWebhookSecret } from '../_shared/security.ts'
+import { sendEmail } from '../_shared/email.ts'
 
 const SUPABASE_URL      = Deno.env.get('SUPABASE_URL')!
 const SERVICE_KEY       = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const RESEND_API_KEY    = Deno.env.get('RESEND_API_KEY')!
-const FROM_EMAIL        = Deno.env.get('DM_FROM_EMAIL')
-                          ?? Deno.env.get('ALERT_FROM_EMAIL')
-                          ?? 'alerts@hyprassistants.com'
 const APP_URL           = Deno.env.get('APP_URL') ?? 'https://example.com'
 
 const DELAY_MIN         = 3
 const DEBOUNCE_MIN      = 15
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY)
-
-async function sendEmail(to: string, subject: string, html: string) {
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ from: `Hypr Task <${FROM_EMAIL}>`, to, subject, html }),
-  })
-  if (!res.ok) {
-    console.error('Resend failed', res.status, await res.text())
-    return false
-  }
-  return true
-}
 
 async function flush() {
   const threshold = new Date(Date.now() - DELAY_MIN * 60_000).toISOString()
@@ -158,24 +139,33 @@ async function flush() {
         <p><a href="${linkUrl}" style="color:#3b82f6;">${linkLabel}</a></p>
       </div>`
 
-    const ok = await sendEmail(recipient.email, subject, html)
+    const result = await sendEmail(recipient.email, subject, html)
 
-    if (ok) {
+    if (result.ok) {
       // Claim row already inserted above; it doubles as the dedupe proof.
       await supabase.from('pending_dm_emails').update({
         sent_at: new Date().toISOString(),
       }).in('id', rows.map(r => r.id))
       sent += rows.length
-    } else {
-      // Release the claim so the next tick can retry this (recipient,
-      // conversation, bucket) — otherwise the unique index would block
-      // a follow-up send for the rest of the 15-minute window.
+    } else if (result.retryable) {
+      // Transient failure (429 / 5xx / network exhausted). Release the
+      // debounce claim so the next tick can retry this (recipient,
+      // conversation, bucket); leave the pending rows un-sent so they
+      // get picked up again. Otherwise the unique index would block a
+      // follow-up send for the rest of the 15-minute window.
+      console.warn(`dm-offline-notify: transient send failure (status=${result.status}); releasing claim for next tick: ${result.error}`)
       await supabase
         .from('dm_email_log')
         .delete()
         .eq('recipient_id', recipient.id)
         .eq('conversation_id', conversationId)
         .eq('sent_at', claimSentAt)
+      // Leave the pending_dm_emails rows untouched so the next tick re-flushes them.
+    } else {
+      // Permanent failure (bad address, unsubscribed, etc.). Don't retry —
+      // mark the queue rows as resend_failed and keep the debounce claim
+      // so we don't burn the next 15 minutes hammering a doomed address.
+      console.error(`dm-offline-notify: permanent send failure (status=${result.status}); marking ${rows.length} rows resend_failed: ${result.error}`)
       await supabase.from('pending_dm_emails').update({
         skipped_reason: 'resend_failed',
         sent_at: new Date().toISOString(),

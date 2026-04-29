@@ -5,6 +5,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeadersFor, verifyWebhookSecret } from '../_shared/security.ts'
+import { sendEmail as sharedSendEmail } from '../_shared/email.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -12,37 +13,21 @@ const supabase = createClient(
 )
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
-const FROM_EMAIL = Deno.env.get('ALERT_FROM_EMAIL') || 'alerts@hyprassistants.com'
 const APP_URL = Deno.env.get('APP_URL') || 'https://tasks.hyprstaffing.com'
 
 // ── Email sender ──────────────────────────────
-async function sendEmail(to: string[], subject: string, html: string, cc: string[] = []) {
-  if (!RESEND_API_KEY) {
-    console.error('RESEND_API_KEY not set — skipping email')
-    return false
-  }
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: `Hypr Task <${FROM_EMAIL}>`,
-      to,
-      cc: cc.length ? cc : undefined,
-      subject,
-      html,
-    }),
-  })
-
-  if (!res.ok) {
-    const err = await res.text()
-    console.error('Resend error:', res.status, err)
-    return false
-  }
-  return true
+// Wrapper preserves the legacy `(to, subject, html, cc?) -> boolean`
+// shape used throughout this file. Permanent failures are logged here;
+// either failure mode falls through as `false` so the caller leaves
+// `email_alert_sent` unset and the next cron tick can retry. Permanent
+// failures will retry on every tick — minimal handling per audit task
+// 3.5 (a per-task fail-counter is the documented next step).
+async function sendEmail(to: string[], subject: string, html: string, cc: string[] = []): Promise<boolean> {
+  const result = await sharedSendEmail(to, subject, html, { cc })
+  if (result.ok) return true
+  const level = result.retryable ? 'warn' : 'error'
+  console[level](`send-alerts: send failed (status=${result.status}, retryable=${result.retryable}) to=${JSON.stringify(to)} subject=${JSON.stringify(subject)}: ${result.error}`)
+  return false
 }
 
 // ── Email template ────────────────────────────
