@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Plus } from 'lucide-react'
 
 export default function AddColumnInline({ onAdd }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
+  const submittedRef = useRef(false)
   if (!open) {
     return (
       <button type="button" onClick={() => setOpen(true)}
@@ -20,12 +21,19 @@ export default function AddColumnInline({ onAdd }) {
         onChange={e => setName(e.target.value)}
         onKeyDown={async (e) => {
           if (e.key === 'Enter' && name.trim()) {
+            submittedRef.current = true
             await onAdd(name.trim())
             setName(''); setOpen(false)
           }
-          if (e.key === 'Escape') { setName(''); setOpen(false) }
+          if (e.key === 'Escape') {
+            submittedRef.current = true
+            setName(''); setOpen(false)
+          }
         }}
-        onBlur={() => { setName(''); setOpen(false) }}
+        onBlur={() => {
+          if (submittedRef.current) { submittedRef.current = false; return }
+          setName(''); setOpen(false)
+        }}
         placeholder="Column name"
         className="form-input text-sm w-full"
       />

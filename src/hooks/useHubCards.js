@@ -101,12 +101,43 @@ export function useHubCards(moduleId) {
   }, [])
 
   const moveCard = useCallback(async (cardId, { columnId, position }) => {
-    // Optimistic: shift the card locally so the UI reflects the drop
-    // immediately instead of waiting for the realtime roundtrip.
+    // Optimistic: shift the card locally and re-number siblings so the
+    // UI reflects the drop immediately and there are no position ties
+    // before the realtime refetch lands.
     setCards(prev => {
-      const next = prev.map(c =>
-        c.id === cardId ? { ...c, column_id: columnId, position } : c
-      )
+      const moved = prev.find(c => c.id === cardId)
+      if (!moved) return prev
+      const wasInTargetCol = moved.column_id === columnId
+      const next = prev.map(c => {
+        if (c.id === cardId) {
+          return { ...c, column_id: columnId, position }
+        }
+        // Source column: cards after the moved one in its old column
+        // shift up by 1 (only if leaving the column).
+        if (!wasInTargetCol && c.column_id === moved.column_id && c.position > moved.position) {
+          return { ...c, position: c.position - 1 }
+        }
+        // Target column: cards at-or-after the new slot shift down by 1.
+        if (c.column_id === columnId && c.id !== cardId) {
+          const oldPos = c.position
+          // If we were already in this column, only shift cards strictly
+          // between the old and new positions.
+          if (wasInTargetCol) {
+            if (moved.position < position && oldPos > moved.position && oldPos <= position) {
+              return { ...c, position: oldPos - 1 }
+            }
+            if (moved.position > position && oldPos >= position && oldPos < moved.position) {
+              return { ...c, position: oldPos + 1 }
+            }
+            return c
+          }
+          // Cross-column: shift target cards at-or-after the new position down.
+          if (oldPos >= position) {
+            return { ...c, position: oldPos + 1 }
+          }
+        }
+        return c
+      })
       return sortCards(next)
     })
     const { error } = await supabase.from('hub_cards')

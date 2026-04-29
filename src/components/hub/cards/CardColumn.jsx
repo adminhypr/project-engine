@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -13,8 +13,12 @@ function SortableCardPreview({ card, onClick }) {
     opacity: isDragging ? 0.4 : 1,
   }
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <CardPreview card={card} onClick={onClick} />
+    <div ref={setNodeRef} style={style}>
+      <CardPreview
+        card={card}
+        onClick={onClick}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
     </div>
   )
 }
@@ -28,6 +32,12 @@ export default function CardColumn({
   const [draft, setDraft] = useState(column.name)
   const [adding, setAdding] = useState(false)
   const [newTitle, setNewTitle] = useState('')
+  const renameSubmittedRef = useRef(false)
+  const addSubmittedRef = useRef(false)
+
+  // Keep draft in sync when column.name changes via realtime while
+  // rename mode is closed.
+  useEffect(() => { setDraft(column.name) }, [column.name])
 
   const cardIds = cards.map(c => c.id)
 
@@ -42,10 +52,22 @@ export default function CardColumn({
               value={draft}
               onChange={e => setDraft(e.target.value)}
               onKeyDown={e => {
-                if (e.key === 'Enter') { onRenameColumn(column.id, draft); setRenaming(false) }
-                if (e.key === 'Escape') { setDraft(column.name); setRenaming(false) }
+                if (e.key === 'Enter') {
+                  renameSubmittedRef.current = true
+                  onRenameColumn(column.id, draft)
+                  setRenaming(false)
+                }
+                if (e.key === 'Escape') {
+                  renameSubmittedRef.current = true
+                  setDraft(column.name)
+                  setRenaming(false)
+                }
               }}
-              onBlur={() => { onRenameColumn(column.id, draft); setRenaming(false) }}
+              onBlur={() => {
+                if (renameSubmittedRef.current) { renameSubmittedRef.current = false; return }
+                onRenameColumn(column.id, draft)
+                setRenaming(false)
+              }}
               className="form-input text-sm font-bold py-0 px-1 min-w-0 flex-1"
             />
           ) : (
@@ -77,13 +99,22 @@ export default function CardColumn({
             onChange={e => setNewTitle(e.target.value)}
             onKeyDown={async (e) => {
               if (e.key === 'Enter' && newTitle.trim()) {
+                addSubmittedRef.current = true
                 await onAddCard(column.id, newTitle.trim())
                 setNewTitle('')
                 setAdding(false)
               }
-              if (e.key === 'Escape') { setNewTitle(''); setAdding(false) }
+              if (e.key === 'Escape') {
+                addSubmittedRef.current = true
+                setNewTitle('')
+                setAdding(false)
+              }
             }}
-            onBlur={() => { setNewTitle(''); setAdding(false) }}
+            onBlur={() => {
+              if (addSubmittedRef.current) { addSubmittedRef.current = false; return }
+              setNewTitle('')
+              setAdding(false)
+            }}
             placeholder="Card title"
             className="form-input text-sm w-full"
           />

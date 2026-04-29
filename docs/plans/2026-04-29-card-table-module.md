@@ -933,12 +933,43 @@ export function useHubCards(moduleId) {
   }, [])
 
   const moveCard = useCallback(async (cardId, { columnId, position }) => {
-    // Optimistic: shift the card locally so the UI reflects the drop
-    // immediately instead of waiting for the realtime roundtrip.
+    // Optimistic: shift the card locally and re-number siblings so the
+    // UI reflects the drop immediately and there are no position ties
+    // before the realtime refetch lands.
     setCards(prev => {
-      const next = prev.map(c =>
-        c.id === cardId ? { ...c, column_id: columnId, position } : c
-      )
+      const moved = prev.find(c => c.id === cardId)
+      if (!moved) return prev
+      const wasInTargetCol = moved.column_id === columnId
+      const next = prev.map(c => {
+        if (c.id === cardId) {
+          return { ...c, column_id: columnId, position }
+        }
+        // Source column: cards after the moved one in its old column
+        // shift up by 1 (only if leaving the column).
+        if (!wasInTargetCol && c.column_id === moved.column_id && c.position > moved.position) {
+          return { ...c, position: c.position - 1 }
+        }
+        // Target column: cards at-or-after the new slot shift down by 1.
+        if (c.column_id === columnId && c.id !== cardId) {
+          const oldPos = c.position
+          // If we were already in this column, only shift cards strictly
+          // between the old and new positions.
+          if (wasInTargetCol) {
+            if (moved.position < position && oldPos > moved.position && oldPos <= position) {
+              return { ...c, position: oldPos - 1 }
+            }
+            if (moved.position > position && oldPos >= position && oldPos < moved.position) {
+              return { ...c, position: oldPos + 1 }
+            }
+            return c
+          }
+          // Cross-column: shift target cards at-or-after the new position down.
+          if (oldPos >= position) {
+            return { ...c, position: oldPos + 1 }
+          }
+        }
+        return c
+      })
       return sortCards(next)
     })
     const { error } = await supabase.from('hub_cards')
@@ -1115,53 +1146,67 @@ git commit -m "feat(card-table): useHubCardSteps hook"
 Create `src/components/hub/cards/CardPreview.jsx`:
 
 ```jsx
-import { MessageSquare, CalendarDays } from 'lucide-react'
+import { MessageSquare, CalendarDays, GripVertical } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 
-export default function CardPreview({ card, onClick }) {
+export default function CardPreview({ card, onClick, dragHandleProps }) {
   const due = card.due_date ? parseISO(card.due_date) : null
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full text-left p-3 rounded-xl bg-white dark:bg-dark-card border border-slate-200 dark:border-dark-border hover:border-brand-300 dark:hover:border-brand-500 shadow-card transition-colors"
-    >
-      <div className="text-sm font-medium text-slate-900 dark:text-white line-clamp-2">{card.title}</div>
-      <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
-        <div className="flex items-center gap-1.5 min-w-0">
-          {due && (
-            <span className="inline-flex items-center gap-1">
-              <CalendarDays size={11} />
-              {format(due, 'MMM d')}
-            </span>
-          )}
-          {card.comment_count > 0 && (
-            <span className="inline-flex items-center gap-1">
-              <MessageSquare size={11} />
-              {card.comment_count}
-            </span>
-          )}
+    <div className="group relative">
+      <button
+        type="button"
+        onClick={onClick}
+        className="w-full text-left p-3 rounded-xl bg-white dark:bg-dark-card border border-slate-200 dark:border-dark-border hover:border-brand-300 dark:hover:border-brand-500 shadow-card transition-colors"
+      >
+        <div className="text-sm font-medium text-slate-900 dark:text-white line-clamp-2">{card.title}</div>
+        <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {due && (
+              <span className="inline-flex items-center gap-1">
+                <CalendarDays size={11} />
+                {format(due, 'MMM d')}
+              </span>
+            )}
+            {card.comment_count > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <MessageSquare size={11} />
+                {card.comment_count}
+              </span>
+            )}
+          </div>
+          <div className="flex -space-x-1.5 shrink-0">
+            {(card.assignees || []).slice(0, 3).map(a => (
+              <div
+                key={a.id}
+                title={a.full_name}
+                className="w-5 h-5 rounded-full ring-2 ring-white dark:ring-dark-card bg-slate-200 dark:bg-slate-700 overflow-hidden"
+              >
+                {a.avatar_url
+                  ? <img src={a.avatar_url} alt="" className="w-full h-full object-cover" />
+                  : <span className="block text-[9px] font-bold text-slate-600 dark:text-slate-300 leading-5 text-center">{a.full_name?.[0] || '?'}</span>}
+              </div>
+            ))}
+            {card.assignees?.length > 3 && (
+              <div className="w-5 h-5 rounded-full ring-2 ring-white dark:ring-dark-card bg-slate-100 dark:bg-slate-800 text-[9px] font-semibold text-slate-500 leading-5 text-center">
+                +{card.assignees.length - 3}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="flex -space-x-1.5 shrink-0">
-          {(card.assignees || []).slice(0, 3).map(a => (
-            <div
-              key={a.id}
-              title={a.full_name}
-              className="w-5 h-5 rounded-full ring-2 ring-white dark:ring-dark-card bg-slate-200 dark:bg-slate-700 overflow-hidden"
-            >
-              {a.avatar_url
-                ? <img src={a.avatar_url} alt="" className="w-full h-full object-cover" />
-                : <span className="block text-[9px] font-bold text-slate-600 dark:text-slate-300 leading-5 text-center">{a.full_name?.[0] || '?'}</span>}
-            </div>
-          ))}
-          {card.assignees?.length > 3 && (
-            <div className="w-5 h-5 rounded-full ring-2 ring-white dark:ring-dark-card bg-slate-100 dark:bg-slate-800 text-[9px] font-semibold text-slate-500 leading-5 text-center">
-              +{card.assignees.length - 3}
-            </div>
-          )}
-        </div>
-      </div>
-    </button>
+      </button>
+      {/* Drag handle — overlay top-right, hover-revealed. Listeners live
+          here ONLY so the card body's onClick can't be triggered by a
+          drag-release pointerup. */}
+      {dragHandleProps && (
+        <span
+          {...dragHandleProps}
+          aria-label="Drag to reorder card"
+          className="absolute top-2 right-2 p-0.5 rounded text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-300 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing transition-opacity"
+        >
+          <GripVertical size={12} />
+        </span>
+      )}
+    </div>
   )
 }
 ```
@@ -1171,7 +1216,7 @@ export default function CardPreview({ card, onClick }) {
 Create `src/components/hub/cards/CardColumn.jsx`:
 
 ```jsx
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -1185,9 +1230,16 @@ function SortableCardPreview({ card, onClick }) {
     transition,
     opacity: isDragging ? 0.4 : 1,
   }
+  // Listeners go on the small drag handle inside CardPreview, NOT the
+  // wrapper. Otherwise pointerup at the end of a drop bubbles to the
+  // underlying <button> and opens the detail panel.
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <CardPreview card={card} onClick={onClick} />
+    <div ref={setNodeRef} style={style}>
+      <CardPreview
+        card={card}
+        onClick={onClick}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
     </div>
   )
 }
@@ -1201,6 +1253,13 @@ export default function CardColumn({
   const [draft, setDraft] = useState(column.name)
   const [adding, setAdding] = useState(false)
   const [newTitle, setNewTitle] = useState('')
+  // Dedupe Enter -> setOpen(false) -> onBlur double-fires.
+  const renameSubmittedRef = useRef(false)
+  const addSubmittedRef = useRef(false)
+
+  // Keep draft in sync when column.name changes via realtime while
+  // rename mode is closed.
+  useEffect(() => { setDraft(column.name) }, [column.name])
 
   const cardIds = cards.map(c => c.id)
 
@@ -1215,10 +1274,22 @@ export default function CardColumn({
               value={draft}
               onChange={e => setDraft(e.target.value)}
               onKeyDown={e => {
-                if (e.key === 'Enter') { onRenameColumn(column.id, draft); setRenaming(false) }
-                if (e.key === 'Escape') { setDraft(column.name); setRenaming(false) }
+                if (e.key === 'Enter') {
+                  renameSubmittedRef.current = true
+                  onRenameColumn(column.id, draft)
+                  setRenaming(false)
+                }
+                if (e.key === 'Escape') {
+                  renameSubmittedRef.current = true
+                  setDraft(column.name)
+                  setRenaming(false)
+                }
               }}
-              onBlur={() => { onRenameColumn(column.id, draft); setRenaming(false) }}
+              onBlur={() => {
+                if (renameSubmittedRef.current) { renameSubmittedRef.current = false; return }
+                onRenameColumn(column.id, draft)
+                setRenaming(false)
+              }}
               className="form-input text-sm font-bold py-0 px-1 min-w-0 flex-1"
             />
           ) : (
@@ -1250,13 +1321,22 @@ export default function CardColumn({
             onChange={e => setNewTitle(e.target.value)}
             onKeyDown={async (e) => {
               if (e.key === 'Enter' && newTitle.trim()) {
+                addSubmittedRef.current = true
                 await onAddCard(column.id, newTitle.trim())
                 setNewTitle('')
                 setAdding(false)
               }
-              if (e.key === 'Escape') { setNewTitle(''); setAdding(false) }
+              if (e.key === 'Escape') {
+                addSubmittedRef.current = true
+                setNewTitle('')
+                setAdding(false)
+              }
             }}
-            onBlur={() => { setNewTitle(''); setAdding(false) }}
+            onBlur={() => {
+              if (addSubmittedRef.current) { addSubmittedRef.current = false; return }
+              setNewTitle('')
+              setAdding(false)
+            }}
             placeholder="Card title"
             className="form-input text-sm w-full"
           />
@@ -1281,12 +1361,14 @@ export default function CardColumn({
 Create `src/components/hub/cards/AddColumnInline.jsx`:
 
 ```jsx
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Plus } from 'lucide-react'
 
 export default function AddColumnInline({ onAdd }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
+  // Dedupe Enter -> setOpen(false) -> onBlur double-fires.
+  const submittedRef = useRef(false)
   if (!open) {
     return (
       <button type="button" onClick={() => setOpen(true)}
@@ -1303,12 +1385,19 @@ export default function AddColumnInline({ onAdd }) {
         onChange={e => setName(e.target.value)}
         onKeyDown={async (e) => {
           if (e.key === 'Enter' && name.trim()) {
+            submittedRef.current = true
             await onAdd(name.trim())
             setName(''); setOpen(false)
           }
-          if (e.key === 'Escape') { setName(''); setOpen(false) }
+          if (e.key === 'Escape') {
+            submittedRef.current = true
+            setName(''); setOpen(false)
+          }
         }}
-        onBlur={() => { setName(''); setOpen(false) }}
+        onBlur={() => {
+          if (submittedRef.current) { submittedRef.current = false; return }
+          setName(''); setOpen(false)
+        }}
         placeholder="Column name"
         className="form-input text-sm w-full"
       />
@@ -1323,7 +1412,7 @@ Create `src/components/hub/cards/CardTable.jsx`:
 
 ```jsx
 import { useMemo, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import {
   DndContext, closestCorners, pointerWithin, rectIntersection,
   PointerSensor, TouchSensor, useSensor, useSensors,
@@ -1376,14 +1465,22 @@ export default function CardTable({ hubId, moduleId }) {
     const toColId   = findColumnFor(over.id)
     if (!fromColId || !toColId) return
 
-    const targetColCards = grouped[toColId] || []
-    let toIndex = targetColCards.length
+    const sourceCol = grouped[fromColId] || []
+    const targetCol = grouped[toColId] || []
+    const fromIdx = sourceCol.findIndex(c => c.id === active.id)
+    let toIndex = targetCol.length
     if (over.id !== `col:${toColId}`) {
-      const idx = targetColCards.findIndex(c => c.id === over.id)
+      const idx = targetCol.findIndex(c => c.id === over.id)
       if (idx !== -1) toIndex = idx
     }
-    // Position = the position the card should occupy. Other cards shift
-    // down naturally on next refetch since position is recomputed there.
+    // Same-column downward: the source still occupies its old slot in
+    // targetCol, so the over-card's index is one past where we actually
+    // want to land after removal.
+    if (fromColId === toColId && fromIdx !== -1 && fromIdx < toIndex) {
+      toIndex -= 1
+    }
+    // No-op if nothing changed
+    if (fromColId === toColId && fromIdx === toIndex) return
     await moveCard(active.id, { columnId: toColId, position: toIndex })
   }
 

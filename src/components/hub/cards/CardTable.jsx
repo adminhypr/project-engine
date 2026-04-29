@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import {
   DndContext, closestCorners, pointerWithin, rectIntersection,
   PointerSensor, TouchSensor, useSensor, useSensors,
@@ -52,14 +52,22 @@ export default function CardTable({ hubId, moduleId }) {
     const toColId   = findColumnFor(over.id)
     if (!fromColId || !toColId) return
 
-    const targetColCards = grouped[toColId] || []
-    let toIndex = targetColCards.length
+    const sourceCol = grouped[fromColId] || []
+    const targetCol = grouped[toColId] || []
+    const fromIdx = sourceCol.findIndex(c => c.id === active.id)
+    let toIndex = targetCol.length
     if (over.id !== `col:${toColId}`) {
-      const idx = targetColCards.findIndex(c => c.id === over.id)
+      const idx = targetCol.findIndex(c => c.id === over.id)
       if (idx !== -1) toIndex = idx
     }
-    // Position = the position the card should occupy. Other cards shift
-    // down naturally on next refetch since position is recomputed there.
+    // Same-column downward: the source still occupies its old slot in
+    // targetCol, so the over-card's index is one past where we actually
+    // want to land after removal.
+    if (fromColId === toColId && fromIdx !== -1 && fromIdx < toIndex) {
+      toIndex -= 1
+    }
+    // No-op if nothing changed
+    if (fromColId === toColId && fromIdx === toIndex) return
     await moveCard(active.id, { columnId: toColId, position: toIndex })
   }
 
