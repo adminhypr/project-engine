@@ -3,22 +3,29 @@ import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../hooks/useAuth'
 import RichInput from '../../ui/RichInput'
 import RichContentRenderer from '../../ui/RichContentRenderer'
+import FileAttachments from './FileAttachments'
 import { format, parseISO } from 'date-fns'
 
 // Card comments use the polymorphic `comments` table (see migration 069/070).
 // `mentioned_ids` is a uuid[] of profile ids — derived from RichInput's
 // onSubmit `mentions: [{ user_id, display_name }]` shape.
+//
+// Migration 072 adds `inline_images` + `attachments` jsonb columns. Inline
+// images come through RichInput's existing flow (paste/drag/upload to the
+// shared `hub-files` bucket); generic file attachments are managed by the
+// FileAttachments helper next to the composer.
 export default function CardComments({ cardId, hubId }) {
   const { profile } = useAuth()
   const [comments, setComments] = useState([])
   const [draft, setDraft] = useState('')
+  const [draftAttachments, setDraftAttachments] = useState([])
   const [posting, setPosting] = useState(false)
   const submitRef = useRef(null)
 
   const fetchComments = useCallback(async () => {
     const { data, error } = await supabase
       .from('comments')
-      .select('id, content, created_at, mentioned_ids, author:profiles!comments_author_id_fkey(id, full_name, avatar_url)')
+      .select('id, content, created_at, mentioned_ids, inline_images, attachments, author:profiles!comments_author_id_fkey(id, full_name, avatar_url)')
       .eq('card_id', cardId)
       .order('created_at', { ascending: true })
     if (!error) setComments(data || [])
@@ -35,18 +42,29 @@ export default function CardComments({ cardId, hubId }) {
     return () => supabase.removeChannel(ch)
   }, [cardId, fetchComments])
 
-  async function handleSubmit({ content, mentions }) {
-    if (!content.trim() || !profile?.id || posting) return
+  async function handleSubmit({ content, mentions, inlineImages }) {
+    const trimmed = (content || '').trim()
+    const hasContent = trimmed.length > 0
+    const hasImages  = (inlineImages || []).length > 0
+    const hasFiles   = draftAttachments.length > 0
+    if (!profile?.id || posting) return
+    if (!hasContent && !hasImages && !hasFiles) return
+
     setPosting(true)
     const mentionedIds = (mentions || []).map(m => m.user_id).filter(Boolean)
     const { error } = await supabase.from('comments').insert({
       card_id: cardId,
       author_id: profile.id,
-      content,
+      content: trimmed,
       mentioned_ids: mentionedIds,
+      inline_images: (inlineImages || []).map(({ preview, ...rest }) => rest),
+      attachments: draftAttachments,
     })
     setPosting(false)
-    if (!error) { setDraft('') }
+    if (!error) {
+      setDraft('')
+      setDraftAttachments([])
+    }
   }
 
   return (
@@ -64,7 +82,19 @@ export default function CardComments({ cardId, hubId }) {
               <span className="text-xs text-slate-400">{format(parseISO(c.created_at), 'MMM d, h:mm a')}</span>
             </div>
             <div className="text-sm text-slate-700 dark:text-slate-200 mt-0.5">
-              <RichContentRenderer content={c.content} />
+              <RichContentRenderer
+                content={c.content}
+                inlineImages={c.inline_images || []}
+              />
+              {(c.attachments || []).length > 0 && (
+                <div className="mt-2">
+                  <FileAttachments
+                    attachments={c.attachments || []}
+                    cardId={cardId}
+                    disabled
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -77,15 +107,22 @@ export default function CardComments({ cardId, hubId }) {
           submitRef={submitRef}
           hubId={hubId}
           enableMentions
-          enableImages={false}
+          enableImages
           placeholder="Write a comment…"
           rows={2}
         />
+        <div className="mt-2">
+          <FileAttachments
+            attachments={draftAttachments}
+            onChange={setDraftAttachments}
+            cardId={cardId}
+          />
+        </div>
         <div className="mt-2 flex justify-end">
           <button
             type="button"
             onClick={() => submitRef.current?.()}
-            disabled={posting || !draft.trim()}
+            disabled={posting || (!draft.trim() && draftAttachments.length === 0)}
             className="btn btn-primary text-sm px-4 disabled:opacity-50"
           >
             {posting ? 'Posting…' : 'Post'}

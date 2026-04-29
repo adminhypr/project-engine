@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
@@ -6,8 +6,11 @@ import { useHubCardColumns } from '../../../hooks/useHubCardColumns'
 import { useHubCards } from '../../../hooks/useHubCards'
 import { useHubMembers } from '../../../hooks/useHubMembers'
 import { showToast } from '../../ui/index'
+import RichInput from '../../ui/RichInput'
+import RichContentRenderer from '../../ui/RichContentRenderer'
 import CardSteps from './CardSteps'
 import CardComments from './CardComments'
+import FileAttachments from './FileAttachments'
 import { X, Trash2, Plus, Check } from 'lucide-react'
 
 // Inline assignee picker — pattern lifted from
@@ -84,6 +87,9 @@ export default function CardDetailPanel({ moduleId, hubId }) {
   const [params, setParams] = useSearchParams()
   const cardId = params.get('card')
   const [card, setCard] = useState(null)
+  const [notesDirty, setNotesDirty] = useState(false)
+  const [savingNotes, setSavingNotes] = useState(false)
+  const notesSubmitRef = useRef(null)
   const { columns } = useHubCardColumns(moduleId)
   const { updateCard, deleteCard, assignCard, unassignCard } = useHubCards(moduleId)
 
@@ -95,7 +101,10 @@ export default function CardDetailPanel({ moduleId, hubId }) {
         .from('hub_cards')
         .select('*, assignees:hub_card_assignees(profile:profiles(id, full_name, avatar_url))')
         .eq('id', cardId).maybeSingle()
-      if (alive && data) setCard({ ...data, assignees: (data.assignees || []).map(a => a.profile).filter(Boolean) })
+      if (alive && data) {
+        setCard({ ...data, assignees: (data.assignees || []).map(a => a.profile).filter(Boolean) })
+        setNotesDirty(false)
+      }
     })()
     return () => { alive = false }
   }, [cardId])
@@ -241,15 +250,69 @@ export default function CardDetailPanel({ moduleId, hubId }) {
             </dl>
 
             <section className="mb-6">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Notes</h4>
-              <textarea
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Notes</h4>
+                {notesDirty && (
+                  <button
+                    type="button"
+                    onClick={() => notesSubmitRef.current?.()}
+                    disabled={savingNotes}
+                    className="btn btn-primary text-xs px-3 py-1 disabled:opacity-50"
+                  >
+                    {savingNotes ? 'Saving…' : 'Save notes'}
+                  </button>
+                )}
+              </div>
+
+              {/* Saved inline images render here via RichContentRenderer —
+                  RichInput only shows images uploaded in the current session,
+                  so we keep a separate read-only preview above the editor for
+                  anything already persisted to the row. New uploads in the
+                  composer below are merged into card.inline_images on save. */}
+              {(card.inline_images || []).length > 0 && (
+                <div className="mb-2">
+                  <RichContentRenderer
+                    content=""
+                    inlineImages={card.inline_images || []}
+                  />
+                </div>
+              )}
+
+              <RichInput
                 value={card.notes || ''}
-                onChange={e => setCard({ ...card, notes: e.target.value })}
-                onBlur={() => updateCard(card.id, { notes: card.notes })}
+                onChange={(v) => { setCard({ ...card, notes: v }); setNotesDirty(true) }}
+                onSubmit={async ({ content, inlineImages }) => {
+                  setSavingNotes(true)
+                  const newImages = (inlineImages || []).map(({ preview, ...rest }) => rest)
+                  const merged = [...(card.inline_images || []), ...newImages]
+                  const ok = await updateCard(card.id, {
+                    notes: content,
+                    inline_images: merged,
+                  })
+                  setSavingNotes(false)
+                  if (ok) {
+                    setCard(prev => prev ? { ...prev, notes: content, inline_images: merged } : prev)
+                    setNotesDirty(false)
+                  }
+                }}
+                submitRef={notesSubmitRef}
+                hubId={hubId}
+                enableMentions={false}
+                enableImages
                 placeholder="Add notes…"
                 rows={6}
-                className="form-input w-full text-sm"
               />
+
+              <div className="mt-2">
+                <FileAttachments
+                  attachments={card.attachments || []}
+                  cardId={card.id}
+                  onChange={async (next) => {
+                    const ok = await updateCard(card.id, { attachments: next })
+                    if (ok) setCard(prev => prev ? { ...prev, attachments: next } : prev)
+                  }}
+                />
+              </div>
             </section>
 
             <section className="mb-6">
