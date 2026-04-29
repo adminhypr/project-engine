@@ -10,6 +10,7 @@ import { useAuth } from '../../../hooks/useAuth'
 import { useHubMembers } from '../../../hooks/useHubMembers'
 import { showToast } from '../../ui/index'
 import { extractImagesFromDoc, extractMentionsFromDoc } from '../../../lib/tiptapExtract'
+import { isBlockedImageType } from '../../../lib/uploadGuards'
 
 const FileImage = Image.extend({
   addAttributes() {
@@ -67,6 +68,10 @@ export default function TodoEditor({
     const ed = editorRef.current
     if (!ed) return
     if (!file.type.startsWith('image/')) return
+    if (isBlockedImageType(file)) {
+      showToast('SVG images are not allowed (security)', 'error')
+      return
+    }
     if (file.size > 5 * 1024 * 1024) {
       showToast(`${file.name || 'Image'} exceeds 5 MB limit`, 'error')
       return
