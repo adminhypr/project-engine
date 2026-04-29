@@ -213,7 +213,22 @@ export function FilterRow({ filters, onChange, onClear, showTeamFilter, teams })
 
 // ── Toast notification ─────────────────────────
 let toastTimeout
+// Dedupe identical (message, type) toasts within a 1.5s window. A 5s
+// Supabase blip during typing previously fired 15 "Failed to load X"
+// calls back-to-back; the existing single-toast slot would chaotically
+// re-flash on every call. Suppress the repeats — the user's already
+// looking at the message.
+let lastToastKey = null
+let lastToastAt = 0
+const TOAST_DEDUPE_MS = 1500
+
 export function showToast(msg, type = 'success') {
+  const key = `${type}:${msg}`
+  const now = Date.now()
+  if (key === lastToastKey && now - lastToastAt < TOAST_DEDUPE_MS) return
+  lastToastKey = key
+  lastToastAt = now
+
   const existing = document.getElementById('app-toast')
   if (existing) existing.remove()
   clearTimeout(toastTimeout)
