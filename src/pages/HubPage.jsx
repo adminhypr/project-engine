@@ -25,9 +25,10 @@ import TodosModuleCard from '../components/hub/todos/TodosModuleCard'
 import AddModuleModal from '../components/hub/AddModuleModal'
 import ExpandedModuleModal from '../components/hub/ExpandedModuleModal'
 import CardDetailPanel from '../components/hub/cards/CardDetailPanel'
+import CardTable from '../components/hub/cards/CardTable'
 import {
   Users, Flame, MessageSquare, FolderOpen, ArrowLeft, CheckSquare,
-  Pencil, Check, X as XIcon, Plus, RotateCcw,
+  Pencil, Check, X as XIcon, Plus, RotateCcw, LayoutGrid,
 } from 'lucide-react'
 
 const DEFAULT_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4']
@@ -40,6 +41,7 @@ export const KIND_META = {
   'docs-files':      { icon: FolderOpen,    color: '#0284c7', defaultOpen: false, Comp: DocsFiles },
   'campfire':        { icon: Flame,         color: '#dc2626', defaultOpen: true,  Comp: Campfire },
   'attendance-room': { icon: Users,         color: '#8b5cf6', defaultOpen: true,  Comp: Attendance },
+  'card-table':      { icon: LayoutGrid,    color: '#0d9488', defaultOpen: true,  Comp: CardTable },
 }
 
 const COLUMN_IDS = ['col-0', 'col-1', 'col-2']

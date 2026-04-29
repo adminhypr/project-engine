@@ -3,13 +3,14 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { showToast } from '../components/ui/index'
 
-const KIND_ORDER = ['message-board', 'attendance-room', 'campfire', 'docs-files', 'to-dos']
+const KIND_ORDER = ['message-board', 'attendance-room', 'campfire', 'docs-files', 'to-dos', 'card-table']
 const KIND_DEFAULT_TITLE = {
   'message-board':   'Message Board',
   'attendance-room': "Who's Here",
   'campfire':        'Campfire',
   'docs-files':      'Docs & Files',
   'to-dos':          'To-Dos',
+  'card-table':      'Card Table',
 }
 
 const NUM_COLUMNS = 3
