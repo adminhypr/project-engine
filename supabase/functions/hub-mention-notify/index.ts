@@ -167,7 +167,7 @@ Deno.serve(async (req) => {
     const moduleLabel = MODULE_LABELS[record.entity_type] || 'Hub'
     const preview = await getMessagePreview(record.entity_type, record.entity_id)
 
-    const messageId = record.entity_type === 'hub_message' ? record.entity_id : null
+    const messageId = record.entity_type === 'message' ? record.entity_id : null
     const link = messageId
       ? `${APP_URL}/hub/${record.hub_id}?message=${messageId}`
       : `${APP_URL}/hub/${record.hub_id}`

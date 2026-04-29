@@ -1261,3 +1261,13 @@ git commit -am "fix(notify): smoke-test follow-ups"
 1. **Auth-gate redirect preservation.** If a user clicks an email link while logged out, today the OAuth flow may drop the original search params. Worth verifying explicitly and possibly fixing — separate plan.
 2. **Email click telemetry.** Add `?utm_source=digest` / `?utm_source=hub-mention-notify` so click-through analytics is tractable. Tiny add.
 3. **Per-event "do not link" override.** Some events (e.g. a deleted message) should fall back to a generic page. Today the link still resolves but the resource is gone — handle via a "X has been deleted" UX state.
+
+---
+
+## Plan deviation — entity_type
+
+The Task 1 SQL block (migration 085) and Task 11 paragraph both assumed `hub_mentions.entity_type = 'hub_message'` for hub message-board mentions. The actual value written by `useHubMessages.postMessage` is `'message'` for top-level board posts and `'message_reply'` for thread replies (see `src/hooks/useHubMessages.js:106` and `:136`). The 085 case clause and the Task 11 edge-function check therefore never matched and the deep-link feature always fell back to the generic hub URL.
+
+**Fix shipped as migration 086 (`086_fix_hub_mention_entity_type.sql`)** which replaces `enqueue_hub_mention_notification` again with `case when new.entity_type = 'message' then new.entity_id else null end`. The `hub-mention-notify` edge function was updated in the same commit to match `'message'` instead of `'hub_message'`.
+
+For v1, `'message_reply'` rows still fall back to the generic hub URL — the frontend's `data-hub-message-id` anchor only exists on top-level posts (per Task 8). Resolving a reply's parent for deep-linking would require a JOIN through `hub_messages` and is out of scope here; a future migration can populate `message_id` with the parent post id so the deep link still scrolls into a useful neighbourhood.
