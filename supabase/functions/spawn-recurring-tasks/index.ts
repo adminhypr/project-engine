@@ -4,18 +4,18 @@
 // templates. The pg_cron schedule fires this function every hour with a
 // shared-secret header.
 //
-// Per due template, under an advisory lock keyed on the template id:
-//   1. Re-read the row inside the lock (race-safe).
-//   2. Resolve valid assignees (non-deleted, non-external).
-//   3. If empty: deactivate, audit `spawn_failed_no_assignees`, notify creator.
+// Per due template:
+//   1. Resolve valid assignees (non-deleted, non-external).
+//   2. If empty: deactivate, audit `spawn_failed_no_assignees`, notify creator.
 //      Do NOT advance next_run_at (so when the user fixes it, they don't
 //      lose another cycle).
-//   4. Else: insert tasks row, insert task_assignees, write
-//      task_audit_log (`task_created` + `recurring_spawned`), then advance
-//      next_run_at via the SQL helper. Never backfill missed runs.
+//   3. Else: hand off to the public.spawn_recurrence() RPC, which inside a
+//      single transaction takes a per-template advisory lock, re-checks
+//      due-state, inserts the task + task_assignees + both audit rows, and
+//      advances next_run_at. Migration 079.
 //
-// Idempotent: the `next_run_at <= now()` filter + advisory lock makes
-// overlapping cron fires safe.
+// Idempotent: pg_try_advisory_xact_lock + the in-RPC re-check of
+// next_run_at make overlapping cron fires safe.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeadersFor } from '../_shared/security.ts'
@@ -54,24 +54,14 @@ function generateTaskId(): string {
 }
 
 async function spawnOne(rec: RecurrenceRow): Promise<{ ok: boolean; reason?: string; taskId?: string }> {
-  // Race protection: re-read row inside a fresh SELECT. The actual idempotency
-  // guarantee comes from advancing next_run_at after a successful spawn —
-  // a duplicate cron fire would re-read with next_run_at already in the
-  // future and bail at the predicate below. Single-replica cron + the
-  // bail-on-future-next-run pattern is sufficient for v1.
-  const { data: fresh, error: freshErr } = await supabase
-    .from('task_recurrences')
-    .select('*')
-    .eq('id', rec.id)
-    .maybeSingle()
-  if (freshErr || !fresh) return { ok: false, reason: 'template gone' }
-  if (!fresh.is_active) return { ok: false, reason: 'paused mid-cycle' }
-  if (new Date(fresh.next_run_at) > new Date()) return { ok: false, reason: 'not due (race)' }
-
-  // 3) Resolve valid assignees — eager join + filter externals + filter
+  // 1) Resolve valid assignees — eager join + filter externals + filter
   //    profiles that no longer exist (cascade-deleted users would already be
   //    gone from the junction, so this mostly filters externals + future
   //    `is_deactivated` flags).
+  //
+  //    This stays in the edge function (rather than moving into the RPC)
+  //    because the empty-assignees branch needs to call the notify edge
+  //    function — something the SQL function can't do directly.
   const { data: assigneeRows, error: aErr } = await supabase
     .from('task_recurrence_assignees')
     .select('profile_id, is_primary, profile:profiles(id, role)')
@@ -82,7 +72,8 @@ async function spawnOne(rec: RecurrenceRow): Promise<{ ok: boolean; reason?: str
     .filter((r: any) => r.profile && r.profile.role !== 'Agent' && r.profile.role !== 'Client')
     .map((r: any) => ({ profile_id: r.profile_id, is_primary: !!r.is_primary }))
 
-  // 4) Empty → deactivate + audit + notify creator.
+  // 2) Empty → deactivate + audit + notify creator. (Pre-spawn step;
+  //    not part of the atomic RPC.)
   if (validAssignees.length === 0) {
     await supabase
       .from('task_recurrences')
@@ -122,81 +113,28 @@ async function spawnOne(rec: RecurrenceRow): Promise<{ ok: boolean; reason?: str
     return { ok: false, reason: 'no valid assignees — deactivated' }
   }
 
-  // 5) Insert the task. Make primary the first valid assignee with is_primary;
-  //    fall back to the first row if no flag was set.
-  const primary = validAssignees.find((r) => r.is_primary) || validAssignees[0]
+  // 3) Atomic spawn: one RPC takes the per-template advisory lock,
+  //    re-checks is_active + next_run_at FOR UPDATE, inserts the task
+  //    + task_assignees + both audit rows, and advances next_run_at.
+  //    Migration 079.
   const dueDate = new Date(Date.now() + rec.template_due_offset_hours * 3600 * 1000).toISOString()
+  const taskIdStr = generateTaskId()
 
-  const { data: createdTask, error: tErr } = await supabase
-    .from('tasks')
-    .insert({
-      task_id: generateTaskId(),
-      title: rec.template_title,
-      notes: rec.template_notes,
-      icon: rec.template_icon,
-      urgency: rec.template_urgency,
-      due_date: dueDate,
-      assigned_to: primary.profile_id,
-      assigned_by: rec.created_by, // can be null if creator was deleted
-      assignment_type: 'Self', // best-effort; assignment_type is informational at read time
-      team_id: rec.team_id,
-      status: 'Not Started',
-      date_assigned: new Date().toISOString(),
-      recurrence_id: rec.id,
-    })
-    .select('id')
-    .single()
-  if (tErr || !createdTask) return { ok: false, reason: `task insert: ${tErr?.message}` }
+  const { data: spawnedId, error: spawnErr } = await supabase.rpc('spawn_recurrence', {
+    p_recurrence_id: rec.id,
+    p_task_id_str: taskIdStr,
+    p_due_date: dueDate,
+    p_assignees: validAssignees.map((a) => ({
+      profile_id: a.profile_id,
+      is_primary: a.is_primary,
+    })),
+    p_creator: rec.created_by,
+  })
 
-  // 6) Insert task_assignees rows.
-  const junctionRows = validAssignees.map((r, i) => ({
-    task_id: createdTask.id,
-    profile_id: r.profile_id,
-    is_primary: r.profile_id === primary.profile_id,
-  }))
-  const { error: jErr } = await supabase
-    .from('task_assignees')
-    .insert(junctionRows)
-  if (jErr) console.warn('task_assignees insert failed:', jErr.message)
+  if (spawnErr) return { ok: false, reason: `spawn rpc: ${spawnErr.message}` }
+  if (!spawnedId) return { ok: false, reason: 'locked or not due' }
 
-  // 7) Audit: per-task (recurring_spawned) + template-level (spawned).
-  await supabase
-    .from('task_audit_log')
-    .insert({
-      task_id: createdTask.id,
-      event_type: 'recurring_spawned',
-      performed_by: rec.created_by,
-      old_value: null,
-      new_value: rec.id,
-      note: `Spawned from recurring template: ${rec.template_title}`,
-    })
-
-  await supabase
-    .from('task_recurrence_audit')
-    .insert({
-      recurrence_id: rec.id,
-      event_type: 'spawned',
-      performed_by: rec.created_by,
-      note: `Spawned task ${createdTask.id}`,
-    })
-
-  // 8) Advance next_run_at via the SQL helper.
-  const { data: nextRun, error: nrErr } = await supabase
-    .rpc('compute_next_recurrence_run', {
-      p_anchor_at: rec.anchor_at,
-      p_interval_unit: rec.interval_unit,
-      p_interval_every: rec.interval_every,
-    })
-  if (nrErr) {
-    console.error('compute_next_recurrence_run failed:', nrErr.message)
-    return { ok: true, taskId: createdTask.id, reason: 'next_run_at not advanced' }
-  }
-  await supabase
-    .from('task_recurrences')
-    .update({ next_run_at: nextRun })
-    .eq('id', rec.id)
-
-  return { ok: true, taskId: createdTask.id }
+  return { ok: true, taskId: spawnedId as string }
 }
 
 Deno.serve(async (req) => {
