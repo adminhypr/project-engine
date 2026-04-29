@@ -10,6 +10,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { isProfileOnline } from '../_shared/presence.ts'
 import { corsHeadersFor, verifyWebhookSecret } from '../_shared/security.ts'
+import { sendEmail as sharedSendEmail, type SendResult } from '../_shared/email.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -17,32 +18,23 @@ const supabase = createClient(
 )
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
-const FROM_EMAIL = Deno.env.get('ALERT_FROM_EMAIL') || 'alerts@hyprassistants.com'
 const APP_URL = Deno.env.get('APP_URL') || 'https://tasks.hyprstaffing.com'
 
 // ── Email sender ──────────────────────────────
-async function sendEmail(to: string[], subject: string, html: string) {
-  if (!RESEND_API_KEY) return false
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: `Hypr Task <${FROM_EMAIL}>`,
-      to,
-      subject,
-      html,
-    }),
-  })
-
-  if (!res.ok) {
-    console.error('Resend error:', res.status, await res.text())
-    return false
+// Thin wrapper over the shared helper. Logs permanent failures here so
+// every call site doesn't have to repeat the boilerplate; transient
+// failures are already retried inside the shared helper.
+async function sendEmail(to: string[], subject: string, html: string): Promise<SendResult> {
+  const result = await sharedSendEmail(to, subject, html)
+  if (!result.ok && !result.retryable) {
+    // Permanent failure (bad address, content rejection, etc.). The audit
+    // suggested a `notify_failures` table for ops visibility — deferred to
+    // a follow-up; logging is the current durable record.
+    console.error(`notify: permanent send failure (status=${result.status}) to=${JSON.stringify(to)} subject=${JSON.stringify(subject)}: ${result.error}`)
+  } else if (!result.ok) {
+    console.warn(`notify: send exhausted retries (status=${result.status}) to=${JSON.stringify(to)} subject=${JSON.stringify(subject)}: ${result.error}`)
   }
-  return true
+  return result
 }
 
 // ── Email template ────────────────────────────

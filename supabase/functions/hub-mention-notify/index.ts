@@ -10,6 +10,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeadersFor, verifyWebhookSecret } from '../_shared/security.ts'
 import { isProfileOnline } from '../_shared/presence.ts'
+import { sendEmail } from '../_shared/email.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -17,32 +18,7 @@ const supabase = createClient(
 )
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
-const FROM_EMAIL = Deno.env.get('ALERT_FROM_EMAIL') || 'alerts@hyprassistants.com'
 const APP_URL = Deno.env.get('APP_URL') || 'https://tasks.hyprstaffing.com'
-
-async function sendEmail(to: string[], subject: string, html: string) {
-  if (!RESEND_API_KEY) return false
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: `Hypr Task <${FROM_EMAIL}>`,
-      to,
-      subject,
-      html,
-    }),
-  })
-
-  if (!res.ok) {
-    console.error('Resend error:', res.status, await res.text())
-    return false
-  }
-  return true
-}
 
 function emailWrap(title: string, color: string, body: string): string {
   return `
@@ -201,9 +177,20 @@ Deno.serve(async (req) => {
          <a href="${APP_URL}/hub/${record.hub_id}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">Open Hub</a>
        </div>`)
 
-    await sendEmail([mentionedUser.email], `${mentionerName} mentioned you in ${hubName}`, html)
+    const result = await sendEmail([mentionedUser.email], `${mentionerName} mentioned you in ${hubName}`, html)
+    if (!result.ok) {
+      // The mention itself is already persisted in `hub_mentions`, so a
+      // failed email doesn't lose data — the bell will still fire and the
+      // 15-min digest will sweep it. Just log so ops can spot recurring
+      // permanent failures.
+      const level = result.retryable ? 'warn' : 'error'
+      console[level](`hub-mention-notify: send failed (status=${result.status}, retryable=${result.retryable}): ${result.error}`)
+    }
 
-    return new Response(JSON.stringify({ action: 'mention_email_sent', ok: true }), { status: 200, headers: cors })
+    return new Response(
+      JSON.stringify({ action: 'mention_email_sent', ok: result.ok, send_error: result.ok ? undefined : result.error }),
+      { status: 200, headers: cors }
+    )
   } catch (err) {
     console.error('Hub mention notify error:', err)
     return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: cors })
