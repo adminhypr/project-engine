@@ -1,6 +1,7 @@
 import { X, MessagesSquare } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { useThread } from '../../hooks/useThread'
+import { useMessageReactions } from '../../hooks/useMessageReactions'
 import DmChatMessage from './DmChatMessage'
 import ChatComposer from './ChatComposer'
 import { ReplyProvider } from './ReplyContext'
@@ -22,6 +23,11 @@ export default function ThreadPanel({
     conversationId: conversation.id,
     rootMessage,
   })
+  // Same hook the main MessageList uses — gives us per-message aggregated
+  // reactions plus a toggle for the current user. Wires the thread root
+  // and every reply into the same reaction surface as the main pane so
+  // hovering a pill shows reactor names everywhere.
+  const { byMessageId, toggle } = useMessageReactions(conversation.id)
 
   const contextLabel = conversation.title
     || conversation.other_profile?.full_name
@@ -61,8 +67,8 @@ export default function ThreadPanel({
                     isMine={root.author_id === profile?.id}
                     onDelete={deleteMessage}
                     receipt={null}
-                    reactions={null}
-                    onToggleReaction={null}
+                    reactions={byMessageId[root.id]}
+                    onToggleReaction={toggle}
                     reactionProfileLookup={profileLookup}
                     myId={profile?.id}
                   />
@@ -84,8 +90,8 @@ export default function ThreadPanel({
                   isMine={m.author_id === profile?.id}
                   onDelete={deleteMessage}
                   receipt={null}
-                  reactions={null}
-                  onToggleReaction={null}
+                  reactions={byMessageId[m.id]}
+                  onToggleReaction={toggle}
                   reactionProfileLookup={profileLookup}
                   myId={profile?.id}
                 />
