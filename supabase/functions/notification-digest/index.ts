@@ -227,19 +227,15 @@ Deno.serve(async (req) => {
       }), { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } })
     }
 
-    // 2) Group by recipient.
-    const byRecipient: Record<string, OutboxRow[]> = {}
-    for (const row of pending as OutboxRow[]) {
-      if (!byRecipient[row.recipient_id]) byRecipient[row.recipient_id] = []
-      byRecipient[row.recipient_id].push(row)
-    }
-
-    // 3) Resolve recipient profiles.
-    const recipientIds = Object.keys(byRecipient)
+    // 2) Resolve recipient profiles for ALL pending rows up front. We do this
+    //    before claiming so the skip-batch path (no email / opted out / online /
+    //    profile missing) can still mark rows as emailed in a single batch
+    //    without a wasted claim-then-release round-trip.
+    const allRecipientIds = Array.from(new Set(pending.map((r: OutboxRow) => r.recipient_id)))
     const { data: profiles, error: profErr } = await supabase
       .from('profiles')
       .select('id, email, full_name, email_digest_enabled, last_seen_at')
-      .in('id', recipientIds)
+      .in('id', allRecipientIds)
     if (profErr) {
       return new Response(JSON.stringify({ error: profErr.message }), { status: 500, headers: cors })
     }
@@ -247,62 +243,153 @@ Deno.serve(async (req) => {
       (profiles as RecipientProfile[]).map((p) => [p.id, p])
     )
 
-    // 4) For each offline recipient with digest enabled and queued rows,
-    //    send one summary email and mark all included rows as emailed.
+    // 3) Reset abandoned claims left by a crashed prior run (older than
+    //    10 min — see migration 078).
+    await supabase.rpc('reset_stale_outbox_claims')
+
+    // 4) Atomically claim the rows we plan to email. A second concurrent
+    //    digest run will see these rows as already claimed and skip them,
+    //    eliminating the duplicate-email race (#6).
+    //
+    //    Scope: ONLY the row IDs we just SELECTed, AND only those still
+    //    unclaimed and un-emailed (a concurrent run may have raced us).
+    const allRowIds = (pending as OutboxRow[]).map((r) => r.id)
+    const { data: claimed, error: claimErr } = await supabase
+      .from('notification_outbox')
+      .update({ claimed_at: new Date().toISOString() })
+      .in('id', allRowIds)
+      .is('claimed_at', null)
+      .is('emailed_at', null)
+      .select('id, recipient_id, event_type, payload, source_table, source_id, created_at')
+    if (claimErr) {
+      return new Response(JSON.stringify({ error: claimErr.message }), { status: 500, headers: cors })
+    }
+    const claimedRows = (claimed || []) as OutboxRow[]
+    const claimedIds = new Set(claimedRows.map((r) => r.id))
+
+    // 5) Re-bucket only the claimed rows by recipient.
+    const claimedByRecipient: Record<string, OutboxRow[]> = {}
+    for (const r of claimedRows) {
+      if (!claimedByRecipient[r.recipient_id]) claimedByRecipient[r.recipient_id] = []
+      claimedByRecipient[r.recipient_id].push(r)
+    }
+
+    // 6) Build send jobs and a list of skip-row IDs (online / opted out / no
+    //    email / missing profile). Skip rows are batch-marked emailed so the
+    //    queue actually moves and the partial index stays small (#H1).
     const offlineCutoff = new Date(Date.now() - OFFLINE_WINDOW_MINUTES * 60 * 1000)
     let sent = 0
+    let failed = 0
     let skipOnline = 0
     let skipOptedOut = 0
     let skipNoEmail = 0
+    let skipNoProfile = 0
 
-    for (const [recipientId, rows] of Object.entries(byRecipient)) {
+    type SendJob = { recipientId: string; rows: OutboxRow[]; prof: RecipientProfile }
+    const sendJobs: SendJob[] = []
+    const skipRowIds: string[] = []
+
+    for (const [recipientId, rows] of Object.entries(claimedByRecipient)) {
       const prof = profileById.get(recipientId)
       if (!prof) {
-        // Recipient profile missing — drop these rows by marking them emailed
-        // so we don't keep retrying.
-        await supabase
-          .from('notification_outbox')
-          .update({ emailed_at: new Date().toISOString() })
-          .in('id', rows.map((r) => r.id))
+        // Recipient profile missing — drop these rows so we don't keep retrying.
+        skipNoProfile++
+        skipRowIds.push(...rows.map((r) => r.id))
         continue
       }
       if (!prof.email) {
         skipNoEmail++
+        skipRowIds.push(...rows.map((r) => r.id))
         continue
       }
       if (!prof.email_digest_enabled) {
         skipOptedOut++
+        skipRowIds.push(...rows.map((r) => r.id))
         continue
       }
-      // Online check.
       const lastSeen = prof.last_seen_at ? new Date(prof.last_seen_at) : null
       const isOnline = lastSeen !== null && lastSeen > offlineCutoff
       if (isOnline) {
         skipOnline++
+        skipRowIds.push(...rows.map((r) => r.id))
         continue
       }
+      sendJobs.push({ recipientId, rows, prof })
+    }
 
-      const { subject, html } = renderDigestHtml(rows, prof.full_name || '')
-      const ok = await sendEmail(prof.email, subject, html)
-      if (ok) {
-        sent++
-        await supabase
-          .from('notification_outbox')
-          .update({ emailed_at: new Date().toISOString() })
-          .in('id', rows.map((r) => r.id))
-      } else {
-        // Leave un-emailed; will retry on the next tick.
-        console.warn(`Failed to send digest to ${prof.email}; will retry`)
+    // 7) Mark all skip rows as emailed in a single bounded batch. The .in()
+    //    list is strictly the row IDs we accumulated above, so we never
+    //    touch unrelated rows.
+    if (skipRowIds.length > 0) {
+      const { error: skipErr } = await supabase
+        .from('notification_outbox')
+        .update({ emailed_at: new Date().toISOString() })
+        .in('id', skipRowIds)
+      if (skipErr) {
+        console.warn('digest: failed to mark skip rows emailed:', skipErr.message)
+        // Non-fatal — they'll retry next tick after the stale-claim reset.
       }
     }
+
+    // 8) Send emails with a concurrency cap. Resend success ⇒ mark emailed_at;
+    //    Resend failure ⇒ release the claim so the next tick retries.
+    const CONCURRENCY = 8
+    async function runJob(job: SendJob) {
+      const rowIds = job.rows.map((r) => r.id)
+      try {
+        const { subject, html } = renderDigestHtml(job.rows, job.prof.full_name || '')
+        const ok = await sendEmail(job.prof.email!, subject, html)
+        if (ok) {
+          sent++
+          await supabase
+            .from('notification_outbox')
+            .update({ emailed_at: new Date().toISOString() })
+            .in('id', rowIds)
+        } else {
+          failed++
+          console.warn(`Failed to send digest to ${job.prof.email}; releasing claim for retry`)
+          await supabase
+            .from('notification_outbox')
+            .update({ claimed_at: null })
+            .in('id', rowIds)
+        }
+      } catch (e) {
+        failed++
+        console.error('digest send threw:', e)
+        // Best-effort claim release so the row isn't stuck for 10 min.
+        await supabase
+          .from('notification_outbox')
+          .update({ claimed_at: null })
+          .in('id', rowIds)
+          .then(() => {}, () => {})
+      }
+    }
+
+    const queue = sendJobs.slice()
+    const workerCount = Math.min(CONCURRENCY, queue.length)
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (queue.length > 0) {
+        const job = queue.shift()
+        if (!job) return
+        await runJob(job)
+      }
+    })
+    await Promise.all(workers)
 
     return new Response(
       JSON.stringify({
         ok: true,
         elapsed_ms: Date.now() - startedAt,
         considered: pending.length,
+        claimed: claimedIds.size,
         sent,
-        skipped: { online: skipOnline, opted_out: skipOptedOut, no_email: skipNoEmail },
+        failed,
+        skipped: {
+          online: skipOnline,
+          opted_out: skipOptedOut,
+          no_email: skipNoEmail,
+          no_profile: skipNoProfile,
+        },
       }),
       { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
     )
