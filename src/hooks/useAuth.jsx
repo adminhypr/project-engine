@@ -326,34 +326,14 @@ export function AuthProvider({ children }) {
     const onVisibility = () => { if (document.visibilityState === 'visible') bump() }
     document.addEventListener('visibilitychange', onVisibility)
 
-    // Best-effort final mark on tab close. `pagehide` fires reliably across
-    // browsers (more than `beforeunload`/`unload`), and `sendBeacon` is the
-    // only request type the browser guarantees to flush during teardown.
-    //
-    // Limitation: sendBeacon ships the request from the browser without any
-    // headers we attach via fetch interceptors. To authenticate with
-    // PostgREST we have to inline the user's JWT into the URL via the
-    // `apikey` param plus a `Bearer` we can't actually set — meaning this
-    // call lands as the anon role at PostgREST. That's why we no-op
-    // gracefully if it fails: the worst case is the user simply doesn't get
-    // a final bump, and the next time they open the app the regular
-    // interval picks up. The 5-min digest "offline" window already tolerates
-    // a missing final tick.
-    const onPageHide = () => {
-      try {
-        if (!navigator.sendBeacon) return
-        const url = `${SUPABASE_URL}/rest/v1/rpc/heartbeat?apikey=${encodeURIComponent(SUPABASE_KEY)}`
-        navigator.sendBeacon(url, new Blob(['{}'], { type: 'application/json' }))
-      } catch {
-        // Swallow — best-effort only.
-      }
-    }
-    window.addEventListener('pagehide', onPageHide)
+    // No pagehide/sendBeacon: navigator.sendBeacon can't carry the
+    // user's JWT, so it would arrive at PostgREST as anon (= no-op,
+    // since heartbeat() is gated on auth.uid()). The 5-min digest
+    // "offline" window already tolerates a missing final tick.
 
     return () => {
       if (timer) clearInterval(timer)
       document.removeEventListener('visibilitychange', onVisibility)
-      window.removeEventListener('pagehide', onPageHide)
     }
   }, [profile?.id])
 

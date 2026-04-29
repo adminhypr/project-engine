@@ -11,8 +11,7 @@
 -- (`profile_presence`) so heartbeats no longer touch `profiles` at all,
 -- bypassing every trigger that hangs off it. A thin SECURITY DEFINER RPC
 -- (`heartbeat()`) is the only write path; the frontend calls it via
--- `supabase.rpc('heartbeat')` (and `navigator.sendBeacon` to the PostgREST
--- RPC endpoint on `pagehide` for a best-effort final mark).
+-- `supabase.rpc('heartbeat')`.
 --
 -- Forward-only safety: `profiles.last_seen_at` is intentionally NOT dropped.
 -- Once every reader is migrated and the new path has soaked in production,
@@ -53,6 +52,10 @@ create policy "profile_presence readable by authenticated"
   using (true);
 
 -- ── RPC ──────────────────────────────────────────────────────
+-- The WHERE auth.uid() IS NOT NULL guard silences anon-caller errors:
+-- without it, an unauthenticated request (e.g., an old sendBeacon on
+-- pagehide before we removed it) would raise a NOT NULL violation on
+-- the primary key, polluting Postgres logs at scale.
 create or replace function public.heartbeat()
 returns void
 language sql
@@ -61,7 +64,8 @@ security definer
 set search_path = public
 as $$
   insert into public.profile_presence (profile_id, last_seen_at)
-  values (auth.uid(), now())
+  select auth.uid(), now()
+  where auth.uid() is not null
   on conflict (profile_id)
     do update set last_seen_at = excluded.last_seen_at;
 $$;
