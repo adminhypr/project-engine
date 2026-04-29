@@ -28,6 +28,33 @@ const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 const PUBLIC_APP_URL = Deno.env.get('PUBLIC_APP_URL') || 'https://tasks.hyprstaffing.com'
 const OFFLINE_WINDOW_MINUTES = 5
 
+function taskLink(taskId: string | null, commentId?: string | null): string | null {
+  if (!taskId) return null
+  return commentId
+    ? `${PUBLIC_APP_URL}/my-tasks?task=${escape(taskId)}&comment=${escape(commentId)}`
+    : `${PUBLIC_APP_URL}/my-tasks?task=${escape(taskId)}`
+}
+
+function dmLink(convId: string | null, messageId?: string | null): string | null {
+  if (!convId) return null
+  return messageId
+    ? `${PUBLIC_APP_URL}/?dm=${escape(convId)}&message=${escape(messageId)}`
+    : `${PUBLIC_APP_URL}/?dm=${escape(convId)}`
+}
+
+function hubMessageLink(hubId: string | null, messageId?: string | null): string | null {
+  if (!hubId) return null
+  return messageId
+    ? `${PUBLIC_APP_URL}/hub/${escape(hubId)}?message=${escape(messageId)}`
+    : `${PUBLIC_APP_URL}/hub/${escape(hubId)}`
+}
+
+function asLink(label: string, url: string | null): string {
+  return url
+    ? `<a href="${url}" style="color:#4f46e5; text-decoration:none;">${label}</a>`
+    : label
+}
+
 interface OutboxRow {
   id: string
   recipient_id: string
@@ -71,21 +98,27 @@ function renderDigestHtml(rows: OutboxRow[], userName: string): { subject: strin
   }
 
   // Tasks
-  section('Tasks assigned to you', byType['task_assigned'] || [], (r) =>
-    `<strong>${escape(r.payload.task_title || 'Task')}</strong> — assigned by ${escape(r.payload.actor_name || 'Someone')}`
-  )
+  section('Tasks assigned to you', byType['task_assigned'] || [], (r) => {
+    const title = `<strong>${escape(r.payload.task_title || 'Task')}</strong>`
+    const titleLinked = asLink(title, taskLink(r.payload.task_id))
+    return `${titleLinked} — assigned by ${escape(r.payload.actor_name || 'Someone')}`
+  })
 
   // Comments + comment mentions
   const commentItems = (byType['comment_mention'] || []).concat(byType['comment_posted'] || [])
   section('Task comments', commentItems, (r) => {
     const isMention = r.event_type === 'comment_mention'
-    return `${isMention ? '<strong>@you</strong> ' : ''}${escape(r.payload.actor_name || 'Someone')} on <strong>${escape(r.payload.task_title || 'a task')}</strong>: <em style="color:#6b7280;">${escape(r.payload.snippet || '').slice(0, 100)}</em>`
+    const title = `<strong>${escape(r.payload.task_title || 'a task')}</strong>`
+    const titleLinked = asLink(title, taskLink(r.payload.task_id, r.payload.comment_id))
+    return `${isMention ? '<strong>@you</strong> ' : ''}${escape(r.payload.actor_name || 'Someone')} on ${titleLinked}: <em style="color:#6b7280;">${escape(r.payload.snippet || '').slice(0, 100)}</em>`
   })
 
   // DMs
-  section('Direct messages', byType['dm_message'] || [], (r) =>
-    `<strong>${escape(r.payload.actor_name || 'Someone')}</strong>: <em style="color:#6b7280;">${escape(r.payload.snippet || '').slice(0, 100)}</em>`
-  )
+  section('Direct messages', byType['dm_message'] || [], (r) => {
+    const actor = `<strong>${escape(r.payload.actor_name || 'Someone')}</strong>`
+    const actorLinked = asLink(actor, dmLink(r.payload.conversation_id, r.payload.message_id))
+    return `${actorLinked}: <em style="color:#6b7280;">${escape(r.payload.snippet || '').slice(0, 100)}</em>`
+  })
 
   // Group + task chat
   const chatMentions = (byType['group_mention'] || []).concat(byType['task_chat_mention'] || [])
@@ -95,7 +128,8 @@ function renderDigestHtml(rows: OutboxRow[], userName: string): { subject: strin
       : r.payload.conversation_kind === 'hub'
         ? `hub <strong>${escape(r.payload.hub_name || r.payload.group_title || 'a hub')}</strong>`
         : `group <strong>${escape(r.payload.group_title || 'a group')}</strong>`
-    return `<strong>${escape(r.payload.actor_name || 'Someone')}</strong> mentioned you in ${where}: <em style="color:#6b7280;">${escape(r.payload.snippet || '').slice(0, 100)}</em>`
+    const whereLinked = asLink(`in ${where}`, dmLink(r.payload.conversation_id, r.payload.message_id))
+    return `<strong>${escape(r.payload.actor_name || 'Someone')}</strong> mentioned you ${whereLinked}: <em style="color:#6b7280;">${escape(r.payload.snippet || '').slice(0, 100)}</em>`
   })
 
   const chatActivity = (byType['group_message'] || []).concat(byType['task_chat_message'] || [])
@@ -105,13 +139,16 @@ function renderDigestHtml(rows: OutboxRow[], userName: string): { subject: strin
       : r.payload.conversation_kind === 'hub'
         ? `hub <strong>${escape(r.payload.hub_name || r.payload.group_title || 'a hub')}</strong>`
         : `group <strong>${escape(r.payload.group_title || 'a group')}</strong>`
-    return `<strong>${escape(r.payload.actor_name || 'Someone')}</strong> in ${where}: <em style="color:#6b7280;">${escape(r.payload.snippet || '').slice(0, 100)}</em>`
+    const whereLinked = asLink(`in ${where}`, dmLink(r.payload.conversation_id, r.payload.message_id))
+    return `<strong>${escape(r.payload.actor_name || 'Someone')}</strong> ${whereLinked}: <em style="color:#6b7280;">${escape(r.payload.snippet || '').slice(0, 100)}</em>`
   })
 
   // Hub mentions
-  section('Hub mentions', byType['hub_mention'] || [], (r) =>
-    `<strong>${escape(r.payload.actor_name || 'Someone')}</strong> mentioned you in <strong>${escape(r.payload.hub_name || 'a hub')}</strong>`
-  )
+  section('Hub mentions', byType['hub_mention'] || [], (r) => {
+    const hubName = `<strong>${escape(r.payload.hub_name || 'a hub')}</strong>`
+    const hubLinked = asLink(hubName, hubMessageLink(r.payload.hub_id, r.payload.message_id))
+    return `<strong>${escape(r.payload.actor_name || 'Someone')}</strong> mentioned you in ${hubLinked}`
+  })
 
   // Card Table — assignments
   section('Cards assigned to you', byType['card_assigned'] || [], (r) => {
@@ -119,7 +156,7 @@ function renderDigestHtml(rows: OutboxRow[], userName: string): { subject: strin
       ? `${PUBLIC_APP_URL}/hub/${escape(r.payload.hub_id)}?card=${escape(r.payload.card_id)}`
       : null
     const title = `<strong>${escape(r.payload.card_title || 'Card')}</strong>`
-    const titleLinked = link ? `<a href="${link}" style="color:#4f46e5; text-decoration:none;">${title}</a>` : title
+    const titleLinked = asLink(title, link)
     const hub = r.payload.hub_name ? ` in <strong>${escape(r.payload.hub_name)}</strong>` : ''
     return `You were assigned to ${titleLinked}${hub} by ${escape(r.payload.actor_name || 'Someone')}`
   })
@@ -129,10 +166,12 @@ function renderDigestHtml(rows: OutboxRow[], userName: string): { subject: strin
   section('Card comments', cardCommentItems, (r) => {
     const isMention = r.event_type === 'card_mention'
     const link = r.payload.hub_id && r.payload.card_id
-      ? `${PUBLIC_APP_URL}/hub/${escape(r.payload.hub_id)}?card=${escape(r.payload.card_id)}`
+      ? (r.payload.comment_id
+          ? `${PUBLIC_APP_URL}/hub/${escape(r.payload.hub_id)}?card=${escape(r.payload.card_id)}&comment=${escape(r.payload.comment_id)}`
+          : `${PUBLIC_APP_URL}/hub/${escape(r.payload.hub_id)}?card=${escape(r.payload.card_id)}`)
       : null
     const title = `<strong>${escape(r.payload.card_title || 'a card')}</strong>`
-    const titleLinked = link ? `<a href="${link}" style="color:#4f46e5; text-decoration:none;">${title}</a>` : title
+    const titleLinked = asLink(title, link)
     const verb = isMention ? 'mentioned you on' : 'commented on'
     const prefix = isMention ? '<strong>@you</strong> ' : ''
     return `${prefix}${escape(r.payload.actor_name || 'Someone')} ${verb} ${titleLinked}: <em style="color:#6b7280;">${escape(r.payload.snippet || '').slice(0, 100)}</em>`
@@ -142,9 +181,11 @@ function renderDigestHtml(rows: OutboxRow[], userName: string): { subject: strin
   // existing `notify` function emails these instantly. We enqueue them too
   // as a future-proof; for now they'll appear here only if the instant path
   // didn't hit (e.g. webhook secret missing).
-  section('Task updates', (byType['task_completed'] || []).concat(byType['task_declined'] || []).concat(byType['task_reassigned'] || []), (r) =>
-    `<strong>${escape(r.payload.task_title || 'Task')}</strong> ${r.event_type.replace('task_', '')}`
-  )
+  section('Task updates', (byType['task_completed'] || []).concat(byType['task_declined'] || []).concat(byType['task_reassigned'] || []), (r) => {
+    const title = `<strong>${escape(r.payload.task_title || 'Task')}</strong>`
+    const titleLinked = asLink(title, taskLink(r.payload.task_id))
+    return `${titleLinked} ${r.event_type.replace('task_', '')}`
+  })
 
   const subject = totalCount === 1
     ? `1 new notification`
