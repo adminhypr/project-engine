@@ -14,7 +14,7 @@
 // stay unmarked and will retry on the next tick.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeadersFor } from '../_shared/security.ts'
+import { corsHeadersFor, verifyWebhookSecret } from '../_shared/security.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -194,11 +194,13 @@ Deno.serve(async (req) => {
   const cors = corsHeadersFor(req)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
-  // Deployed --no-verify-jwt — pg_cron call from inside the project. The
-  // function is read-only on profiles + outbox (no destructive actions),
-  // and no PII leaks since it only emails verified addresses owned by
-  // queued recipients. Matches the existing dm-offline-notify / spawn-
-  // recurring-tasks pattern.
+  // Deployed --no-verify-jwt so pg_cron's net.http_post can hit it. The
+  // X-Webhook-Secret header (sent by the cron job, verified here against
+  // the WEBHOOK_SHARED_SECRET function env var) is the actual auth gate.
+  // Migration 081 schedules the cron call with this header.
+  if (!verifyWebhookSecret(req)) {
+    return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403, headers: cors })
+  }
 
   const startedAt = Date.now()
 

@@ -18,7 +18,7 @@
 // next_run_at make overlapping cron fires safe.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeadersFor } from '../_shared/security.ts'
+import { corsHeadersFor, verifyWebhookSecret } from '../_shared/security.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -142,12 +142,12 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
   // Deployed with --no-verify-jwt so the pg_cron `net.http_post` call from
-  // inside the project can hit it. The function is safe to invoke without
-  // auth: the only writes happen for templates whose next_run_at <= now(),
-  // and each spawn advances next_run_at to the next future occurrence
-  // (idempotent within an hour). Matches dm-offline-notify's pattern; the
-  // tighter shared-secret check is tracked as a follow-up to roll out
-  // across all cron-driven functions in one pass.
+  // inside the project can hit it. Auth is enforced via the X-Webhook-Secret
+  // header — pg_cron sends it (migration 081) and verifyWebhookSecret
+  // constant-time compares against the WEBHOOK_SHARED_SECRET env var.
+  if (!verifyWebhookSecret(req)) {
+    return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403, headers: cors })
+  }
 
   const startedAt = Date.now()
   const results: Array<{ id: string; result: any }> = []

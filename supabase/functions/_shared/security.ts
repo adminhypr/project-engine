@@ -44,14 +44,14 @@ export function corsHeadersFor(req: Request): Record<string, string> {
 }
 
 // ── Webhook shared-secret verification ────────────────────────
-// Soft-fail policy: if WEBHOOK_SHARED_SECRET is NOT set, log a warning and
-// ALLOW the request. This lets us ship the check without dashboard access.
-// Once the env var is set, we enforce strict, constant-time comparison.
+// Strict policy: if WEBHOOK_SHARED_SECRET is NOT set, log an error and
+// REJECT the request. Cron-driven and webhook-triggered functions must
+// have the env var configured before they can be invoked. Audit fix #10.
 export function verifyWebhookSecret(req: Request): boolean {
   const expected = Deno.env.get('WEBHOOK_SHARED_SECRET')
   if (!expected) {
-    console.warn('[security] WEBHOOK_SHARED_SECRET not set — allowing request. Set this env var to enforce webhook auth.')
-    return true
+    console.error('[security] WEBHOOK_SHARED_SECRET is not set — rejecting request. Set the env var on the function.')
+    return false
   }
   const got = req.headers.get('x-webhook-secret')
   if (!got) return false
