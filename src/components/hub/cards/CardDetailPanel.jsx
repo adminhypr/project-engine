@@ -364,6 +364,7 @@ export default function CardDetailPanel({ moduleId, hubId }) {
                 <FileAttachments
                   attachments={card.attachments || []}
                   cardId={card.id}
+                  hubId={hubId}
                   onChange={async (next) => {
                     const ok = await updateCard(card.id, { attachments: next })
                     if (ok) setCard(prev => prev ? { ...prev, attachments: next } : prev)

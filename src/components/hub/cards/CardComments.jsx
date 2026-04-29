@@ -91,6 +91,7 @@ export default function CardComments({ cardId, hubId }) {
                   <FileAttachments
                     attachments={c.attachments || []}
                     cardId={cardId}
+                    hubId={hubId}
                     disabled
                   />
                 </div>
@@ -116,6 +117,7 @@ export default function CardComments({ cardId, hubId }) {
             attachments={draftAttachments}
             onChange={setDraftAttachments}
             cardId={cardId}
+            hubId={hubId}
           />
         </div>
         <div className="mt-2 flex justify-end">

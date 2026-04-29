@@ -34,6 +34,7 @@ export default function FileAttachments({
   attachments = [],
   onChange,
   cardId,
+  hubId,
   disabled = false,
 }) {
   const fileInputRef = useRef(null)
@@ -49,13 +50,15 @@ export default function FileAttachments({
       showToast(`${file.name || 'File'} exceeds 10 MB limit`, 'error')
       return
     }
-    if (!cardId) return
+    if (!cardId || !hubId) return
 
     const tempId = crypto.randomUUID()
     const safeName = sanitizeFilename(file.name)
     setUploading(prev => [...prev, { id: tempId, name: safeName }])
 
-    const storagePath = `card-attachments/${cardId}/${crypto.randomUUID()}-${safeName}`
+    // Path MUST start with `${hubId}/...` — the migration 073 RLS policy
+    // extracts the hub id from the leading folder segment to scope reads.
+    const storagePath = `${hubId}/card-attachments/${cardId}/${crypto.randomUUID()}-${safeName}`
     const { error } = await supabase.storage
       .from('hub-files')
       .upload(storagePath, file, { contentType: file.type || undefined })
