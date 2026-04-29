@@ -14,6 +14,7 @@ export default function RichInput({
   value,
   onChange,
   onSubmit,
+  onBlur,
   submitRef,
   hubId,
   enableMentions = true,
@@ -22,6 +23,13 @@ export default function RichInput({
   rows = 1,
   className = '',
   singleLine = false,
+  // For "edit-in-place" surfaces (e.g. card notes) where the saved
+  // inline images should appear inside the editor on first mount.
+  // Pair with a `key` on the parent so re-opening a different row reseeds.
+  initialInlineImages,
+  // For the same surfaces, keep the inline images in state after submit
+  // so the user keeps seeing them. Chat-style surfaces leave this true.
+  clearOnSubmit = true,
 }) {
   const { profile } = useAuth()
   const { members } = useHubMembers(hubId)
@@ -34,8 +42,10 @@ export default function RichInput({
   const [mentions, setMentions] = useState([])
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 })
 
-  // Image state
-  const [inlineImages, setInlineImages] = useState([])
+  // Image state. Seeded from `initialInlineImages` for edit-in-place surfaces
+  // so previously-saved screenshots are visible inside the editor (not in a
+  // separate read-only block above it).
+  const [inlineImages, setInlineImages] = useState(() => initialInlineImages || [])
   const [uploading, setUploading] = useState([])
   const [dragOver, setDragOver] = useState(false)
 
@@ -127,8 +137,10 @@ export default function RichInput({
       mentions,
       inlineImages,
     })
-    setMentions([])
-    setInlineImages([])
+    if (clearOnSubmit) {
+      setMentions([])
+      setInlineImages([])
+    }
     setMentionState({ active: false, query: '', startIndex: -1 })
   }
 
@@ -288,6 +300,12 @@ export default function RichInput({
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
+          onBlur={() => {
+            // Defer so a click on the mention dropdown / image picker
+            // (which steals focus first) is processed before the parent
+            // reads "blur = save."
+            if (onBlur) setTimeout(() => onBlur(), 100)
+          }}
           placeholder={placeholder}
           rows={singleLine ? 1 : rows}
           className={`form-input w-full resize-none text-sm ${singleLine ? 'py-1.5 pr-9' : 'pr-9'} ${className}`}

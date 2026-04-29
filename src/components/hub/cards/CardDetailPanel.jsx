@@ -7,7 +7,6 @@ import { useHubCards } from '../../../hooks/useHubCards'
 import { useHubMembers } from '../../../hooks/useHubMembers'
 import { showToast } from '../../ui/index'
 import RichInput from '../../ui/RichInput'
-import RichContentRenderer from '../../ui/RichContentRenderer'
 import CardSteps from './CardSteps'
 import CardComments from './CardComments'
 import FileAttachments from './FileAttachments'
@@ -87,8 +86,9 @@ export default function CardDetailPanel({ moduleId, hubId }) {
   const [params, setParams] = useSearchParams()
   const cardId = params.get('card')
   const [card, setCard] = useState(null)
-  const [notesDirty, setNotesDirty] = useState(false)
-  const [savingNotes, setSavingNotes] = useState(false)
+  // Local draft of the notes text. Decoupled from card.notes so realtime
+  // refetches don't clobber what the user is typing. Auto-saves on blur.
+  const [notesDraft, setNotesDraft] = useState('')
   const notesSubmitRef = useRef(null)
   const { columns } = useHubCardColumns(moduleId)
   const { updateCard, deleteCard, assignCard, unassignCard } = useHubCards(moduleId)
@@ -103,7 +103,7 @@ export default function CardDetailPanel({ moduleId, hubId }) {
         .eq('id', cardId).maybeSingle()
       if (alive && data) {
         setCard({ ...data, assignees: (data.assignees || []).map(a => a.profile).filter(Boolean) })
-        setNotesDirty(false)
+        setNotesDraft(data.notes || '')
       }
     })()
     return () => { alive = false }
@@ -250,57 +250,40 @@ export default function CardDetailPanel({ moduleId, hubId }) {
             </dl>
 
             <section className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Notes</h4>
-                {notesDirty && (
-                  <button
-                    type="button"
-                    onClick={() => notesSubmitRef.current?.()}
-                    disabled={savingNotes}
-                    className="btn btn-primary text-xs px-3 py-1 disabled:opacity-50"
-                  >
-                    {savingNotes ? 'Saving…' : 'Save notes'}
-                  </button>
-                )}
-              </div>
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Notes</h4>
 
-              {/* Saved inline images render here via RichContentRenderer —
-                  RichInput only shows images uploaded in the current session,
-                  so we keep a separate read-only preview above the editor for
-                  anything already persisted to the row. New uploads in the
-                  composer below are merged into card.inline_images on save. */}
-              {(card.inline_images || []).length > 0 && (
-                <div className="mb-2">
-                  <RichContentRenderer
-                    content=""
-                    inlineImages={card.inline_images || []}
-                  />
-                </div>
-              )}
-
+              {/*
+                Single Basecamp-style notes block: one editor, saved inline
+                screenshots seeded into the editor's state via
+                `initialInlineImages`, auto-saves on blur via `onBlur`. The
+                `key={card.id}` keeps state in sync across card switches.
+              */}
               <RichInput
-                value={card.notes || ''}
-                onChange={(v) => { setCard({ ...card, notes: v }); setNotesDirty(true) }}
+                key={card.id}
+                value={notesDraft}
+                onChange={setNotesDraft}
+                onBlur={() => notesSubmitRef.current?.()}
                 onSubmit={async ({ content, inlineImages }) => {
-                  setSavingNotes(true)
-                  const newImages = (inlineImages || []).map(({ preview, ...rest }) => rest)
-                  const merged = [...(card.inline_images || []), ...newImages]
+                  // No-op if nothing changed (RichInput's blur fires every
+                  // click-out, even when text is identical to the saved row).
+                  const cleanedImages = (inlineImages || []).map(({ preview, ...rest }) => rest)
+                  const sameText = (content || '') === (card.notes || '')
+                  const sameImageCount = cleanedImages.length === (card.inline_images || []).length
+                  if (sameText && sameImageCount) return
                   const ok = await updateCard(card.id, {
                     notes: content,
-                    inline_images: merged,
+                    inline_images: cleanedImages,
                   })
-                  setSavingNotes(false)
-                  if (ok) {
-                    setCard(prev => prev ? { ...prev, notes: content, inline_images: merged } : prev)
-                    setNotesDirty(false)
-                  }
+                  if (ok) setCard(prev => prev ? { ...prev, notes: content, inline_images: cleanedImages } : prev)
                 }}
                 submitRef={notesSubmitRef}
+                initialInlineImages={card.inline_images || []}
+                clearOnSubmit={false}
                 hubId={hubId}
                 enableMentions={false}
                 enableImages
                 placeholder="Add notes…"
-                rows={6}
+                rows={8}
               />
 
               <div className="mt-2">
