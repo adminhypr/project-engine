@@ -129,6 +129,31 @@ function renderDigestHtml(rows: OutboxRow[], userName: string): { subject: strin
     `<strong>${escape(r.payload.actor_name || 'Someone')}</strong> mentioned you in <strong>${escape(r.payload.hub_name || 'a hub')}</strong>`
   )
 
+  // Card Table — assignments
+  section('Cards assigned to you', byType['card_assigned'] || [], (r) => {
+    const link = r.payload.hub_id && r.payload.card_id
+      ? `${PUBLIC_APP_URL}/hub/${escape(r.payload.hub_id)}?card=${escape(r.payload.card_id)}`
+      : null
+    const title = `<strong>${escape(r.payload.card_title || 'Card')}</strong>`
+    const titleLinked = link ? `<a href="${link}" style="color:#4f46e5; text-decoration:none;">${title}</a>` : title
+    const hub = r.payload.hub_name ? ` in <strong>${escape(r.payload.hub_name)}</strong>` : ''
+    return `You were assigned to ${titleLinked}${hub} by ${escape(r.payload.actor_name || 'Someone')}`
+  })
+
+  // Card Table — comments + mentions
+  const cardCommentItems = (byType['card_mention'] || []).concat(byType['card_comment'] || [])
+  section('Card comments', cardCommentItems, (r) => {
+    const isMention = r.event_type === 'card_mention'
+    const link = r.payload.hub_id && r.payload.card_id
+      ? `${PUBLIC_APP_URL}/hub/${escape(r.payload.hub_id)}?card=${escape(r.payload.card_id)}`
+      : null
+    const title = `<strong>${escape(r.payload.card_title || 'a card')}</strong>`
+    const titleLinked = link ? `<a href="${link}" style="color:#4f46e5; text-decoration:none;">${title}</a>` : title
+    const verb = isMention ? 'mentioned you on' : 'commented on'
+    const prefix = isMention ? '<strong>@you</strong> ' : ''
+    return `${prefix}${escape(r.payload.actor_name || 'Someone')} ${verb} ${titleLinked}: <em style="color:#6b7280;">${escape(r.payload.snippet || '').slice(0, 100)}</em>`
+  })
+
   // Other task events (declined / completed / reassigned) — currently the
   // existing `notify` function emails these instantly. We enqueue them too
   // as a future-proof; for now they'll appear here only if the instant path
