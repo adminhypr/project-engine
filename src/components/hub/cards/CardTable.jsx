@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  DndContext, closestCorners, pointerWithin, rectIntersection,
+  DndContext, DragOverlay, closestCorners, pointerWithin, rectIntersection,
   PointerSensor, TouchSensor, useSensor, useSensors,
 } from '@dnd-kit/core'
 import { useHubCardColumns } from '../../../hooks/useHubCardColumns'
@@ -12,6 +12,7 @@ import { groupCardsByColumn } from '../../../lib/cards'
 import { showToast } from '../../ui/index'
 import CardColumn from './CardColumn'
 import AddColumnInline from './AddColumnInline'
+import CardPreview from './CardPreview'
 
 function collisionDetection(args) {
   const ptr = pointerWithin(args)
@@ -31,6 +32,7 @@ export default function CardTable({ hubId, moduleId }) {
   const { columns, loading: colsLoading, addColumn, renameColumn, deleteColumn } = useHubCardColumns(moduleId)
   const { cards, loading: cardsLoading, addCard, moveCard } = useHubCards(moduleId)
   const [, setSearchParams] = useSearchParams()
+  const [activeId, setActiveId] = useState(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -38,6 +40,7 @@ export default function CardTable({ hubId, moduleId }) {
   )
 
   const grouped = useMemo(() => groupCardsByColumn(cards, columns.map(c => c.id)), [cards, columns])
+  const activeCard = activeId ? cards.find(c => c.id === activeId) : null
 
   function findColumnFor(id) {
     if (typeof id === 'string' && id.startsWith('col:')) return id.slice(4)
@@ -45,7 +48,16 @@ export default function CardTable({ hubId, moduleId }) {
     return card?.column_id || null
   }
 
+  function handleDragStart(event) {
+    setActiveId(event.active.id)
+  }
+
+  function handleDragCancel() {
+    setActiveId(null)
+  }
+
   async function handleDragEnd(event) {
+    setActiveId(null)
     const { active, over } = event
     if (!over) return
     const fromColId = findColumnFor(active.id)
@@ -95,7 +107,13 @@ export default function CardTable({ hubId, moduleId }) {
 
   return (
     <div className="px-3 py-3">
-      <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={collisionDetection}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+      >
         <div className="flex gap-3 overflow-x-auto pb-2 group">
           {columns.map(col => (
             <CardColumn
@@ -103,6 +121,7 @@ export default function CardTable({ hubId, moduleId }) {
               column={col}
               cards={grouped[col.id] || []}
               canManage={canManage}
+              activeId={activeId}
               onOpenCard={openCard}
               onAddCard={async (colId, title) => {
                 const created = await addCard({ columnId: colId, title })
@@ -117,6 +136,24 @@ export default function CardTable({ hubId, moduleId }) {
           ))}
           {canManage && <AddColumnInline onAdd={addColumn} />}
         </div>
+
+        {/* Floating preview that follows the cursor while dragging.
+            Tilts + scales for a "lifted off the board" feel. */}
+        <DragOverlay
+          dropAnimation={{
+            duration: 220,
+            easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+          }}
+        >
+          {activeCard ? (
+            <div
+              className="rotate-2 scale-[1.03] shadow-elevated rounded-xl ring-2 ring-brand-400/60 dark:ring-brand-500/50 cursor-grabbing"
+              style={{ width: 240 }}
+            >
+              <CardPreview card={activeCard} onClick={() => {}} />
+            </div>
+          ) : null}
+        </DragOverlay>
       </DndContext>
     </div>
   )

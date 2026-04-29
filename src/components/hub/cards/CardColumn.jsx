@@ -6,11 +6,38 @@ import { Plus, Pencil, Trash2 } from 'lucide-react'
 import CardPreview from './CardPreview'
 
 function SortableCardPreview({ card, onClick }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.id })
+  const {
+    attributes, listeners, setNodeRef, transform, transition, isDragging,
+  } = useSortable({
+    id: card.id,
+    transition: {
+      // dnd-kit applies this transition to siblings shifting out of the
+      // way during drag. Smoother + slightly snappier than the default.
+      duration: 220,
+      easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+    },
+  })
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.4 : 1,
+  }
+  // The DragOverlay (mounted in CardTable) renders the floating card that
+  // follows the cursor. The source slot here keeps the layout space and
+  // shows a dashed placeholder so the user sees where they're dragging
+  // FROM. No content is rendered while it's the active drag.
+  if (isDragging) {
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        className="rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-100/50 dark:bg-white/[0.02]"
+        aria-hidden
+      >
+        <div className="invisible">
+          <CardPreview card={card} onClick={() => {}} />
+        </div>
+      </div>
+    )
   }
   return (
     <div ref={setNodeRef} style={style}>
@@ -24,10 +51,11 @@ function SortableCardPreview({ card, onClick }) {
 }
 
 export default function CardColumn({
-  column, cards, canManage,
+  column, cards, canManage, activeId,
   onOpenCard, onAddCard, onRenameColumn, onDeleteColumn,
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `col:${column.id}` })
+  const dragging = !!activeId
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState(column.name)
   const [adding, setAdding] = useState(false)
@@ -42,7 +70,16 @@ export default function CardColumn({
   const cardIds = cards.map(c => c.id)
 
   return (
-    <div ref={setNodeRef} className={`flex flex-col min-w-[260px] w-[260px] rounded-2xl bg-slate-50 dark:bg-dark-bg/40 p-2 border ${isOver ? 'border-brand-300 dark:border-brand-500' : 'border-transparent'}`}>
+    <div
+      ref={setNodeRef}
+      className={`flex flex-col min-w-[260px] w-[260px] rounded-2xl p-2 border transition-colors duration-150 ${
+        isOver
+          ? 'bg-brand-50/40 dark:bg-brand-500/[0.08] border-brand-300 dark:border-brand-500'
+          : dragging
+            ? 'bg-slate-50 dark:bg-dark-bg/40 border-slate-200/60 dark:border-slate-700/40'
+            : 'bg-slate-50 dark:bg-dark-bg/40 border-transparent'
+      }`}
+    >
       <div className="flex items-center justify-between gap-1 px-2 py-1">
         <div className="flex items-center gap-2 min-w-0">
           <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: column.color }} />
