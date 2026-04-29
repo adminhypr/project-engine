@@ -92,17 +92,41 @@ async function flush() {
       continue
     }
 
-    // Debounce: was an email sent to this (recipient, conversation) in the last 15 min?
-    const debounceThreshold = new Date(Date.now() - DEBOUNCE_MIN * 60_000).toISOString()
-    const { data: recent } = await supabase
+    // Atomic debounce claim: insert into dm_email_log BEFORE sending.
+    // Migration 080 adds a unique index on (recipient_id, conversation_id,
+    // time_bucket) where time_bucket is a generated 15-min bucket of
+    // sent_at. If the insert hits a conflict another worker (or a recent
+    // run) already claimed this bucket → skip Resend. If it inserts, we
+    // own the send; on Resend failure we DELETE the claim so the next
+    // tick can retry.
+    const claimSentAt = new Date().toISOString()
+    const { data: claimed, error: claimErr } = await supabase
       .from('dm_email_log')
+      .insert({
+        recipient_id: recipient.id,
+        conversation_id: conversationId,
+        sent_at: claimSentAt,
+      })
       .select('sent_at')
-      .eq('recipient_id', recipient.id)
-      .eq('conversation_id', conversationId)
-      .gte('sent_at', debounceThreshold)
-      .limit(1)
 
-    if (recent && recent.length > 0) {
+    // Postgres unique-violation surfaces as PostgREST 23505 / status 409.
+    if (claimErr) {
+      const code = (claimErr as { code?: string }).code
+      if (code === '23505') {
+        await supabase.from('pending_dm_emails').update({
+          skipped_reason: 'debounced',
+          sent_at: new Date().toISOString(),
+        }).in('id', rows.map(r => r.id))
+        continue
+      }
+      console.error('dm_email_log claim failed', claimErr)
+      // Don't try to send if we couldn't even record a claim — leave the
+      // pending rows for the next tick.
+      continue
+    }
+
+    if (!claimed || claimed.length === 0) {
+      // Defensive: insert returned no rows but no error either.
       await supabase.from('pending_dm_emails').update({
         skipped_reason: 'debounced',
         sent_at: new Date().toISOString(),
@@ -137,15 +161,21 @@ async function flush() {
     const ok = await sendEmail(recipient.email, subject, html)
 
     if (ok) {
+      // Claim row already inserted above; it doubles as the dedupe proof.
       await supabase.from('pending_dm_emails').update({
         sent_at: new Date().toISOString(),
       }).in('id', rows.map(r => r.id))
-      await supabase.from('dm_email_log').insert({
-        recipient_id: recipient.id,
-        conversation_id: conversationId,
-      })
       sent += rows.length
     } else {
+      // Release the claim so the next tick can retry this (recipient,
+      // conversation, bucket) — otherwise the unique index would block
+      // a follow-up send for the rest of the 15-minute window.
+      await supabase
+        .from('dm_email_log')
+        .delete()
+        .eq('recipient_id', recipient.id)
+        .eq('conversation_id', conversationId)
+        .eq('sent_at', claimSentAt)
       await supabase.from('pending_dm_emails').update({
         skipped_reason: 'resend_failed',
         sent_at: new Date().toISOString(),
