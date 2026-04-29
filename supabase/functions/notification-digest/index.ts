@@ -15,6 +15,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeadersFor, verifyWebhookSecret } from '../_shared/security.ts'
+import { sendEmail } from '../_shared/email.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -22,7 +23,6 @@ const supabase = createClient(
 )
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
-const FROM_EMAIL = Deno.env.get('ALERT_FROM_EMAIL') || 'alerts@hyprassistants.com'
 const PUBLIC_APP_URL = Deno.env.get('PUBLIC_APP_URL') || 'https://tasks.hyprstaffing.com'
 const OFFLINE_WINDOW_MINUTES = 5
 
@@ -42,24 +42,6 @@ interface RecipientProfile {
   full_name: string | null
   email_digest_enabled: boolean
   last_seen_at: string | null
-}
-
-async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
-  if (!RESEND_API_KEY) return false
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: `Hypr Task <${FROM_EMAIL}>`,
-      to: [to],
-      subject,
-      html,
-    }),
-  })
-  return res.ok
 }
 
 // Render one section per event type group ("3 new task comments", "2 mentions", etc.).
@@ -343,16 +325,16 @@ Deno.serve(async (req) => {
       const rowIds = job.rows.map((r) => r.id)
       try {
         const { subject, html } = renderDigestHtml(job.rows, job.prof.full_name || '')
-        const ok = await sendEmail(job.prof.email!, subject, html)
-        if (ok) {
+        const result = await sendEmail(job.prof.email!, subject, html)
+        if (result.ok) {
           sent++
           await supabase
             .from('notification_outbox')
             .update({ emailed_at: new Date().toISOString() })
             .in('id', rowIds)
-        } else {
+        } else if (result.retryable) {
           failed++
-          console.warn(`Failed to send digest to ${job.prof.email}; releasing claim for retry`)
+          console.warn(`digest: transient send failure for ${job.prof.email} (status=${result.status}); releasing claim for retry: ${result.error}`)
           const { error: relErr } = await supabase
             .from('notification_outbox')
             .update({ claimed_at: null })
@@ -360,6 +342,17 @@ Deno.serve(async (req) => {
           if (relErr) {
             console.warn(`digest: claim-release failed for ${job.prof.email} (rows will recover via stale-claim reset on next tick):`, relErr.message)
           }
+        } else {
+          // Permanent failure (4xx, missing config, no recipient). Mark
+          // as emailed so we don't keep retrying a doomed send. Without a
+          // dedicated `email_failure_reason` column (deferred polish per
+          // plan), the failure is recorded only in logs.
+          failed++
+          console.error(`digest: permanent send failure for ${job.prof.email} (status=${result.status}); dead-lettering: ${result.error}`)
+          await supabase
+            .from('notification_outbox')
+            .update({ emailed_at: new Date().toISOString() })
+            .in('id', rowIds)
         }
       } catch (e) {
         failed++
