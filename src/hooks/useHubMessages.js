@@ -37,10 +37,34 @@ export function useHubMessages(hubId, moduleId = null) {
 
   useEffect(() => {
     if (!hubId) return
+    let cancelled = false
     setLoading(true)
     setMessages([])
-    fetchMessages()
-  }, [hubId, moduleId, fetchMessages])
+    ;(async () => {
+      // Inline so we can gate state writes (and the error toast) on cancel —
+      // a rapid hub/module switch shouldn't land stale messages or pop a
+      // toast for a fetch the user already navigated away from.
+      let q = supabase
+        .from('hub_messages')
+        .select('*, author:profiles!hub_messages_author_id_fkey(id, full_name, avatar_url), reply_count:hub_messages!parent_id(count)')
+        .is('parent_id', null)
+        .order('pinned', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(30)
+      if (moduleId) q = q.eq('module_id', moduleId)
+      else q = q.eq('hub_id', hubId)
+      const { data, error } = await q
+      if (cancelled) return
+      if (error) { showToast('Failed to load messages', 'error'); setLoading(false); return }
+      const normalized = (data || []).map(m => ({
+        ...m,
+        reply_count: Array.isArray(m.reply_count) ? (m.reply_count[0]?.count ?? 0) : (m.reply_count ?? 0),
+      }))
+      setMessages(normalized)
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [hubId, moduleId])
 
   useEffect(() => {
     if (!hubId) return

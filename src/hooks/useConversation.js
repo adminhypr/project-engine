@@ -18,7 +18,7 @@ export function useConversation(conversationId) {
   const cidRef = useRef(conversationId)
   cidRef.current = conversationId
 
-  const fetchPage = useCallback(async (cursor) => {
+  const fetchPage = useCallback(async (cursor, { silent = false } = {}) => {
     if (!cidRef.current) return []
     let q = supabase
       .from('dm_messages')
@@ -32,20 +32,28 @@ export function useConversation(conversationId) {
       .limit(PAGE_SIZE)
     if (cursor) q = q.lt('created_at', cursor)
     const { data, error } = await q
-    if (error) { showToast('Failed to load messages', 'error'); return [] }
+    if (error) {
+      if (!silent) showToast('Failed to load messages', 'error')
+      return []
+    }
     return (data || []).reverse()
   }, [])
 
   useEffect(() => {
     if (!conversationId) { setMessages([]); setLoading(false); return }
+    let cancelled = false
     setLoading(true)
     setMessages([])
     setHasMore(true)
-    fetchPage().then(rows => {
+    ;(async () => {
+      // Pass silent so a stale fetch's error toast doesn't pop after switch.
+      const rows = await fetchPage(undefined, { silent: true })
+      if (cancelled) return
       setMessages(rows)
       setHasMore(rows.length === PAGE_SIZE)
       setLoading(false)
-    })
+    })()
+    return () => { cancelled = true }
   }, [conversationId, fetchPage])
 
   useEffect(() => {
