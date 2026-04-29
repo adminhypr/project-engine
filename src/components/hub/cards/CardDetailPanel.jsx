@@ -86,6 +86,7 @@ function AssigneePicker({ hubId, assignedIds, onAdd }) {
 export default function CardDetailPanel({ moduleId, hubId }) {
   const [params, setParams] = useSearchParams()
   const cardId = params.get('card')
+  const targetCommentId = params.get('comment')
   const [card, setCard] = useState(null)
   // Notes is a click-to-edit field (Basecamp-style). Display mode renders
   // the saved content; clicking Edit (or the body) opens the editor.
@@ -145,6 +146,35 @@ export default function CardDetailPanel({ moduleId, hubId }) {
       .subscribe()
     return () => supabase.removeChannel(ch)
   }, [cardId])
+
+  // Deep-link to a specific comment (?comment=<id>) — once the card is
+  // loaded and the comments list has rendered, scroll the matching row
+  // into view and flash the `pe-msg-highlight` class. Strip the param
+  // after consuming so realtime refetches don't re-scroll.
+  useEffect(() => {
+    if (!targetCommentId || !card) return
+    let attempts = 0
+    let timer = null
+    function tick() {
+      const el = document.querySelector(`[data-comment-id="${CSS.escape(targetCommentId)}"]`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el.classList.remove('pe-msg-highlight')
+        requestAnimationFrame(() => el.classList.add('pe-msg-highlight'))
+        setTimeout(() => el.classList.remove('pe-msg-highlight'), 1600)
+        const next = new URLSearchParams(params)
+        next.delete('comment')
+        setParams(next, { replace: true })
+        return
+      }
+      if (attempts >= 10) return
+      attempts += 1
+      timer = setTimeout(tick, 150)
+    }
+    tick()
+    return () => { if (timer) clearTimeout(timer) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card, targetCommentId])
 
   function close() {
     const next = new URLSearchParams(params)

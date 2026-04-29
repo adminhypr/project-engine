@@ -70,7 +70,7 @@ export default function CardComments({ cardId, hubId }) {
   return (
     <div className="space-y-3">
       {comments.map(c => (
-        <div key={c.id} className="flex gap-2">
+        <div key={c.id} data-comment-id={c.id} className="flex gap-2">
           <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden shrink-0">
             {c.author?.avatar_url
               ? <img src={c.author.avatar_url} alt="" className="w-full h-full object-cover" />
