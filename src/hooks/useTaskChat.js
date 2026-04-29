@@ -54,7 +54,9 @@ export function useTaskChat(taskId) {
   }, [taskId, profile?.id])
 
   // 2. Fetch root messages whenever the conversation is known.
-  const fetchMessages = useCallback(async () => {
+  // The `silent` opt suppresses the error toast on switch-cancel; resync
+  // and other future callers still surface errors.
+  const fetchMessages = useCallback(async ({ silent = false } = {}) => {
     const cid = cidRef.current
     if (!cid) return
     const { data, error } = await supabase
@@ -65,15 +67,32 @@ export function useTaskChat(taskId) {
       // rule as useConversation; column is provided by migration 037.
       .is('thread_root_id', null)
       .order('created_at', { ascending: true })
-    if (error) { showToast('Failed to load messages', 'error'); return }
+    if (error) { if (!silent) showToast('Failed to load messages', 'error'); return }
     setMessages(data || [])
     setLoading(false)
   }, [])
 
+  // Initial fetch — guarded by `cancelled` so a rapid task switch can't
+  // land stale messages on top of fresh state.
   useEffect(() => {
     if (!conversationId) return
-    fetchMessages()
-  }, [conversationId, fetchMessages])
+    let cancelled = false
+    ;(async () => {
+      const cid = cidRef.current
+      if (!cid) return
+      const { data, error } = await supabase
+        .from('dm_messages')
+        .select(MSG_SELECT)
+        .eq('conversation_id', cid)
+        .is('thread_root_id', null)
+        .order('created_at', { ascending: true })
+      if (cancelled) return
+      if (error) { setLoading(false); return }
+      setMessages(data || [])
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [conversationId])
 
   // 3. Realtime — subscribe to the shared bus (fed by the global
   //    useDmRealtime subscription mounted in AuthProvider). This is the same
