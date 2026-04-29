@@ -187,9 +187,21 @@ Deno.serve(async (req) => {
       console[level](`hub-mention-notify: send failed (status=${result.status}, retryable=${result.retryable}): ${result.error}`)
     }
 
+    // HTTP status:
+    //   • 200 on success OR on permanent failure (we've deliberately given
+    //     up — webhook retry would just re-fail).
+    //   • 500 on transient/retryable failure so the Supabase Database
+    //     Webhook subsystem retries the delivery (helper already retried
+    //     internally, so this is the "Resend is down" path).
+    const httpStatus = result.ok || (!result.retryable) ? 200 : 500
     return new Response(
-      JSON.stringify({ action: 'mention_email_sent', ok: result.ok, send_error: result.ok ? undefined : result.error }),
-      { status: 200, headers: cors }
+      JSON.stringify({
+        action: 'mention_email_sent',
+        ok: result.ok,
+        send_error: result.ok ? undefined : result.error,
+        retryable: result.ok ? undefined : result.retryable,
+      }),
+      { status: httpStatus, headers: cors }
     )
   } catch (err) {
     console.error('Hub mention notify error:', err)
