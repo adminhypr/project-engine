@@ -41,7 +41,7 @@ export const KIND_META = {
   'docs-files':      { icon: FolderOpen,    color: '#0284c7', defaultOpen: false, Comp: DocsFiles },
   'campfire':        { icon: Flame,         color: '#dc2626', defaultOpen: true,  Comp: Campfire },
   'attendance-room': { icon: Users,         color: '#8b5cf6', defaultOpen: true,  Comp: Attendance },
-  'card-table':      { icon: LayoutGrid,    color: '#0d9488', defaultOpen: true,  Comp: CardTable },
+  'card-table':      { icon: LayoutGrid,    color: '#0d9488', defaultOpen: true,  Comp: CardTable, wide: true },
 }
 
 const COLUMN_IDS = ['col-0', 'col-1', 'col-2']

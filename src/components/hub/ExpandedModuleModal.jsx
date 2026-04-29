@@ -45,8 +45,10 @@ export default function ExpandedModuleModal({ module, hubId, kindMeta, onClose }
           animate={{ opacity: 1, y: 0,  scale: 1 }}
           exit={{ opacity: 0, y: 8,    scale: 0.98 }}
           transition={{ duration: 0.18, ease: 'easeOut' }}
-          className="bg-white dark:bg-dark-card rounded-2xl shadow-elevated w-full max-w-3xl my-auto flex flex-col"
-          style={{ minHeight: '60vh', maxHeight: '90vh' }}
+          className={`bg-white dark:bg-dark-card rounded-2xl shadow-elevated w-full ${
+            kindMeta.wide ? 'max-w-[96vw]' : 'max-w-3xl'
+          } my-auto flex flex-col`}
+          style={{ minHeight: kindMeta.wide ? '80vh' : '60vh', maxHeight: '92vh' }}
           onClick={e => e.stopPropagation()}
         >
           {/* Header */}
