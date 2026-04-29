@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useTasks, useTaskActions, useProfiles } from '../hooks/useTasks'
 import { useAuth } from '../hooks/useAuth'
@@ -41,11 +42,26 @@ export default function TeamViewPage() {
   const { tasks, teamTasks, loading, refetch } = useTasks()
   const { deleteTasks, updateTasks, updateTask, deleteTask, assignTask } = useTaskActions()
   const { profiles } = useProfiles()
+  const location = useLocation()
+  const navigate = useNavigate()
 
   const savedView = loadSavedView()
   const [view, setView] = useState(() => savedView.viewMode || localStorage.getItem(VIEW_KEY) || 'list')
   const [filters, setFilters] = useState(() => savedView.filters || {})
-  const [activeTaskId, setActiveTaskId] = useState(null)
+  // Open-task is mirrored to ?task=<id> so it survives navigation away
+  // and back. Without this, switching tabs unmounts /team and the user
+  // loses their open panel — same fix the My Tasks page got on 2026-04-28.
+  const activeTaskId = useMemo(() => {
+    const v = new URLSearchParams(location.search).get('task')
+    return v || null
+  }, [location.search])
+  const setActiveTaskId = useCallback((id) => {
+    const params = new URLSearchParams(location.search)
+    if (id) params.set('task', id)
+    else params.delete('task')
+    const next = params.toString()
+    navigate({ pathname: location.pathname, search: next ? `?${next}` : '' }, { replace: true })
+  }, [location.pathname, location.search, navigate])
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [showBulkDelete, setShowBulkDelete] = useState(false)
   const [quickAddStatus, setQuickAddStatus] = useState(null)
