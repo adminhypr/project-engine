@@ -19,7 +19,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-dark-bg flex items-center justify-center p-4 sm:p-6">
+    <main aria-labelledby="login-heading" className="min-h-screen bg-slate-50 dark:bg-dark-bg flex items-center justify-center p-4 sm:p-6">
 
       <motion.div
         className="bg-white dark:bg-dark-card rounded-3xl shadow-panel border border-slate-200 dark:border-dark-border p-6 sm:p-10 w-full max-w-sm text-center"
@@ -38,7 +38,7 @@ export default function LoginPage() {
           </svg>
         </motion.div>
 
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Hypr Task</h1>
+        <h1 id="login-heading" className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Hypr Task</h1>
         <p className="text-slate-500 dark:text-slate-400 text-sm mb-8 leading-relaxed">
           Task management for your team.<br />Sign in with your company Google account.
         </p>
@@ -104,6 +104,6 @@ export default function LoginPage() {
           </div>
         )}
       </motion.div>
-    </div>
+    </main>
   )
 }

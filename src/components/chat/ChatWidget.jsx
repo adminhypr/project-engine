@@ -4,6 +4,7 @@ import { isExternal } from '../../lib/roleHelpers'
 import { useContactList } from '../../hooks/useContactList'
 import { totalUnread as sumUnread } from '../../lib/dmUnread'
 import { readWidgetState, writeWidgetState } from '../../lib/dmWidgetStorage'
+import { setMutedConvIds, setMaximizedConvId } from '../../lib/dmSoundContext'
 import { supabase } from '../../lib/supabase'
 import ChatLauncher from './ChatLauncher'
 import ChatPanel from './ChatPanel'
@@ -56,6 +57,16 @@ export default function ChatWidget() {
   const { sections, groups, campfires, tasks, conversations, presence, createOrOpen, createGroup, markRead } =
     useContactList(query)
   const total = sumUnread(conversations)
+
+  // Keep the global DM sound-suppression context in sync so useDmRealtime
+  // can skip the ping for muted conversations and the one the user is
+  // actively reading.
+  useEffect(() => {
+    setMutedConvIds(conversations.filter(c => c.muted).map(c => c.id))
+  }, [conversations])
+  useEffect(() => {
+    setMaximizedConvId(maximizedId)
+  }, [maximizedId])
 
   // Add a conversation id to the open list. Shared by DM-open, group-open,
   // and post-create flows so they all behave identically.

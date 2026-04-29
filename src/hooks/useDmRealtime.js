@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { emitMessage } from '../lib/dmEventBus'
 import { playMessageSound } from '../lib/notificationSounds'
+import { shouldPlaySoundFor } from '../lib/dmSoundContext'
 
 export function useDmRealtime(profileId) {
   useEffect(() => {
@@ -22,7 +23,11 @@ export function useDmRealtime(profileId) {
           emitMessage(data.conversation_id, data)
           // Sound for incoming user messages only — not my own sends,
           // not system messages (task assignments etc. use the task sound).
-          if (data.author_id !== profileId && data.kind !== 'system') {
+          // Skip muted conversations and the one the user is actively
+          // reading (maximised + tab visible).
+          if (data.author_id !== profileId
+              && data.kind !== 'system'
+              && shouldPlaySoundFor(data.conversation_id)) {
             playMessageSound()
           }
         }

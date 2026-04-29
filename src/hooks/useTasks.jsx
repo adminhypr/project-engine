@@ -439,10 +439,14 @@ function useTasksImpl() {
     return () => { if (timer) clearTimeout(timer); unsub() }
   }, [profileId])
 
-  // My tasks only (primary + secondary assignee)
+  // My tasks only (primary + secondary assignee). Reads from the enriched
+  // `assignees` array (line 184), which is populated either from the inline
+  // join or from the fallback map. The legacy `task_assignees` field only
+  // survives on the inline-join path, so we'd silently miss secondaries
+  // whenever the join 401s and falls back.
   const myTasks = tasks.filter(t =>
     t.assigned_to === profile?.id ||
-    t.task_assignees?.some(ta => ta.profile_id === profile?.id)
+    t.assignees?.some(a => a.id === profile?.id)
   )
 
   // Team tasks (for manager view) — only teams where user has Manager role

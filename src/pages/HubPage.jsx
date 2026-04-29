@@ -60,7 +60,8 @@ function DroppableColumn({ id, children }) {
 }
 
 function ModuleColumn({
-  columnId, modules, hubId, canManage, onRename, onDelete, onExpand,
+  columnId, modules, hubId, canManage, expandedId,
+  onRename, onDelete, onExpand,
 }) {
   const ids = modules.map(m => m.id)
   return (
@@ -71,6 +72,10 @@ function ModuleColumn({
             const meta = KIND_META[m.kind]
             if (!meta) return null
             const Comp = meta.Comp
+            // Suppress the inline content while the user has this module
+            // expanded in the modal — otherwise both copies mount, double
+            // up RPC calls, and (for Campfire) hold two chat subscriptions.
+            const isExpandedInModal = expandedId === m.id
             return (
               <SortableModuleCard
                 key={m.id}
@@ -83,7 +88,7 @@ function ModuleColumn({
                 onDelete={canManage ? () => onDelete(m) : null}
                 onExpand={() => onExpand(m)}
               >
-                <Comp hubId={hubId} moduleId={m.id} />
+                {isExpandedInModal ? null : <Comp hubId={hubId} moduleId={m.id} />}
               </SortableModuleCard>
             )
           })}
@@ -350,6 +355,7 @@ function HubDashboard({ hubId }) {
                 modules={localColumns[ci] || []}
                 hubId={hubId}
                 canManage={canRenameHub}
+                expandedId={expandedModule?.id || null}
                 onRename={renameModule}
                 onDelete={(m) => setPendingDelete(m)}
                 onExpand={(m) => setExpandedModule(m)}

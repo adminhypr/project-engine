@@ -32,7 +32,7 @@ export function usePresence(hubId, profile) {
       channel.untrack()
       supabase.removeChannel(channel)
     }
-  }, [hubId, profile?.id])
+  }, [hubId, profile?.id, profile?.full_name, profile?.avatar_url])
 
   return { onlineUsers }
 }
