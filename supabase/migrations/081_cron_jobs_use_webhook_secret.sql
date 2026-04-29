@@ -17,32 +17,53 @@
 -- CLI/dashboard), so this migration does NOT touch it. Add the header to
 -- that schedule manually in the Supabase dashboard.
 --
+-- TWO MORE callers also depend on the strict check, neither in pg_cron:
+--   • notify (Database Webhook on tasks INSERT/UPDATE)
+--   • hub-mention-notify (Database Webhook on hub_mentions INSERT)
+-- These webhooks are configured in Supabase dashboard → Database →
+-- Webhooks. They MUST be edited to include the X-Webhook-Secret header
+-- BEFORE the strict-mode functions are deployed, or every webhook fire
+-- will silently 401 (no in-app emails on assignment, no hub-mention
+-- emails). See deploy steps 2.5 + 6 below.
+--
 -- ─────────────────────────────────────────────
--- MANUAL DEPLOY STEPS — order matters or cron jobs will 403:
+-- MANUAL DEPLOY STEPS — order matters or cron + webhook callers will 403:
 --   1. Generate a random secret value (e.g. `openssl rand -hex 32`).
 --   2. In Supabase project: set `WEBHOOK_SHARED_SECRET` function secret
 --      (Project settings → Edge Functions → Secrets) to that value.
+--   2.5. In Supabase dashboard → Database → Webhooks, edit BOTH the
+--        notify webhook AND the hub-mention-notify webhook. Add an
+--        HTTP header: `X-Webhook-Secret: <same value>`. Save each.
+--        (Skip this and assignment / hub-mention emails go silent.)
 --   3. Deploy the four edge functions so the strict check ships with the
---      secret already set (digest, spawn, dm-notify, alerts):
+--      secret already set:
 --        supabase functions deploy notification-digest
 --        supabase functions deploy spawn-recurring-tasks
 --        supabase functions deploy dm-offline-notify
 --        supabase functions deploy send-alerts
+--      (notify + hub-mention-notify will also need redeploy if any code
+--      changed; otherwise the strict-mode change in _shared/security.ts
+--      is picked up on next deploy of any function that imports it.)
 --   4. On the database, set the matching session setting (run as superuser):
 --        alter database postgres set app.webhook_secret = '<same value>';
 --      Note: existing pg_cron job sessions inherit this on their next fire
---      because pg_cron starts a fresh session per run.
+--      because pg_cron starts a fresh session per run. (Database name is
+--      `postgres` on Supabase by default; substitute if your project
+--      renames it.)
 --   5. Apply this migration.
 --   6. (Manual) Add the same X-Webhook-Secret header to the send-alerts
 --      schedule via the Supabase dashboard.
+--   7. Smoke-test: trigger one task assignment, one hub mention, and
+--      wait for one digest tick. Verify email arrives + cron logs show
+--      200 not 403.
 --
 -- If `app.webhook_secret` is NOT set on the database before this migration
--- applies, current_setting('app.webhook_secret', true) returns NULL and
--- jsonb_build_object stores a JSON null. The HTTP request then sends the
--- header as the literal string "null" (or omits it depending on driver),
--- which the strict check rejects. Cron jobs will start 403'ing every tick
--- until step 4 is completed. No data loss — pending outbox / recurrence
--- rows just sit until the next successful tick.
+-- applies, current_setting('app.webhook_secret', true) returns NULL.
+-- jsonb_build_object stores it as JSON null and pg_net serializes the
+-- header value as empty/missing — either way the strict check's length
+-- comparison fails and returns 403. Cron jobs will 403 every tick until
+-- step 4 is completed. No data loss — pending outbox / recurrence rows
+-- just sit until the next successful tick.
 -- ─────────────────────────────────────────────
 
 create extension if not exists pg_cron;

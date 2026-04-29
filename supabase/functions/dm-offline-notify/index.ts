@@ -200,7 +200,7 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: cors })
   }
 
-  // H-1: verify shared secret (soft-fail if env var not set).
+  // H-1: verify shared secret (strict — rejects if WEBHOOK_SHARED_SECRET unset).
   if (!verifyWebhookSecret(req)) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
