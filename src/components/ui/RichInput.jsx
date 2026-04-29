@@ -9,6 +9,10 @@ import { showToast } from './index'
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5 MB
 const MAX_DROPDOWN = 6
+// Script-capable image types — must be rejected client-side AND blocked
+// by the hub-files bucket allow-list (migration 077). SVG can embed
+// <script> that executes when opened via signed URL.
+const BLOCKED_IMAGE_MIME = new Set(['image/svg+xml', 'image/svg'])
 
 export default function RichInput({
   value,
@@ -155,6 +159,10 @@ export default function RichInput({
 
   async function uploadImage(file) {
     if (!file.type.startsWith('image/')) return
+    if (BLOCKED_IMAGE_MIME.has(file.type)) {
+      showToast('SVG images are not allowed (security)', 'error')
+      return
+    }
     if (file.size > MAX_IMAGE_SIZE) {
       showToast(`${file.name || 'Image'} exceeds 5 MB limit`, 'error')
       return
