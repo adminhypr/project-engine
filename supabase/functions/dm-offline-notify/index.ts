@@ -124,13 +124,16 @@ async function flush() {
       </div>`
     ).join('')
 
-    // Task chats deep-link to the task detail panel; DM/group open the app root
-    // (the chat widget handles routing to the conversation from there).
+    // Build a deep link to the conversation, anchored on the most recent
+    // pending message id when available. Falls back to /?dm=<id> when the
+    // row doesn't carry a message id (rare edge case). All conversation
+    // kinds (1:1, group, task) route through the chat widget at the app
+    // root — the previous /my-tasks?task= link broke for non-assignees.
     const conv: any = (first as any).conversation
-    const linkUrl = conv?.kind === 'task' && conv?.task_id
-      ? `${APP_URL}/my-tasks?task=${conv.task_id}`
-      : APP_URL
-    const linkLabel = conv?.kind === 'task' ? 'Open Task' : 'Open Project Engine'
+    const linkUrl = first.message_id
+      ? `${APP_URL}/?dm=${conv.id}&message=${first.message_id}`
+      : `${APP_URL}/?dm=${conv.id}`
+    const linkLabel = 'Open Project Engine'
 
     const html = `
       <div style="font-family:system-ui,sans-serif;max-width:560px;">
