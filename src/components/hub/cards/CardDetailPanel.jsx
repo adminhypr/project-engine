@@ -7,10 +7,11 @@ import { useHubCards } from '../../../hooks/useHubCards'
 import { useHubMembers } from '../../../hooks/useHubMembers'
 import { showToast } from '../../ui/index'
 import RichInput from '../../ui/RichInput'
+import RichContentRenderer from '../../ui/RichContentRenderer'
 import CardSteps from './CardSteps'
 import CardComments from './CardComments'
 import FileAttachments from './FileAttachments'
-import { X, Trash2, Plus, Check } from 'lucide-react'
+import { X, Trash2, Plus, Check, Pencil } from 'lucide-react'
 
 // Inline assignee picker — pattern lifted from
 // `src/components/hub/todos/TodoItemPage.jsx` (toggle button reveals
@@ -86,12 +87,15 @@ export default function CardDetailPanel({ moduleId, hubId }) {
   const [params, setParams] = useSearchParams()
   const cardId = params.get('card')
   const [card, setCard] = useState(null)
-  // Local draft of the notes text. Decoupled from card.notes so realtime
-  // refetches don't clobber what the user is typing. Save is explicit
-  // (button) AND fires on blur as a safety net.
+  // Notes is a click-to-edit field (Basecamp-style). Display mode renders
+  // the saved content; clicking Edit (or the body) opens the editor.
+  // notesDraft buffers the working text while editing; cancel reverts.
+  const [editingNotes, setEditingNotes] = useState(false)
   const [notesDraft, setNotesDraft] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
-  const [notesJustSaved, setNotesJustSaved] = useState(false)
+  // Bumped each time we re-enter edit mode, so the RichInput remounts and
+  // re-seeds its inline-image state from the latest saved card row.
+  const [editKey, setEditKey] = useState(0)
   const notesSubmitRef = useRef(null)
   const { columns } = useHubCardColumns(moduleId)
   const { updateCard, deleteCard, assignCard, unassignCard } = useHubCards(moduleId)
@@ -107,6 +111,7 @@ export default function CardDetailPanel({ moduleId, hubId }) {
       if (alive && data) {
         setCard({ ...data, assignees: (data.assignees || []).map(a => a.profile).filter(Boolean) })
         setNotesDraft(data.notes || '')
+        setEditingNotes(false)
       }
     })()
     return () => { alive = false }
@@ -255,60 +260,107 @@ export default function CardDetailPanel({ moduleId, hubId }) {
             <section className="mb-6">
               <div className="flex items-center justify-between mb-2">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Notes</h4>
-                <div className="flex items-center gap-2">
-                  {notesJustSaved && (
-                    <span className="text-xs text-emerald-500 inline-flex items-center gap-1">
-                      <Check size={12} /> Saved
-                    </span>
-                  )}
+                {!editingNotes && (
                   <button
                     type="button"
-                    onClick={() => notesSubmitRef.current?.()}
-                    disabled={savingNotes}
-                    className="btn btn-primary text-xs px-3 py-1 disabled:opacity-50"
+                    onClick={() => {
+                      setNotesDraft(card.notes || '')
+                      setEditKey(k => k + 1)
+                      setEditingNotes(true)
+                    }}
+                    className="text-xs text-slate-400 hover:text-brand-500 inline-flex items-center gap-1"
+                    title="Edit notes"
                   >
-                    {savingNotes ? 'Saving…' : 'Save'}
+                    <Pencil size={12} /> Edit
                   </button>
-                </div>
+                )}
               </div>
 
-              {/*
-                Single Basecamp-style notes block: one editor, saved inline
-                screenshots seeded into the editor's state via
-                `initialInlineImages`. Save fires from the explicit Save
-                button or as a safety net on blur. `key={card.id}` keeps
-                state in sync across card switches.
-              */}
-              <RichInput
-                key={card.id}
-                value={notesDraft}
-                onChange={setNotesDraft}
-                onBlur={() => notesSubmitRef.current?.()}
-                onSubmit={async ({ content, inlineImages }) => {
-                  const cleanedImages = (inlineImages || []).map(({ preview, ...rest }) => rest)
-                  setSavingNotes(true)
-                  const ok = await updateCard(card.id, {
-                    notes: content,
-                    inline_images: cleanedImages,
-                  })
-                  setSavingNotes(false)
-                  if (ok) {
-                    setCard(prev => prev ? { ...prev, notes: content, inline_images: cleanedImages } : prev)
-                    setNotesJustSaved(true)
-                    setTimeout(() => setNotesJustSaved(false), 1800)
-                  }
-                }}
-                submitRef={notesSubmitRef}
-                initialInlineImages={card.inline_images || []}
-                clearOnSubmit={false}
-                hubId={hubId}
-                enableMentions={false}
-                enableImages
-                placeholder="Add notes…"
-                rows={8}
-              />
+              {editingNotes ? (
+                /* EDIT MODE — RichInput + Save / Cancel */
+                <>
+                  <RichInput
+                    key={`notes-edit-${card.id}-${editKey}`}
+                    value={notesDraft}
+                    onChange={setNotesDraft}
+                    onSubmit={async ({ content, inlineImages }) => {
+                      const cleanedImages = (inlineImages || []).map(({ preview, ...rest }) => rest)
+                      setSavingNotes(true)
+                      const ok = await updateCard(card.id, {
+                        notes: content,
+                        inline_images: cleanedImages,
+                      })
+                      setSavingNotes(false)
+                      if (ok) {
+                        setCard(prev => prev ? { ...prev, notes: content, inline_images: cleanedImages } : prev)
+                        setEditingNotes(false)
+                      }
+                    }}
+                    submitRef={notesSubmitRef}
+                    initialInlineImages={card.inline_images || []}
+                    clearOnSubmit={false}
+                    hubId={hubId}
+                    enableMentions={false}
+                    enableImages
+                    placeholder="Add notes…"
+                    rows={10}
+                  />
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => notesSubmitRef.current?.()}
+                      disabled={savingNotes}
+                      className="btn btn-primary text-xs px-3 py-1 disabled:opacity-50"
+                    >
+                      {savingNotes ? 'Saving…' : 'Save'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNotesDraft(card.notes || '')
+                        setEditingNotes(false)
+                      }}
+                      disabled={savingNotes}
+                      className="btn btn-ghost text-xs px-3 py-1 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                /* DISPLAY MODE — rendered notes; click to edit. */
+                (card.notes || (card.inline_images || []).length > 0) ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNotesDraft(card.notes || '')
+                      setEditKey(k => k + 1)
+                      setEditingNotes(true)
+                    }}
+                    title="Click to edit notes"
+                    className="block w-full text-left rounded-lg p-3 hover:bg-slate-50 dark:hover:bg-dark-hover transition-colors cursor-text"
+                  >
+                    <RichContentRenderer
+                      content={card.notes || ''}
+                      inlineImages={card.inline_images || []}
+                    />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNotesDraft('')
+                      setEditKey(k => k + 1)
+                      setEditingNotes(true)
+                    }}
+                    className="block w-full text-left p-3 rounded-lg border border-dashed border-slate-200 dark:border-dark-border text-sm text-slate-400 hover:border-brand-300 hover:text-brand-500 transition-colors"
+                  >
+                    Add notes…
+                  </button>
+                )
+              )}
 
-              <div className="mt-2">
+              <div className="mt-3">
                 <FileAttachments
                   attachments={card.attachments || []}
                   cardId={card.id}
