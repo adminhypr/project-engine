@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ModalWrapper } from '../ui/animations'
-import { MessageSquare, CheckSquare, Flame, FolderOpen, Users, X as XIcon } from 'lucide-react'
+import { MessageSquare, CheckSquare, Flame, FolderOpen, Users, LayoutGrid, X as XIcon } from 'lucide-react'
 import { HUB_MODULE_KINDS, HUB_MODULE_DEFAULT_TITLE } from '../../hooks/useHubModules'
 
 const KIND_META = {
@@ -9,6 +9,7 @@ const KIND_META = {
   'campfire':        { label: 'Campfire',        icon: Flame,         color: '#dc2626', desc: 'Real-time chat for quick conversation' },
   'docs-files':      { label: 'Docs & Files',    icon: FolderOpen,    color: '#0284c7', desc: 'Shared folders + file uploads' },
   'to-dos':          { label: 'To-Dos',          icon: CheckSquare,   color: '#8b5cf6', desc: 'Lists of trackable tasks' },
+  'card-table':      { label: 'Card Table',      icon: LayoutGrid,    color: '#0d9488', desc: 'Basecamp-style kanban: columns, cards, assignees' },
 }
 
 export default function AddModuleModal({ isOpen, onClose, onSubmit }) {
