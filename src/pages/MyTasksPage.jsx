@@ -114,14 +114,17 @@ export default function MyTasksPage() {
   useEffect(() => {
     const targetCommentId = new URLSearchParams(location.search).get('comment')
     if (!targetCommentId || !activeTaskId) return
+    let cancelled = false
+    let timer = null
     let attempts = 0
     function tick() {
+      if (cancelled) return
       const el = document.querySelector(`[data-comment-id="${CSS.escape(targetCommentId)}"]`)
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' })
         el.classList.remove('pe-msg-highlight')
         requestAnimationFrame(() => el.classList.add('pe-msg-highlight'))
-        setTimeout(() => el.classList.remove('pe-msg-highlight'), 1600)
+        timer = setTimeout(() => el.classList.remove('pe-msg-highlight'), 1600)
         // Strip ?comment from the URL once consumed.
         const params = new URLSearchParams(location.search)
         params.delete('comment')
@@ -134,9 +137,13 @@ export default function MyTasksPage() {
       }
       if (attempts >= 10) return
       attempts += 1
-      setTimeout(tick, 150)
+      timer = setTimeout(tick, 150)
     }
     tick()
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
     // Re-run when the task panel opens or location changes.
   }, [activeTaskId, location.search, location.pathname, navigate])
 

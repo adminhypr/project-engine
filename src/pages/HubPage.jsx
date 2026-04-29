@@ -136,7 +136,7 @@ function HubDashboard({ hubId }) {
   const targetMessageId = params.get('message')
 
   // Deep-link to a specific message-board entry (?message=<id>) — fired
-  // by hub-mention emails. Polls for the data-message-id anchor on the
+  // by hub-mention emails. Polls for the data-hub-message-id anchor on the
   // rendered MessageBoard, scrolls + flashes via `pe-msg-highlight`, and
   // strips the param after consuming so back/forward stays clean.
   useEffect(() => {
@@ -144,7 +144,7 @@ function HubDashboard({ hubId }) {
     let attempts = 0
     let timer = null
     function tick() {
-      const el = document.querySelector(`[data-message-id="${CSS.escape(targetMessageId)}"]`)
+      const el = document.querySelector(`[data-hub-message-id="${CSS.escape(targetMessageId)}"]`)
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' })
         el.classList.remove('pe-msg-highlight')

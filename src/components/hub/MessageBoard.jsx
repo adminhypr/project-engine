@@ -45,10 +45,12 @@ function MessageBoard({ hubId, moduleId }) {
 
       <div className="space-y-2">
         {messages.map(msg => (
-          // data-message-id anchors deep-link scroll-to from
+          // data-hub-message-id anchors deep-link scroll-to from
           // /hub/<id>?message=<id> emails. Top-level only — replies
           // live inside MessageThread and don't get the attribute.
-          <div key={msg.id} data-message-id={msg.id}>
+          // Scoped name avoids collision with DmChatMessage's
+          // data-message-id which is used by the chat widget.
+          <div key={msg.id} data-hub-message-id={msg.id}>
             <MessageThread
               message={msg}
               hubId={hubId}
