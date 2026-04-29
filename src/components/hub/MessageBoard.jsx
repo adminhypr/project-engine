@@ -45,17 +45,21 @@ function MessageBoard({ hubId, moduleId }) {
 
       <div className="space-y-2">
         {messages.map(msg => (
-          <MessageThread
-            key={msg.id}
-            message={msg}
-            hubId={hubId}
-            isOwn={msg.author_id === profile?.id}
-            isManager={isManager}
-            onReply={replyToMessage}
-            onDelete={deleteMessage}
-            onTogglePin={togglePin}
-            getReplies={getReplies}
-          />
+          // data-message-id anchors deep-link scroll-to from
+          // /hub/<id>?message=<id> emails. Top-level only — replies
+          // live inside MessageThread and don't get the attribute.
+          <div key={msg.id} data-message-id={msg.id}>
+            <MessageThread
+              message={msg}
+              hubId={hubId}
+              isOwn={msg.author_id === profile?.id}
+              isManager={isManager}
+              onReply={replyToMessage}
+              onDelete={deleteMessage}
+              onTogglePin={togglePin}
+              getReplies={getReplies}
+            />
+          </div>
         ))}
       </div>
     </div>

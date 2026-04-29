@@ -132,6 +132,37 @@ function HubDashboard({ hubId }) {
     resetLayout, hasCustomLayout, loading: modulesLoading,
   } = useHubModules(hubId)
   const navigate = useNavigate()
+  const [params, setSearchParams] = useSearchParams()
+  const targetMessageId = params.get('message')
+
+  // Deep-link to a specific message-board entry (?message=<id>) — fired
+  // by hub-mention emails. Polls for the data-message-id anchor on the
+  // rendered MessageBoard, scrolls + flashes via `pe-msg-highlight`, and
+  // strips the param after consuming so back/forward stays clean.
+  useEffect(() => {
+    if (!targetMessageId) return
+    let attempts = 0
+    let timer = null
+    function tick() {
+      const el = document.querySelector(`[data-message-id="${CSS.escape(targetMessageId)}"]`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el.classList.remove('pe-msg-highlight')
+        requestAnimationFrame(() => el.classList.add('pe-msg-highlight'))
+        setTimeout(() => el.classList.remove('pe-msg-highlight'), 1600)
+        const next = new URLSearchParams(params)
+        next.delete('message')
+        setSearchParams(next, { replace: true })
+        return
+      }
+      if (attempts >= 12) return
+      attempts += 1
+      timer = setTimeout(tick, 150)
+    }
+    tick()
+    return () => { if (timer) clearTimeout(timer) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetMessageId])
   const [showMembers, setShowMembers] = useState(false)
   const [activeId, setActiveId] = useState(null)
   const [showAddModule, setShowAddModule] = useState(false)
