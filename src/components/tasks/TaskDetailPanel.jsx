@@ -846,7 +846,7 @@ export default function TaskDetailPanel({ task, tasks = [], onClose, onUpdated }
           ) : (
             <div className="space-y-3">
               {comments.map(c => (
-                <div key={c.id} className="bg-slate-50 dark:bg-dark-bg rounded-xl p-3 border border-slate-100 dark:border-dark-border">
+                <div key={c.id} data-comment-id={c.id} className="bg-slate-50 dark:bg-dark-bg rounded-xl p-3 border border-slate-100 dark:border-dark-border">
                   <div className="flex items-center gap-2 mb-1.5">
                     {c.author?.avatar_url
                       ? <img src={c.author.avatar_url} className="w-5 h-5 rounded-full" alt="" />
