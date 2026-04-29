@@ -8,6 +8,8 @@
 
 **Tech Stack:** Supabase (Postgres + RLS + Realtime), React 18 + Vite, Tailwind, Framer Motion, `@dnd-kit/core` + `/sortable` (already in deps), TipTap-based `RichInput` (already in repo), Vitest for pure-helper tests.
 
+**Migrations:** This feature ships migrations **069** (initial schema), **070** (post-execution fixes), and **071** (`get_card_comment_counts` RPC — PostgREST aggregates are disabled on this Supabase project, so per-card comment counts go through a SECURITY INVOKER RPC instead).
+
 **Open assumptions** (flag at start of execution if any are wrong):
 - Cards have a `due_date` (visible in Basecamp screenshots).
 - Cards do **not** have a separate `completed_at` — the "Done" column IS the completion signal. `hub_card_steps` items have their own per-step `completed_at`. (If the team wants both, this is a small Task 1 schema delta — add `completed_at` + `completed_by` to `hub_cards`.)
@@ -828,7 +830,7 @@ Reads cards (with assignees + comment count) for a module. CRUD: add, update, mo
 Create `src/hooks/useHubCards.js`:
 
 ```javascript
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { showToast } from '../components/ui/index'
@@ -852,16 +854,18 @@ export function useHubCards(moduleId) {
     if (!moduleRef.current) return
     const [cardsRes, countsRes] = await Promise.all([
       supabase.from('hub_cards').select(CARD_SELECT).eq('module_id', moduleRef.current),
-      // Per-card comment count via PostgREST aggregate. Cheap because
-      // comments has an index on card_id (added in migration 069).
-      supabase.from('comments').select('card_id, id.count()', { head: false })
-        .not('card_id', 'is', null),
+      // Per-card comment counts via SECURITY INVOKER RPC (migration 071).
+      // PostgREST aggregates are disabled on this Supabase project, and a
+      // per-card HEAD-count loop would be N+1 — RPC is the cheap path.
+      supabase.rpc('get_card_comment_counts', { p_module_id: moduleRef.current }),
     ])
     if (cardsRes.error) { console.warn('hub_cards fetch failed:', cardsRes.error.message); setLoading(false); return }
 
     const countMap = new Map()
-    if (!countsRes.error && countsRes.data) {
-      for (const r of countsRes.data) countMap.set(r.card_id, Number(r.count) || 0)
+    if (countsRes.error) {
+      console.warn('get_card_comment_counts failed:', countsRes.error.message)
+    } else if (countsRes.data) {
+      for (const r of countsRes.data) countMap.set(r.card_id, Number(r.comment_count) || 0)
     }
 
     const enriched = (cardsRes.data || []).map(c => ({
@@ -929,12 +933,24 @@ export function useHubCards(moduleId) {
   }, [])
 
   const moveCard = useCallback(async (cardId, { columnId, position }) => {
+    // Optimistic: shift the card locally so the UI reflects the drop
+    // immediately instead of waiting for the realtime roundtrip.
+    setCards(prev => {
+      const next = prev.map(c =>
+        c.id === cardId ? { ...c, column_id: columnId, position } : c
+      )
+      return sortCards(next)
+    })
     const { error } = await supabase.from('hub_cards')
       .update({ column_id: columnId, position })
       .eq('id', cardId)
-    if (error) { showToast(error.message || 'Failed to move card', 'error'); return false }
+    if (error) {
+      showToast(error.message || 'Failed to move card', 'error')
+      fetch() // revert to authoritative state
+      return false
+    }
     return true
-  }, [])
+  }, [fetch])
 
   const deleteCard = useCallback(async (cardId) => {
     const { error } = await supabase.from('hub_cards').delete().eq('id', cardId)
