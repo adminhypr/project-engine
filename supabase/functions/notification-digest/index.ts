@@ -245,7 +245,10 @@ Deno.serve(async (req) => {
 
     // 3) Reset abandoned claims left by a crashed prior run (older than
     //    10 min — see migration 078).
-    await supabase.rpc('reset_stale_outbox_claims')
+    const { error: resetErr } = await supabase.rpc('reset_stale_outbox_claims')
+    if (resetErr) {
+      console.warn('digest: reset_stale_outbox_claims failed:', resetErr.message)
+    }
 
     // 4) Atomically claim the rows we plan to email. A second concurrent
     //    digest run will see these rows as already claimed and skip them,
@@ -348,20 +351,25 @@ Deno.serve(async (req) => {
         } else {
           failed++
           console.warn(`Failed to send digest to ${job.prof.email}; releasing claim for retry`)
-          await supabase
+          const { error: relErr } = await supabase
             .from('notification_outbox')
             .update({ claimed_at: null })
             .in('id', rowIds)
+          if (relErr) {
+            console.warn(`digest: claim-release failed for ${job.prof.email} (rows will recover via stale-claim reset on next tick):`, relErr.message)
+          }
         }
       } catch (e) {
         failed++
         console.error('digest send threw:', e)
         // Best-effort claim release so the row isn't stuck for 10 min.
-        await supabase
+        const { error: relErr } = await supabase
           .from('notification_outbox')
           .update({ claimed_at: null })
           .in('id', rowIds)
-          .then(() => {}, () => {})
+        if (relErr) {
+          console.warn(`digest: post-throw claim-release failed (rows will recover via stale-claim reset):`, relErr.message)
+        }
       }
     }
 
