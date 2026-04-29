@@ -108,6 +108,38 @@ export default function MyTasksPage() {
     }
   }, [location.state?.openTaskId, location.pathname, location.search, activeTaskId, tasks, refetch, setActiveTaskId, navigate])
 
+  // Deep-link to a specific comment — strip the param after consuming so
+  // realtime refetches don't re-scroll. Pattern matches the chat widget's
+  // `pe-msg-highlight` flash.
+  useEffect(() => {
+    const targetCommentId = new URLSearchParams(location.search).get('comment')
+    if (!targetCommentId || !activeTaskId) return
+    let attempts = 0
+    function tick() {
+      const el = document.querySelector(`[data-comment-id="${CSS.escape(targetCommentId)}"]`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el.classList.remove('pe-msg-highlight')
+        requestAnimationFrame(() => el.classList.add('pe-msg-highlight'))
+        setTimeout(() => el.classList.remove('pe-msg-highlight'), 1600)
+        // Strip ?comment from the URL once consumed.
+        const params = new URLSearchParams(location.search)
+        params.delete('comment')
+        const qs = params.toString()
+        navigate(
+          { pathname: location.pathname, search: qs ? `?${qs}` : '' },
+          { replace: true }
+        )
+        return
+      }
+      if (attempts >= 10) return
+      attempts += 1
+      setTimeout(tick, 150)
+    }
+    tick()
+    // Re-run when the task panel opens or location changes.
+  }, [activeTaskId, location.search, location.pathname, navigate])
+
   // Listen for the chat widget's "Open task →" link. The header dispatches a
   // window-level open-task CustomEvent with { taskId }; we set activeTaskId so
   // the detail panel opens on top of the current page.
