@@ -301,31 +301,59 @@ export function AuthProvider({ children }) {
 
   useDmRealtime(profile?.id)
 
-  // Presence heartbeat — bumps profiles.last_seen_at so the notification
-  // digest knows the user is "online". Fires immediately on mount, then
-  // every 60s while the tab is visible. Pauses when hidden so we don't
-  // burn DB updates on idle background tabs.
+  // Presence heartbeat — bumps profile_presence.last_seen_at so the
+  // notification digest knows the user is "online". Fires immediately on
+  // mount, then every 60s while the tab is visible. Pauses when hidden so
+  // we don't burn DB updates on idle background tabs.
+  //
+  // Migration 084 split the heartbeat off `profiles` onto its own
+  // `profile_presence` table written via the `heartbeat()` SECURITY DEFINER
+  // RPC. This avoids re-firing the sync_effective_role + 042 self-update
+  // guard triggers ~16x/sec at 1000 active users.
   useEffect(() => {
     if (!profile?.id) return
     let timer = null
     const bump = async () => {
       if (document.visibilityState !== 'visible') return
       try {
-        await supabase
-          .from('profiles')
-          .update({ last_seen_at: new Date().toISOString() })
-          .eq('id', profile.id)
+        await supabase.rpc('heartbeat')
       } catch (e) {
-        console.warn('last_seen_at heartbeat failed:', e)
+        console.warn('heartbeat rpc failed:', e)
       }
     }
     bump()
     timer = setInterval(bump, 60000)
     const onVisibility = () => { if (document.visibilityState === 'visible') bump() }
     document.addEventListener('visibilitychange', onVisibility)
+
+    // Best-effort final mark on tab close. `pagehide` fires reliably across
+    // browsers (more than `beforeunload`/`unload`), and `sendBeacon` is the
+    // only request type the browser guarantees to flush during teardown.
+    //
+    // Limitation: sendBeacon ships the request from the browser without any
+    // headers we attach via fetch interceptors. To authenticate with
+    // PostgREST we have to inline the user's JWT into the URL via the
+    // `apikey` param plus a `Bearer` we can't actually set — meaning this
+    // call lands as the anon role at PostgREST. That's why we no-op
+    // gracefully if it fails: the worst case is the user simply doesn't get
+    // a final bump, and the next time they open the app the regular
+    // interval picks up. The 5-min digest "offline" window already tolerates
+    // a missing final tick.
+    const onPageHide = () => {
+      try {
+        if (!navigator.sendBeacon) return
+        const url = `${SUPABASE_URL}/rest/v1/rpc/heartbeat?apikey=${encodeURIComponent(SUPABASE_KEY)}`
+        navigator.sendBeacon(url, new Blob(['{}'], { type: 'application/json' }))
+      } catch {
+        // Swallow — best-effort only.
+      }
+    }
+    window.addEventListener('pagehide', onPageHide)
+
     return () => {
       if (timer) clearInterval(timer)
       document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('pagehide', onPageHide)
     }
   }, [profile?.id])
 

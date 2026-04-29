@@ -3,7 +3,9 @@
 // Cron-driven (every 15 minutes). Sends ONE summary email per offline user
 // covering all events queued in `notification_outbox` since their last digest.
 //
-// "Offline" = `profiles.last_seen_at < now() - interval '5 minutes'`.
+// "Offline" = `profile_presence.last_seen_at < now() - interval '5 minutes'`.
+// (Migration 084 moved presence off `profiles.last_seen_at` onto its own
+// table to avoid re-firing heavy triggers on every 60s heartbeat.)
 // "Per user" = a single grouped email instead of N per-event blasts.
 //
 // Users with `email_digest_enabled = false` are skipped entirely (any
@@ -218,13 +220,33 @@ Deno.serve(async (req) => {
     const allRecipientIds = Array.from(new Set(pending.map((r: OutboxRow) => r.recipient_id)))
     const { data: profiles, error: profErr } = await supabase
       .from('profiles')
-      .select('id, email, full_name, email_digest_enabled, last_seen_at')
+      .select('id, email, full_name, email_digest_enabled')
       .in('id', allRecipientIds)
     if (profErr) {
       return new Response(JSON.stringify({ error: profErr.message }), { status: 500, headers: cors })
     }
+
+    // Pull presence from the dedicated table (migration 084). Merged onto the
+    // profile rows below so the existing offline-skip logic keeps working
+    // unchanged. Missing rows in profile_presence simply mean "never sent a
+    // heartbeat" → treat as offline (last_seen_at = null).
+    const { data: presence, error: presErr } = await supabase
+      .from('profile_presence')
+      .select('profile_id, last_seen_at')
+      .in('profile_id', allRecipientIds)
+    if (presErr) {
+      console.warn('digest: profile_presence fetch failed:', presErr.message)
+    }
+    const lastSeenById = new Map<string, string>(
+      ((presence as Array<{ profile_id: string; last_seen_at: string }>) || [])
+        .map((r) => [r.profile_id, r.last_seen_at])
+    )
+
     const profileById = new Map<string, RecipientProfile>(
-      (profiles as RecipientProfile[]).map((p) => [p.id, p])
+      (profiles as Omit<RecipientProfile, 'last_seen_at'>[]).map((p) => [
+        p.id,
+        { ...p, last_seen_at: lastSeenById.get(p.id) ?? null },
+      ])
     )
 
     // 3) Reset abandoned claims left by a crashed prior run (older than
