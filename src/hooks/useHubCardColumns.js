@@ -8,6 +8,8 @@ const DEFAULT_COLORS = ['#64748b', '#0ea5e9', '#f59e0b', '#10b981', '#ef4444', '
 export function useHubCardColumns(moduleId) {
   const { profile } = useAuth()
   const [columns, setColumns] = useState([])
+  const columnsRef = useRef(columns)
+  columnsRef.current = columns
   const [loading, setLoading] = useState(true)
   const moduleRef = useRef(moduleId)
   moduleRef.current = moduleId
@@ -43,17 +45,20 @@ export function useHubCardColumns(moduleId) {
   const addColumn = useCallback(async (name) => {
     const trimmed = (name || '').trim()
     if (!trimmed || !moduleRef.current || !profile?.id) return null
-    const nextPos = columns.length
-      ? Math.max(...columns.map(c => c.position ?? 0)) + 1
+    // Read columns from ref so this callback's identity doesn't churn on
+    // every realtime tick (each fetch produces a new array reference).
+    const cur = columnsRef.current
+    const nextPos = cur.length
+      ? Math.max(...cur.map(c => c.position ?? 0)) + 1
       : 0
-    const color = DEFAULT_COLORS[columns.length % DEFAULT_COLORS.length]
+    const color = DEFAULT_COLORS[cur.length % DEFAULT_COLORS.length]
     const { data, error } = await supabase
       .from('hub_card_columns')
       .insert({ module_id: moduleRef.current, name: trimmed, color, position: nextPos })
       .select().single()
     if (error) { showToast(error.message || 'Failed to add column', 'error'); return null }
     return data
-  }, [columns, profile?.id])
+  }, [profile?.id])
 
   const renameColumn = useCallback(async (columnId, name) => {
     const trimmed = (name || '').trim()
