@@ -36,7 +36,12 @@ create policy "profile_teams_update" on public.profile_teams
     exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'Admin')
     or (
       -- Manager / TeamLeader on this team can update OTHER users' rows on this team.
+      -- Cannot target their own row, and cannot target an Admin (no demoting Admins).
       profile_id <> auth.uid()
+      and not exists (
+        select 1 from public.profiles tp
+         where tp.id = profile_teams.profile_id and tp.role = 'Admin'
+      )
       and exists (
         select 1 from public.profile_teams self_pt
          where self_pt.profile_id = auth.uid()
@@ -55,7 +60,12 @@ create policy "profile_teams_delete" on public.profile_teams
   for delete using (
     exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'Admin')
     or (
+      -- Same constraints as UPDATE: cannot self-delete, cannot kick an Admin.
       profile_id <> auth.uid()
+      and not exists (
+        select 1 from public.profiles tp
+         where tp.id = profile_teams.profile_id and tp.role = 'Admin'
+      )
       and exists (
         select 1 from public.profile_teams self_pt
          where self_pt.profile_id = auth.uid()
