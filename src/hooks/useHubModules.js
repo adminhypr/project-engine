@@ -27,7 +27,12 @@ export function groupModulesByColumn(modules) {
 }
 
 // All hub modules for a hub, with realtime updates and CRUD.
-// RLS: every hub member can SELECT; only owner/admin can write.
+//
+// Layout is layered: hub_modules carries the canonical "house" layout
+// (admin-curated). Per-user overrides live in hub_module_user_layout —
+// when present they win for column_index + position; otherwise canonical
+// applies. Drag-reorder writes only to overrides via saveLayout.
+// Admin add/rename/delete still writes to hub_modules (canonical).
 export function useHubModules(hubId) {
   const { profile } = useAuth()
   const [modules, setModules] = useState([])
@@ -36,40 +41,64 @@ export function useHubModules(hubId) {
   hubRef.current = hubId
 
   const fetchModules = useCallback(async () => {
-    if (!hubRef.current) return
-    const { data, error } = await supabase
-      .from('hub_modules')
-      .select('*')
-      .eq('hub_id', hubRef.current)
-      .order('column_index')
-      .order('position')
-    if (error) {
-      console.warn('hub_modules fetch failed:', error.message)
+    if (!hubRef.current || !profile?.id) return
+    const [canonRes, overrideRes] = await Promise.all([
+      supabase
+        .from('hub_modules')
+        .select('*')
+        .eq('hub_id', hubRef.current),
+      supabase
+        .from('hub_module_user_layout')
+        .select('module_id, column_index, position')
+        .eq('user_id', profile.id),
+    ])
+    if (canonRes.error) {
+      console.warn('hub_modules fetch failed:', canonRes.error.message)
       setLoading(false)
       return
     }
-    setModules(data || [])
+    if (overrideRes.error) {
+      console.warn('hub_module_user_layout fetch failed:', overrideRes.error.message)
+    }
+
+    const overrideMap = new Map((overrideRes.data || []).map(o => [o.module_id, o]))
+    const merged = (canonRes.data || []).map(m => {
+      const o = overrideMap.get(m.id)
+      return o ? { ...m, column_index: o.column_index, position: o.position, _override: true } : m
+    })
+    // id break-tie keeps order stable when canonical + override positions collide
+    merged.sort((a, b) =>
+      ((a.column_index ?? 0) - (b.column_index ?? 0)) ||
+      ((a.position ?? 0) - (b.position ?? 0)) ||
+      a.id.localeCompare(b.id)
+    )
+    setModules(merged)
     setLoading(false)
-  }, [])
+  }, [profile?.id])
 
   useEffect(() => {
-    if (!hubId) { setModules([]); setLoading(false); return }
+    if (!hubId || !profile?.id) { setModules([]); setLoading(false); return }
     setLoading(true)
     fetchModules()
-  }, [hubId, fetchModules])
+  }, [hubId, profile?.id, fetchModules])
 
-  // Realtime: any module change in this hub triggers a refetch.
+  // Realtime: refetch on canonical changes (hub-scoped) and on override
+  // changes for this user (across tabs / devices).
   useEffect(() => {
-    if (!hubId) return
+    if (!hubId || !profile?.id) return
     const channel = supabase
-      .channel(`hub-modules-${hubId}`)
+      .channel(`hub-modules-${hubId}-${profile.id}`)
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'hub_modules', filter: `hub_id=eq.${hubId}` },
         () => fetchModules()
       )
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'hub_module_user_layout', filter: `user_id=eq.${profile.id}` },
+        () => fetchModules()
+      )
       .subscribe()
     return () => supabase.removeChannel(channel)
-  }, [hubId, fetchModules])
+  }, [hubId, profile?.id, fetchModules])
 
   const addModule = useCallback(async (kind, title, columnIndex = 0) => {
     if (!hubRef.current || !profile?.id) return null
@@ -118,49 +147,74 @@ export function useHubModules(hubId) {
     return true
   }, [])
 
-  // Persist a new layout: array of arrays per column. Each element is a
-  // module object whose id determines the row to update. Optimistic update +
-  // single batched RPC-less write (server-side enforcement via RLS).
+  // Persist a new layout: array of arrays per column. Writes only to the
+  // caller's hub_module_user_layout rows — canonical hub_modules is left
+  // alone. Upserts every visible module so once a user has dragged once,
+  // their override row set fully captures their view; new modules added
+  // by an admin afterwards have no override and fall back to canonical.
   const saveLayout = useCallback(async (columns) => {
-    const updates = []
+    if (!profile?.id) return
+    const rows = []
     columns.forEach((col, ci) => {
       col.forEach((m, pi) => {
-        if (m.column_index !== ci || m.position !== pi) {
-          updates.push({ id: m.id, column_index: ci, position: pi })
-        }
+        rows.push({
+          user_id: profile.id,
+          module_id: m.id,
+          column_index: ci,
+          position: pi,
+        })
       })
     })
-    if (updates.length === 0) return
-    // Optimistic: flatten back into a fresh modules array
-    const flat = columns.flatMap((col, ci) => col.map((m, pi) => ({ ...m, column_index: ci, position: pi })))
+    if (rows.length === 0) return
+
+    // Optimistic flatten — every shown module is now considered overridden.
+    const flat = columns.flatMap((col, ci) =>
+      col.map((m, pi) => ({ ...m, column_index: ci, position: pi, _override: true }))
+    )
     setModules(flat)
 
-    // Run updates in parallel. Postgres-level concurrent UPDATEs of distinct
-    // rows are fine; on any failure we refetch to recover authoritative state.
-    const results = await Promise.all(
-      updates.map(u =>
-        supabase
-          .from('hub_modules')
-          .update({ column_index: u.column_index, position: u.position })
-          .eq('id', u.id)
-      )
-    )
-    if (results.some(r => r.error)) {
+    const { error } = await supabase
+      .from('hub_module_user_layout')
+      .upsert(rows, { onConflict: 'user_id,module_id' })
+    if (error) {
       showToast('Failed to save layout', 'error')
       fetchModules()
     }
-  }, [fetchModules])
+  }, [profile?.id, fetchModules])
+
+  // Drop all of this user's override rows for modules in this hub. After
+  // the realtime tick (or the inline refetch fallback) the view falls
+  // back to the canonical hub_modules layout.
+  const resetLayout = useCallback(async () => {
+    if (!profile?.id || !hubRef.current) return false
+    const moduleIds = modules.map(m => m.id)
+    if (moduleIds.length === 0) return true
+    const { error } = await supabase
+      .from('hub_module_user_layout')
+      .delete()
+      .eq('user_id', profile.id)
+      .in('module_id', moduleIds)
+    if (error) {
+      showToast(error.message || 'Failed to reset layout', 'error')
+      return false
+    }
+    fetchModules()
+    return true
+  }, [profile?.id, modules, fetchModules])
 
   const columns = useMemo(() => groupModulesByColumn(modules), [modules])
+  const hasCustomLayout = useMemo(() => modules.some(m => m._override), [modules])
 
   return {
     modules,
     columns,
     loading,
+    hasCustomLayout,
     addModule,
     renameModule,
     deleteModule,
     saveLayout,
+    resetLayout,
     refetch: fetchModules,
   }
 }

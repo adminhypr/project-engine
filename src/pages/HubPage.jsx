@@ -25,7 +25,7 @@ import AddModuleModal from '../components/hub/AddModuleModal'
 import ExpandedModuleModal from '../components/hub/ExpandedModuleModal'
 import {
   Users, Flame, MessageSquare, FolderOpen, ArrowLeft, CheckSquare,
-  Pencil, Check, X as XIcon, Plus,
+  Pencil, Check, X as XIcon, Plus, RotateCcw,
 } from 'lucide-react'
 
 const DEFAULT_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4']
@@ -118,7 +118,10 @@ function moduleCollisionDetection(args) {
 function HubDashboard({ hubId }) {
   const { hubs, loading, updateHub } = useHubs()
   const { isAdmin } = useAuth()
-  const { columns, addModule, renameModule, deleteModule, saveLayout, loading: modulesLoading } = useHubModules(hubId)
+  const {
+    columns, addModule, renameModule, deleteModule, saveLayout,
+    resetLayout, hasCustomLayout, loading: modulesLoading,
+  } = useHubModules(hubId)
   const navigate = useNavigate()
   const [showMembers, setShowMembers] = useState(false)
   const [activeId, setActiveId] = useState(null)
@@ -368,16 +371,29 @@ function HubDashboard({ hubId }) {
           </DragOverlay>
         </DndContext>
 
-        {canRenameHub && (
-          <div className="mt-4 flex justify-center">
-            <button
-              type="button"
-              onClick={() => setShowAddModule(true)}
-              className="btn btn-secondary text-sm px-4 inline-flex items-center gap-1.5"
-            >
-              <Plus size={14} />
-              Add module
-            </button>
+        {(canRenameHub || hasCustomLayout) && (
+          <div className="mt-4 flex justify-center gap-2">
+            {canRenameHub && (
+              <button
+                type="button"
+                onClick={() => setShowAddModule(true)}
+                className="btn btn-secondary text-sm px-4 inline-flex items-center gap-1.5"
+              >
+                <Plus size={14} />
+                Add module
+              </button>
+            )}
+            {hasCustomLayout && (
+              <button
+                type="button"
+                onClick={resetLayout}
+                className="btn btn-ghost text-sm px-4 inline-flex items-center gap-1.5 text-slate-500 dark:text-slate-400"
+                title="Restore the hub's default module layout for me"
+              >
+                <RotateCcw size={13} />
+                Reset layout
+              </button>
+            )}
           </div>
         )}
       </div>
