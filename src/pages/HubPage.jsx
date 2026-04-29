@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 import {
   DndContext, DragOverlay, closestCorners, pointerWithin, rectIntersection,
   PointerSensor, TouchSensor, useSensor, useSensors,
@@ -23,6 +24,7 @@ import DocsFiles from '../components/hub/DocsFiles'
 import TodosModuleCard from '../components/hub/todos/TodosModuleCard'
 import AddModuleModal from '../components/hub/AddModuleModal'
 import ExpandedModuleModal from '../components/hub/ExpandedModuleModal'
+import CardDetailPanel from '../components/hub/cards/CardDetailPanel'
 import {
   Users, Flame, MessageSquare, FolderOpen, ArrowLeft, CheckSquare,
   Pencil, Check, X as XIcon, Plus, RotateCcw,
@@ -413,6 +415,10 @@ function HubDashboard({ hubId }) {
         />
       )}
 
+      {/* Card detail panel (?card=<id>) — opens over the hub grid for any
+          Card Table module in this hub. */}
+      <HubCardDetailRouter hubId={hubId} />
+
       <AddModuleModal
         isOpen={showAddModule}
         onClose={() => setShowAddModule(false)}
@@ -469,6 +475,23 @@ function ConfirmDeleteModule({ module, onCancel, onConfirm }) {
       </div>
     </div>
   )
+}
+
+function HubCardDetailRouter({ hubId }) {
+  const [params] = useSearchParams()
+  const cardId = params.get('card')
+  const [moduleId, setModuleId] = useState(null)
+  useEffect(() => {
+    if (!cardId) { setModuleId(null); return }
+    let alive = true
+    ;(async () => {
+      const { data } = await supabase.from('hub_cards').select('module_id').eq('id', cardId).maybeSingle()
+      if (alive) setModuleId(data?.module_id || null)
+    })()
+    return () => { alive = false }
+  }, [cardId])
+  if (!cardId || !moduleId) return null
+  return <CardDetailPanel moduleId={moduleId} hubId={hubId} />
 }
 
 export default function HubPage() {
