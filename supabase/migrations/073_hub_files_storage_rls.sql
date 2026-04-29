@@ -23,10 +23,10 @@ drop policy if exists "hub_files_storage_delete" on storage.objects;
 create or replace function public.hub_id_from_storage_name(p_name text)
 returns uuid
 language sql
-immutable
+stable
 as $$
   select case
-    when (storage.foldername(p_name))[1] ~ '^[0-9a-fA-F-]{36}$'
+    when (storage.foldername(p_name))[1] ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
       then ((storage.foldername(p_name))[1])::uuid
     else null
   end
