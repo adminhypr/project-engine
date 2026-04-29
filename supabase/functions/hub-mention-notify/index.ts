@@ -167,6 +167,11 @@ Deno.serve(async (req) => {
     const moduleLabel = MODULE_LABELS[record.entity_type] || 'Hub'
     const preview = await getMessagePreview(record.entity_type, record.entity_id)
 
+    const messageId = record.entity_type === 'hub_message' ? record.entity_id : null
+    const link = messageId
+      ? `${APP_URL}/hub/${record.hub_id}?message=${messageId}`
+      : `${APP_URL}/hub/${record.hub_id}`
+
     const html = emailWrap(`You were mentioned in ${hubName}`, '#6366f1',
       `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${mentionedUser.full_name}</strong>,</p>
        <p style="margin: 0 0 16px; color: #374151;"><strong>${mentionerName}</strong> mentioned you in <strong>${hubName}</strong> — ${moduleLabel}:</p>
@@ -174,7 +179,7 @@ Deno.serve(async (req) => {
          <p style="margin: 0; font-size: 14px; color: #374151; font-style: italic;">"${preview}"</p>
        </div>
        <div style="margin-top: 20px; text-align: center;">
-         <a href="${APP_URL}/hub/${record.hub_id}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">Open Hub</a>
+         <a href="${link}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">Open Hub</a>
        </div>`)
 
     const result = await sendEmail([mentionedUser.email], `${mentionerName} mentioned you in ${hubName}`, html)
