@@ -54,6 +54,28 @@ function generateTaskId(): string {
 }
 
 async function spawnOne(rec: RecurrenceRow): Promise<{ ok: boolean; reason?: string; taskId?: string }> {
+  // 0) Pre-check: if the template's creator has been deleted,
+  //    rec.created_by is NULL (task_recurrences.created_by is ON DELETE
+  //    SET NULL per 058:34). The downstream INSERT into tasks.assigned_by
+  //    would fail the NOT NULL constraint inside the RPC. Deactivate +
+  //    audit here (mirrors the empty-assignees path below). No
+  //    notification ping — there's no creator to notify.
+  if (!rec.created_by) {
+    await supabase
+      .from('task_recurrences')
+      .update({ is_active: false })
+      .eq('id', rec.id)
+    await supabase
+      .from('task_recurrence_audit')
+      .insert({
+        recurrence_id: rec.id,
+        event_type: 'spawn_failed_creator_deleted',
+        performed_by: null,
+        note: `Template "${rec.template_title}" deactivated: creator profile was deleted.`,
+      })
+    return { ok: false, reason: 'creator deleted — deactivated' }
+  }
+
   // 1) Resolve valid assignees — eager join + filter externals + filter
   //    profiles that no longer exist (cascade-deleted users would already be
   //    gone from the junction, so this mostly filters externals + future
