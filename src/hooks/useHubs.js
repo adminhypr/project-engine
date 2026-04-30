@@ -42,20 +42,21 @@ export function useHubs() {
       showToast('Agents and clients cannot create hubs', 'error')
       return null
     }
-    // Create hub
+    // Atomic hubs + hub_members(owner) insert via SECURITY DEFINER RPC
+    // (migration 091). Replaces a previous two-step client flow that left
+    // 15 orphan hubs in prod when the second insert silently failed.
     const { data: hub, error } = await supabase
-      .from('hubs')
-      .insert({ name: name.trim(), description: description?.trim() || null, icon, color, created_by: profile.id })
-      .select()
-      .single()
-    if (error) { showToast('Failed to create hub', 'error'); return null }
-
-    // Add creator as owner
-    await supabase.from('hub_members').insert({
-      hub_id: hub.id,
-      profile_id: profile.id,
-      role: 'owner'
-    })
+      .rpc('create_hub_with_owner', {
+        p_name: name.trim(),
+        p_description: description?.trim() || null,
+        p_icon: icon ?? null,
+        p_color: color ?? null,
+      })
+    if (error || !hub) {
+      console.error('createHub failed:', error)
+      showToast(error?.message || 'Failed to create hub', 'error')
+      return null
+    }
 
     await fetchHubs()
     showToast('Hub created')
