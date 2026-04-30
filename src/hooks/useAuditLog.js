@@ -24,19 +24,20 @@ export function useAuditLog(taskId) {
   useEffect(() => {
     if (!taskId) { setEvents([]); setLoading(false); return }
 
-    async function fetch() {
-      setLoading(true)
+    // Guard the initial fetch so a rapid task switch can't land stale
+    // audit rows on top of fresh state.
+    let cancelled = false
+    setLoading(true)
+    ;(async () => {
       const { data, error } = await supabase
         .from('task_audit_log')
         .select('*, performer:profiles!task_audit_log_performed_by_fkey(full_name, avatar_url)')
         .eq('task_id', taskId)
         .order('created_at', { ascending: true })
-
+      if (cancelled) return
       if (!error && data) setEvents(data)
       setLoading(false)
-    }
-
-    fetch()
+    })()
 
     // Real-time subscription
     const channel = supabase
@@ -51,7 +52,10 @@ export function useAuditLog(taskId) {
       })
       .subscribe()
 
-    return () => supabase.removeChannel(channel)
+    return () => {
+      cancelled = true
+      supabase.removeChannel(channel)
+    }
   }, [taskId])
 
   return { events, loading }
@@ -62,8 +66,11 @@ export function useAuditLogReport({ dateFrom, dateTo, isAdmin, teamId }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    async function fetch() {
-      setLoading(true)
+    // Guard the fetch so a rapid date-range change in the report UI can't
+    // land stale rows on top of the freshest filter result.
+    let cancelled = false
+    setLoading(true)
+    ;(async () => {
       const { data, error } = await supabase
         .from('task_audit_log')
         .select(`
@@ -75,12 +82,11 @@ export function useAuditLogReport({ dateFrom, dateTo, isAdmin, teamId }) {
         .lte('created_at', dateTo + 'T23:59:59')
         .order('created_at', { ascending: false })
         .limit(500)
-
+      if (cancelled) return
       if (!error && data) setEvents(data)
       setLoading(false)
-    }
-
-    fetch()
+    })()
+    return () => { cancelled = true }
   }, [dateFrom, dateTo])
 
   return { events, loading }

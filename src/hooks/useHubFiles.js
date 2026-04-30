@@ -49,11 +49,45 @@ export function useHubFiles(hubId, folderId = null, moduleId = null) {
     setLoading(false)
   }, [folderId])
 
+  // Initial fetch — guarded by `cancelled` so a rapid hub/folder switch
+  // can't land stale folder/file state (or pop a toast) for a fetch the
+  // user already navigated away from.
   useEffect(() => {
     if (!hubId) return
+    let cancelled = false
     setLoading(true)
-    fetchContents()
-  }, [hubId, folderId, fetchContents])
+    ;(async () => {
+      let folderQuery = supabase
+        .from('hub_folders')
+        .select('*, creator:profiles!hub_folders_created_by_fkey(id, full_name)')
+        .order('name')
+      let fileQuery = supabase
+        .from('hub_files')
+        .select('*, uploader:profiles!hub_files_uploaded_by_fkey(id, full_name, avatar_url)')
+        .order('created_at', { ascending: false })
+      if (moduleId) {
+        folderQuery = folderQuery.eq('module_id', moduleId)
+        fileQuery   = fileQuery.eq('module_id', moduleId)
+      } else {
+        folderQuery = folderQuery.eq('hub_id', hubId)
+        fileQuery   = fileQuery.eq('hub_id', hubId)
+      }
+      if (folderId) folderQuery = folderQuery.eq('parent_id', folderId)
+      else folderQuery = folderQuery.is('parent_id', null)
+      if (folderId) fileQuery = fileQuery.eq('folder_id', folderId)
+      else fileQuery = fileQuery.is('folder_id', null)
+
+      const [{ data: folderData, error: fErr }, { data: fileData, error: fiErr }] = await Promise.all([
+        folderQuery, fileQuery
+      ])
+      if (cancelled) return
+      if (fErr || fiErr) { setLoading(false); return }
+      setFolders(folderData || [])
+      setFiles(fileData || [])
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [hubId, folderId, moduleId])
 
   const uploadFiles = useCallback(async (fileList) => {
     if (!hubRef.current || !profile?.id) return { ok: false, errors: ['Not authenticated'] }

@@ -11,7 +11,7 @@ export function useHubActivity(hubId) {
   const hubRef = useRef(hubId)
   hubRef.current = hubId
 
-  const fetchActivities = useCallback(async (cursor) => {
+  const fetchActivities = useCallback(async (cursor, { silent = false } = {}) => {
     if (!hubRef.current) return []
     let query = supabase
       .from('hub_activity')
@@ -21,20 +21,30 @@ export function useHubActivity(hubId) {
       .limit(PAGE_SIZE)
     if (cursor) query = query.lt('created_at', cursor)
     const { data, error } = await query
-    if (error) { showToast('Failed to load activity', 'error'); return [] }
+    if (error) {
+      if (!silent) showToast('Failed to load activity', 'error')
+      return []
+    }
     return data || []
   }, [])
 
+  // Initial fetch — guarded by `cancelled` so a rapid hub switch can't
+  // land stale activity on top of fresh state (or pop an error toast for
+  // a fetch the user already navigated away from).
   useEffect(() => {
     if (!hubId) return
+    let cancelled = false
     setLoading(true)
     setActivities([])
     setHasMore(true)
-    fetchActivities().then(data => {
+    ;(async () => {
+      const data = await fetchActivities(undefined, { silent: true })
+      if (cancelled) return
       setActivities(data)
       setHasMore(data.length === PAGE_SIZE)
       setLoading(false)
-    })
+    })()
+    return () => { cancelled = true }
   }, [hubId, fetchActivities])
 
   useEffect(() => {
