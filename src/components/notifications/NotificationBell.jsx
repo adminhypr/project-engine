@@ -8,8 +8,9 @@ import { useAuth } from '../../hooks/useAuth'
 import { formatDate } from '../../lib/helpers'
 import { useMentionNotifications } from '../../hooks/useMentionNotifications'
 import { useConversations } from '../../hooks/useConversations'
+import { useTodoAssignmentNotifications } from '../../hooks/useTodoAssignmentNotifications'
 
-function getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInvites, hubMentions, dmConversations) {
+function getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInvites, hubMentions, dmConversations, todoAssignments = []) {
   const notifications = []
   const now = new Date()
 
@@ -56,6 +57,29 @@ function getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInv
       mentionId: m.id,
       time: m.created_at,
       priority: 0.2,
+    })
+  })
+
+  // To-do assignments (last 7d) — see useTodoAssignmentNotifications.
+  // Routed straight to the deep-link item URL the rest of the app uses
+  // (matches AssignTodoFromChatModal's post-create navigate).
+  todoAssignments.forEach((a) => {
+    const hubName = a.item?.hub?.name || 'a hub'
+    const listTitle = a.item?.list?.title
+    const itemTitle = a.item?.title || 'a to-do'
+    const link = a.item?.hub_id && a.item?.list_id && a.item_id
+      ? `/hub/${a.item.hub_id}/todos/${a.item.list_id}/items/${a.item_id}`
+      : (a.item?.hub_id ? `/hub/${a.item.hub_id}` : null)
+    notifications.push({
+      id: `todo-assign-${a.id}`,
+      type: 'todo-assigned',
+      icon: <CheckCircle size={14} />,
+      color: 'text-emerald-600 bg-emerald-500/15',
+      title: `${a.assigner?.full_name || 'Someone'} assigned you a to-do`,
+      body: `${itemTitle}${listTitle ? ` in ${listTitle}` : ''} — ${hubName}`,
+      link,
+      time: a.created_at,
+      priority: 0.4,
     })
   })
 
@@ -180,7 +204,7 @@ function getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInv
   // internal-only noise. Keep this list in sync with any new hub/to-do
   // notification types added above.
   const isExternal = profile?.role === 'Agent' || profile?.role === 'Client'
-  const externalAllowedTypes = new Set(['hub-invite', 'hub-mention', 'task-mention', 'dm'])
+  const externalAllowedTypes = new Set(['hub-invite', 'hub-mention', 'task-mention', 'dm', 'todo-assigned'])
   const filtered = isExternal
     ? notifications.filter(n => externalAllowedTypes.has(n.type))
     : notifications
@@ -216,6 +240,7 @@ export default function NotificationBell({ onTaskClick }) {
   const [hubInvites, setHubInvites] = useState([])
   const { mentions: hubMentions, markSeen: markMentionSeen } = useMentionNotifications()
   const { conversations: dmConversations } = useConversations()
+  const todoAssignments = useTodoAssignmentNotifications()
   const [dismissed, setDismissed] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('pe-dismissed-notifs') || '[]')
@@ -343,7 +368,7 @@ export default function NotificationBell({ onTaskClick }) {
     return () => supabase.removeChannel(channel)
   }, [profile?.id])
 
-  const allNotifications = getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInvites, hubMentions, dmConversations)
+  const allNotifications = getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInvites, hubMentions, dmConversations, todoAssignments)
   const notifications = allNotifications.filter(n => !dismissed.includes(n.id))
   const count = notifications.length
 
