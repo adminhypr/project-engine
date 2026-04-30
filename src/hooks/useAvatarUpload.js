@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { showToast } from '../components/ui/index'
+import { isBlockedImageType } from '../lib/uploadGuards'
 
 const MAX_BYTES = 10 * 1024 * 1024 // 10 MB
 
@@ -17,6 +18,10 @@ export function useAvatarUpload() {
     if (!profile?.id) return false
     if (!file || !file.type?.startsWith('image/')) {
       showToast('Pick an image file (JPEG, PNG, WebP, or GIF)', 'error')
+      return false
+    }
+    if (isBlockedImageType(file)) {
+      showToast('SVG avatars are not allowed (security)', 'error')
       return false
     }
     if (file.size > MAX_BYTES) {
