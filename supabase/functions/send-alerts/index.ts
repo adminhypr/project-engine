@@ -26,7 +26,12 @@ const APP_URL = Deno.env.get('APP_URL') || 'https://tasks.hyprstaffing.com'
 // failures will retry on every tick — minimal handling per audit task
 // 3.5 (a per-task fail-counter is the documented next step).
 async function sendEmail(to: string[], subject: string, html: string, cc: string[] = [], ctx?: Record<string, unknown>): Promise<boolean> {
-  const result = await sharedSendEmail(to, subject, html, { cc, source: 'send-alerts', context: ctx })
+  // Stuff cc into context so notify_failures rows preserve who was CC'd
+  // — recipient_email only stores the To address, and only when there's
+  // a single recipient. Useful when ops debugs "did the manager get CC'd
+  // on the red alert?" via the dashboard.
+  const fullCtx = cc.length > 0 ? { ...(ctx ?? {}), cc } : ctx
+  const result = await sharedSendEmail(to, subject, html, { cc, source: 'send-alerts', context: fullCtx })
   if (result.ok) return true
   if (result.retryable) {
     console.warn(`send-alerts: send failed (status=${result.status}) to=${JSON.stringify(to)}: ${result.error}`)
