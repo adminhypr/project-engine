@@ -43,13 +43,38 @@ export function useHubTodos(hubId, moduleId = null) {
     setLoading(false)
   }, [])
 
+  // Initial fetch — guarded by `cancelled` so a rapid hub/module switch
+  // can't land stale lists/items on top of fresh state (or pop a toast
+  // for a fetch the user already navigated away from).
   useEffect(() => {
     if (!hubId) return
+    let cancelled = false
     setLoading(true)
     setLists([])
     setItems([])
-    fetchData()
-  }, [hubId, moduleId, fetchData])
+    ;(async () => {
+      let listQ = supabase
+        .from('hub_todo_lists')
+        .select('*, creator:profiles!hub_todo_lists_created_by_fkey(id, full_name, avatar_url)')
+        .is('deleted_at', null)
+        .order('position')
+      let itemQ = supabase
+        .from('hub_todo_items')
+        .select('*, creator:profiles!hub_todo_items_created_by_fkey(id, full_name, avatar_url), completer:profiles!hub_todo_items_completed_by_fkey(id, full_name), hub_todo_item_assignees(profile_id, profiles(id, full_name, avatar_url))')
+        .is('deleted_at', null)
+        .order('position')
+      if (moduleId) listQ = listQ.eq('module_id', moduleId)
+      else listQ = listQ.eq('hub_id', hubId)
+      itemQ = itemQ.eq('hub_id', hubId)
+      const [{ data: listData, error: lErr }, { data: itemData, error: iErr }] = await Promise.all([listQ, itemQ])
+      if (cancelled) return
+      if (lErr || iErr) { setLoading(false); return }
+      setLists(listData || [])
+      setItems(itemData || [])
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [hubId, moduleId])
 
   /* ── Realtime ── */
   useEffect(() => {

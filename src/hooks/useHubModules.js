@@ -84,11 +84,43 @@ export function useHubModules(hubId) {
     setLoading(false)
   }, [profile?.id])
 
+  // Initial fetch — guarded by `cancelled` so a rapid hub switch can't
+  // land stale modules (or override layout) on top of fresh state.
   useEffect(() => {
     if (!hubId || !profile?.id) { setModules([]); setLoading(false); return }
+    let cancelled = false
     setLoading(true)
-    fetchModules()
-  }, [hubId, profile?.id, fetchModules])
+    ;(async () => {
+      const [canonRes, overrideRes] = await Promise.all([
+        supabase
+          .from('hub_modules')
+          .select('*')
+          .eq('hub_id', hubId),
+        supabase
+          .from('hub_module_user_layout')
+          .select('module_id, column_index, position')
+          .eq('user_id', profile.id),
+      ])
+      if (cancelled) return
+      if (canonRes.error) {
+        console.warn('hub_modules fetch failed:', canonRes.error.message)
+        setLoading(false)
+        return
+      }
+      if (overrideRes.error) {
+        console.warn('hub_module_user_layout fetch failed:', overrideRes.error.message)
+      }
+
+      const overrideMap = new Map((overrideRes.data || []).map(o => [o.module_id, o]))
+      const merged = (canonRes.data || []).map(m => {
+        const o = overrideMap.get(m.id)
+        return o ? { ...m, column_index: o.column_index, position: o.position, _override: true } : m
+      })
+      setModules(sortModules(merged))
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [hubId, profile?.id])
 
   // Realtime:
   //   • Canonical changes (hub_modules) — full refetch (insert/delete/rename

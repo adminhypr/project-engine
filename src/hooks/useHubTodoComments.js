@@ -22,12 +22,26 @@ export function useHubTodoComments(itemId, hubId) {
     setLoading(false)
   }, [])
 
+  // Initial fetch — guarded by `cancelled` so a rapid item switch can't
+  // land stale comments on top of fresh state.
   useEffect(() => {
     if (!itemId) return
+    let cancelled = false
     setLoading(true)
     setComments([])
-    fetchComments()
-  }, [itemId, fetchComments])
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('hub_todo_comments')
+        .select('*, author:profiles!hub_todo_comments_created_by_fkey(id, full_name, avatar_url)')
+        .eq('item_id', itemId)
+        .order('created_at', { ascending: true })
+      if (cancelled) return
+      if (error) { setLoading(false); return }
+      setComments(data || [])
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [itemId])
 
   useEffect(() => {
     if (!itemId) return
