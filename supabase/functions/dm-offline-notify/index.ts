@@ -142,7 +142,14 @@ async function flush() {
         <p><a href="${linkUrl}" style="color:#3b82f6;">${linkLabel}</a></p>
       </div>`
 
-    const result = await sendEmail(recipient.email, subject, html)
+    const result = await sendEmail(recipient.email, subject, html, {
+      source: 'dm-offline-notify',
+      context: {
+        recipient_id: recipient.id,
+        conversation_id: conversationId,
+        message_count: rows.length,
+      },
+    })
 
     if (result.ok) {
       // Claim row already inserted above; it doubles as the dedupe proof.

@@ -17,16 +17,21 @@ const APP_URL = Deno.env.get('APP_URL') || 'https://tasks.hyprstaffing.com'
 
 // ── Email sender ──────────────────────────────
 // Wrapper preserves the legacy `(to, subject, html, cc?) -> boolean`
-// shape used throughout this file. Permanent failures are logged here;
-// either failure mode falls through as `false` so the caller leaves
+// shape used throughout this file. Tags every send with source='send-alerts'
+// so the shared helper logs permanent failures to public.notify_failures
+// (mig 089). Optional ctx is attached as the jsonb context column.
+//
+// Either failure mode still falls through as `false` so the caller leaves
 // `email_alert_sent` unset and the next cron tick can retry. Permanent
 // failures will retry on every tick — minimal handling per audit task
 // 3.5 (a per-task fail-counter is the documented next step).
-async function sendEmail(to: string[], subject: string, html: string, cc: string[] = []): Promise<boolean> {
-  const result = await sharedSendEmail(to, subject, html, { cc })
+async function sendEmail(to: string[], subject: string, html: string, cc: string[] = [], ctx?: Record<string, unknown>): Promise<boolean> {
+  const result = await sharedSendEmail(to, subject, html, { cc, source: 'send-alerts', context: ctx })
   if (result.ok) return true
-  const level = result.retryable ? 'warn' : 'error'
-  console[level](`send-alerts: send failed (status=${result.status}, retryable=${result.retryable}) to=${JSON.stringify(to)} subject=${JSON.stringify(subject)}: ${result.error}`)
+  if (result.retryable) {
+    console.warn(`send-alerts: send failed (status=${result.status}) to=${JSON.stringify(to)}: ${result.error}`)
+  }
+  // Permanent failures are persisted by the shared helper itself.
   return false
 }
 
@@ -148,7 +153,7 @@ async function sendRedAlerts(): Promise<number> {
 
     const managerEmail = await getManagerEmail(task)
     const cc = managerEmail && managerEmail !== toEmail ? [managerEmail] : []
-    const ok = await sendEmail([toEmail], `🔴 Overdue: "${task.title}" — Action Required`, html, cc)
+    const ok = await sendEmail([toEmail], `🔴 Overdue: "${task.title}" — Action Required`, html, cc, { task_id: task.id, alert_type: 'red' })
 
     if (ok) {
       await supabase.from('tasks').update({ email_alert_sent: true }).eq('id', task.id)
@@ -210,7 +215,7 @@ async function sendDueReminders(): Promise<number> {
          <a href="${APP_URL}/my-tasks?task=${task.id}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
        </div>`)
 
-    const ok = await sendEmail([toEmail], `${emoji} Due soon: "${task.title}"`, html)
+    const ok = await sendEmail([toEmail], `${emoji} Due soon: "${task.title}"`, html, [], { task_id: task.id, alert_type: 'due_reminder' })
     if (ok) sent++
   }
   return sent

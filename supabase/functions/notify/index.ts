@@ -21,19 +21,15 @@ const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 const APP_URL = Deno.env.get('APP_URL') || 'https://tasks.hyprstaffing.com'
 
 // ── Email sender ──────────────────────────────
-// Thin wrapper over the shared helper. Logs permanent failures here so
-// every call site doesn't have to repeat the boilerplate; transient
-// failures are already retried inside the shared helper.
-async function sendEmail(to: string[], subject: string, html: string): Promise<SendResult> {
-  const result = await sharedSendEmail(to, subject, html)
-  if (!result.ok && !result.retryable) {
-    // Permanent failure (bad address, content rejection, etc.). The audit
-    // suggested a `notify_failures` table for ops visibility — deferred to
-    // a follow-up; logging is the current durable record.
-    console.error(`notify: permanent send failure (status=${result.status}) to=${JSON.stringify(to)} subject=${JSON.stringify(subject)}: ${result.error}`)
-  } else if (!result.ok) {
+// Thin wrapper over the shared helper. Tags every send with source='notify'
+// so the helper logs permanent failures to public.notify_failures (mig 089).
+// Optional ctx is attached as the jsonb context column.
+async function sendEmail(to: string[], subject: string, html: string, ctx?: Record<string, unknown>): Promise<SendResult> {
+  const result = await sharedSendEmail(to, subject, html, { source: 'notify', context: ctx })
+  if (!result.ok && result.retryable) {
     console.warn(`notify: send exhausted retries (status=${result.status}) to=${JSON.stringify(to)} subject=${JSON.stringify(subject)}: ${result.error}`)
   }
+  // Permanent failures are now persisted by the shared helper itself.
   return result
 }
 
@@ -102,7 +98,7 @@ async function onTaskCreated(record: any) {
        <a href="${APP_URL}/my-tasks?task=${task.id}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
      </div>`)
 
-  await sendEmail([task.assignee.email], `New task: "${task.title}"`, html)
+  await sendEmail([task.assignee.email], `New task: "${task.title}"`, html, { task_id: task.id, event: 'task_assigned' })
 }
 
 // ── 2. TASK DECLINED — notify assigner ────────
@@ -132,7 +128,7 @@ async function onTaskDeclined(record: any, oldRecord: any) {
        <a href="${APP_URL}/my-tasks?task=${task.id}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">Reassign Task</a>
      </div>`)
 
-  await sendEmail([task.assigner.email], `Task declined: "${task.title}"`, html)
+  await sendEmail([task.assigner.email], `Task declined: "${task.title}"`, html, { task_id: task.id, event: 'task_declined' })
 }
 
 // ── 3. TASK COMPLETED — notify assigner ───────
@@ -176,7 +172,7 @@ async function onTaskCompleted(record: any, oldRecord: any) {
        <a href="${APP_URL}/my-tasks?task=${task.id}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Details</a>
      </div>`)
 
-  await sendEmail([task.assigner.email], `Task completed: "${task.title}"`, html)
+  await sendEmail([task.assigner.email], `Task completed: "${task.title}"`, html, { task_id: task.id, event: 'task_completed' })
 }
 
 // ── 3b. TASK FORCE-CLOSED — notify all assignees + assigner ───
@@ -234,7 +230,7 @@ async function onTaskForceClosed(task: any, forceCloseRow: any) {
          <a href="${APP_URL}/my-tasks?task=${task.id}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Details</a>
        </div>`)
 
-    await sendEmail([r.email], subject, html)
+    await sendEmail([r.email], subject, html, { task_id: task.id, event: 'task_force_closed', recipient_id: r.id })
   }
 }
 
@@ -267,7 +263,7 @@ async function onTaskReassigned(record: any, oldRecord: any) {
        <a href="${APP_URL}/my-tasks?task=${task.id}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
      </div>`)
 
-  await sendEmail([task.assignee.email], `Task reassigned to you: "${task.title}"`, html)
+  await sendEmail([task.assignee.email], `Task reassigned to you: "${task.title}"`, html, { task_id: task.id, event: 'task_reassigned' })
 }
 
 async function onRecurringSpawnFailed(payload: any) {
@@ -302,7 +298,7 @@ async function onRecurringSpawnFailed(payload: any) {
       <p style="color:#9ca3af; font-size:12px; margin-top:24px;">Recurrence ID: ${recurrence_id}</p>
     </div>
   `
-  await sendEmail(recipients.map((r) => r.email), `Recurring task paused: "${safeTitle}"`, html)
+  await sendEmail(recipients.map((r) => r.email), `Recurring task paused: "${safeTitle}"`, html, { event: 'recurring_spawn_failed', recurrence_id: payload?.recurrence_id })
 }
 
 // ── Webhook handler ───────────────────────────

@@ -388,7 +388,14 @@ Deno.serve(async (req) => {
       const rowIds = job.rows.map((r) => r.id)
       try {
         const { subject, html } = renderDigestHtml(job.rows, job.prof.full_name || '')
-        const result = await sendEmail(job.prof.email!, subject, html)
+        const result = await sendEmail(job.prof.email!, subject, html, {
+          source: 'notification-digest',
+          context: {
+            recipient_id: job.recipientId,
+            row_count: job.rows.length,
+            event_types: Array.from(new Set(job.rows.map((r) => r.event_type))),
+          },
+        })
         if (result.ok) {
           sent++
           await supabase

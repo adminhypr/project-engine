@@ -182,12 +182,22 @@ Deno.serve(async (req) => {
          <a href="${link}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">Open Hub</a>
        </div>`)
 
-    const result = await sendEmail([mentionedUser.email], `${mentionerName} mentioned you in ${hubName}`, html)
+    const result = await sendEmail([mentionedUser.email], `${mentionerName} mentioned you in ${hubName}`, html, {
+      source: 'hub-mention-notify',
+      context: {
+        hub_id: record.hub_id,
+        mentioned_user: record.mentioned_user,
+        mentioned_by: record.mentioned_by,
+        entity_type: record.entity_type,
+        entity_id: record.entity_id,
+      },
+    })
     if (!result.ok) {
       // The mention itself is already persisted in `hub_mentions`, so a
       // failed email doesn't lose data — the bell will still fire and the
       // 15-min digest will sweep it. Just log so ops can spot recurring
-      // permanent failures.
+      // permanent failures (also persisted to notify_failures via the
+      // shared helper).
       const level = result.retryable ? 'warn' : 'error'
       console[level](`hub-mention-notify: send failed (status=${result.status}, retryable=${result.retryable}): ${result.error}`)
     }

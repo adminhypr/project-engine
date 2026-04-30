@@ -13,6 +13,16 @@
 //
 // Callers decide what to do on each outcome (mark dead-lettered, release
 // queue claim for next tick, log + drop, etc.).
+//
+// Permanent-failure persistence (audit task 3.5 follow-up): when callers
+// pass `opts.source`, the helper writes a row to `notify_failures`
+// (migration 089) on permanent failure (4xx-not-429). Retryable / network-
+// exhausted failures are NOT logged — they're already retried internally
+// and the caller's release-claim path picks them up next tick. Logging
+// requires SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY env vars (always set
+// in edge function runtime).
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 export type SendResult =
   | { ok: true; id: string }
@@ -23,9 +33,65 @@ export interface SendEmailOptions {
   cc?: string | string[]
   /** Override the From address for this call. Defaults to env-derived value. */
   from?: string
+  /**
+   * Source tag for notify_failures logging. When set, permanent failures
+   * write a row to public.notify_failures (admin-readable). Common values:
+   * 'notify' | 'send-alerts' | 'dm-offline-notify' | 'notification-digest'
+   * | 'hub-mention-notify'. Omit to disable logging.
+   */
+  source?: string
+  /**
+   * Optional jsonb context attached to the notify_failures row. Use for
+   * function-specific identifiers like { task_id, conversation_id,
+   * recurrence_id }. Ignored when source is omitted.
+   */
+  context?: Record<string, unknown>
 }
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
+
+// Lazy admin client for notify_failures inserts. Created on first failure
+// log so functions that never see a permanent failure don't pay the cost.
+let _adminClient: ReturnType<typeof createClient> | null = null
+function getAdminClient() {
+  if (_adminClient) return _adminClient
+  const url = Deno.env.get('SUPABASE_URL')
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  if (!url || !key) return null
+  _adminClient = createClient(url, key)
+  return _adminClient
+}
+
+async function logPermanentFailure(
+  source: string,
+  recipients: string[] | undefined,
+  subject: string,
+  status: number,
+  error: string,
+  context: Record<string, unknown> | undefined,
+) {
+  const client = getAdminClient()
+  if (!client) {
+    console.warn('logPermanentFailure: no admin client (SUPABASE_URL/SERVICE_ROLE_KEY missing)')
+    return
+  }
+  // Best-effort recipient capture: only persist if we have exactly one
+  // (multi-recipient rows blur which address actually bounced).
+  const recipient_email = recipients && recipients.length === 1 ? recipients[0] : null
+  const { error: insErr } = await client.from('notify_failures').insert({
+    source,
+    recipient_email,
+    subject,
+    http_status: status,
+    retryable: false,
+    error_message: error,
+    context: context ?? null,
+  })
+  if (insErr) {
+    // Don't block the caller's path on a logging failure — just warn.
+    console.warn(`logPermanentFailure: insert failed: ${insErr.message}`)
+  }
+}
 // FROM_EMAIL preference order matches the patterns already used by the
 // individual edge functions (DM_FROM_EMAIL → ALERT_FROM_EMAIL → fallback).
 const FROM_EMAIL =
@@ -57,11 +123,17 @@ export async function sendEmail(
 ): Promise<SendResult> {
   if (!RESEND_API_KEY) {
     console.error('sendEmail: RESEND_API_KEY not configured')
+    if (opts.source) {
+      await logPermanentFailure(opts.source, undefined, subject, 0, 'RESEND_API_KEY not configured', opts.context)
+    }
     return { ok: false, retryable: false, status: 0, error: 'RESEND_API_KEY not configured' }
   }
 
   const recipients = toArray(to)
   if (!recipients) {
+    if (opts.source) {
+      await logPermanentFailure(opts.source, undefined, subject, 0, 'no recipients', opts.context)
+    }
     return { ok: false, retryable: false, status: 0, error: 'no recipients' }
   }
 
@@ -119,6 +191,9 @@ export async function sendEmail(
     // 4xx (except 429) — permanent. Don't retry.
     if (status >= 400 && status < 500 && status !== 429) {
       console.error(`sendEmail: permanent ${status}: ${text}`)
+      if (opts.source) {
+        await logPermanentFailure(opts.source, recipients, subject, status, text, opts.context)
+      }
       return { ok: false, retryable: false, status, error: text }
     }
 
