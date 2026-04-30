@@ -92,5 +92,45 @@ export function useHubMembers(hubId) {
     return true
   }, [])
 
-  return { members, loading, addMember, removeMember, updateRole, refetch: fetchMembers }
+  // Atomic owner swap via the SECURITY DEFINER RPC from migration 094.
+  // Promotes newOwnerId to 'owner' and demotes the caller to 'admin' in
+  // one transaction. Caller must be the current hub owner OR global Admin.
+  const transferOwnership = useCallback(async (newOwnerId) => {
+    const { error } = await supabase.rpc('transfer_hub_ownership', {
+      p_hub_id: hubRef.current,
+      p_new_owner_id: newOwnerId,
+    })
+    if (error) {
+      console.error('transferOwnership failed:', error)
+      showToast(error.message || 'Failed to transfer ownership', 'error')
+      return false
+    }
+    showToast('Ownership transferred')
+    return true
+  }, [])
+
+  // Self-leave. Backed by the existing hub_members_delete RLS clause
+  // (profile_id = auth.uid()). The migration-094 last-owner guard
+  // prevents the only remaining owner from leaving — UI should also
+  // disable the button in that case for clarity, but the trigger is
+  // the authoritative gate.
+  const leaveHub = useCallback(async (myProfileId) => {
+    const { error } = await supabase
+      .from('hub_members')
+      .delete()
+      .eq('hub_id', hubRef.current)
+      .eq('profile_id', myProfileId)
+    if (error) {
+      console.error('leaveHub failed:', error)
+      // The last-owner guard raises with a clear message — surface it.
+      showToast(error.message?.includes('last owner')
+        ? 'Transfer ownership before leaving — you are the only owner.'
+        : 'Failed to leave hub', 'error')
+      return false
+    }
+    showToast('You left the hub')
+    return true
+  }, [])
+
+  return { members, loading, addMember, removeMember, updateRole, transferOwnership, leaveHub, refetch: fetchMembers }
 }
