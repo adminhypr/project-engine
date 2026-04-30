@@ -72,7 +72,16 @@ export function useHubs() {
 
   const deleteHub = useCallback(async (hubId) => {
     const { error } = await supabase.from('hubs').delete().eq('id', hubId)
-    if (error) { showToast('Failed to delete hub', 'error'); return false }
+    if (error) {
+      console.error('deleteHub failed:', error)
+      // RLS rejection shows up here as "permission denied for table hubs".
+      // The friendlier message preserves prior UX; the console line above
+      // gives ops the actionable detail.
+      showToast(error.message?.includes('permission')
+        ? 'Only the hub owner or an Admin can delete this hub'
+        : 'Failed to delete hub', 'error')
+      return false
+    }
     await fetchHubs()
     showToast('Hub deleted')
     return true

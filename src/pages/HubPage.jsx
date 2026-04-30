@@ -17,6 +17,7 @@ import HubList from '../components/hub/HubList'
 import HubModuleCard from '../components/hub/HubModuleCard'
 import SortableModuleCard from '../components/hub/SortableModuleCard'
 import HubMembersPanel from '../components/hub/HubMembersPanel'
+import DeleteHubModal from '../components/hub/DeleteHubModal'
 import Attendance from '../components/hub/Attendance'
 import Campfire from '../components/hub/Campfire'
 import MessageBoard from '../components/hub/MessageBoard'
@@ -28,7 +29,7 @@ import CardDetailPanel from '../components/hub/cards/CardDetailPanel'
 import CardTable from '../components/hub/cards/CardTable'
 import {
   Users, Flame, MessageSquare, FolderOpen, ArrowLeft, CheckSquare,
-  Pencil, Check, X as XIcon, Plus, RotateCcw, LayoutGrid,
+  Pencil, Check, X as XIcon, Plus, RotateCcw, LayoutGrid, Trash2,
 } from 'lucide-react'
 
 const DEFAULT_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4']
@@ -125,7 +126,7 @@ function moduleCollisionDetection(args) {
 }
 
 function HubDashboard({ hubId }) {
-  const { hubs, loading, updateHub } = useHubs()
+  const { hubs, loading, updateHub, deleteHub } = useHubs()
   const { isAdmin } = useAuth()
   const {
     columns, addModule, renameModule, deleteModule, saveLayout,
@@ -164,6 +165,7 @@ function HubDashboard({ hubId }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetMessageId])
   const [showMembers, setShowMembers] = useState(false)
+  const [showDeleteHub, setShowDeleteHub] = useState(false)
   const [activeId, setActiveId] = useState(null)
   const [showAddModule, setShowAddModule] = useState(false)
   const [pendingDelete, setPendingDelete] = useState(null)
@@ -268,6 +270,10 @@ function HubDashboard({ hubId }) {
   const myRole = hub?.my_role || 'member'
   const color = hub?.color || DEFAULT_COLORS[Math.abs((hub?.name || '').charCodeAt(0)) % DEFAULT_COLORS.length]
   const canRenameHub = isAdmin || myRole === 'owner' || myRole === 'admin'
+  // Delete is more dangerous than rename — gate strictly to global Admin
+  // or the hub's owner (matches the live hubs_delete RLS policy from 016).
+  // Hub-level admins (role='admin') can rename but NOT delete.
+  const canDeleteHub = isAdmin || myRole === 'owner'
 
   useEffect(() => {
     if (editingName && nameInputRef.current) nameInputRef.current.select()
@@ -360,13 +366,25 @@ function HubDashboard({ hubId }) {
               )}
             </div>
           </div>
-          <button
-            onClick={() => setShowMembers(true)}
-            className="btn btn-secondary text-xs flex items-center gap-1.5 shrink-0"
-          >
-            <Users size={13} />
-            Members
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setShowMembers(true)}
+              className="btn btn-secondary text-xs flex items-center gap-1.5"
+            >
+              <Users size={13} />
+              Members
+            </button>
+            {canDeleteHub && (
+              <button
+                onClick={() => setShowDeleteHub(true)}
+                className="btn btn-secondary text-xs flex items-center gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-500/10"
+                title="Delete hub"
+              >
+                <Trash2 size={13} />
+                Delete
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -478,6 +496,19 @@ function HubDashboard({ hubId }) {
         isOpen={showMembers}
         onClose={() => setShowMembers(false)}
         myRole={myRole}
+      />
+
+      <DeleteHubModal
+        isOpen={showDeleteHub}
+        onClose={() => setShowDeleteHub(false)}
+        hubName={hub?.name || ''}
+        onConfirm={async () => {
+          const ok = await deleteHub(hubId)
+          // useHubs.deleteHub toasts on both paths; we just need to
+          // navigate away on success.
+          if (ok) navigate('/hub')
+          return ok
+        }}
       />
     </PageTransition>
   )
