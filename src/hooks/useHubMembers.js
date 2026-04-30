@@ -8,7 +8,7 @@ export function useHubMembers(hubId) {
   const hubRef = useRef(hubId)
   hubRef.current = hubId
 
-  const fetchMembers = useCallback(async () => {
+  const fetchMembers = useCallback(async ({ silent = false } = {}) => {
     if (!hubRef.current) return
     const { data, error } = await supabase
       .from('hub_members')
@@ -16,16 +16,32 @@ export function useHubMembers(hubId) {
       .eq('hub_id', hubRef.current)
       .order('role', { ascending: true })
       .order('created_at', { ascending: true })
-    if (error) showToast('Failed to load members', 'error')
+    if (error) { if (!silent) showToast('Failed to load members', 'error') }
     setMembers(data || [])
     setLoading(false)
   }, [])
 
+  // Initial fetch — guarded by `cancelled` so a rapid hub switch can't
+  // land stale members on top of fresh state (or pop a toast for a fetch
+  // the user already navigated away from).
   useEffect(() => {
     if (!hubId) return
+    let cancelled = false
     setLoading(true)
-    fetchMembers()
-  }, [hubId, fetchMembers])
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('hub_members')
+        .select('*, profile:profiles!hub_members_profile_id_fkey(id, full_name, email, avatar_url, role)')
+        .eq('hub_id', hubId)
+        .order('role', { ascending: true })
+        .order('created_at', { ascending: true })
+      if (cancelled) return
+      if (error) { setLoading(false); return }
+      setMembers(data || [])
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [hubId])
 
   // Realtime
   useEffect(() => {

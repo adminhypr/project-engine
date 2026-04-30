@@ -45,11 +45,37 @@ export function useHubCards(moduleId) {
     setLoading(false)
   }, [])
 
+  // Initial fetch — guarded by `cancelled` so a rapid module switch can't
+  // land stale cards on top of fresh state.
   useEffect(() => {
     if (!moduleId) { setCards([]); setLoading(false); return }
+    let cancelled = false
     setLoading(true)
-    fetch()
-  }, [moduleId, fetch])
+    ;(async () => {
+      const [cardsRes, countsRes] = await Promise.all([
+        supabase.from('hub_cards').select(CARD_SELECT).eq('module_id', moduleId),
+        supabase.rpc('get_card_comment_counts', { p_module_id: moduleId }),
+      ])
+      if (cancelled) return
+      if (cardsRes.error) { console.warn('hub_cards fetch failed:', cardsRes.error.message); setLoading(false); return }
+
+      const countMap = new Map()
+      if (countsRes.error) {
+        console.warn('get_card_comment_counts failed:', countsRes.error.message)
+      } else if (countsRes.data) {
+        for (const r of countsRes.data) countMap.set(r.card_id, Number(r.comment_count) || 0)
+      }
+
+      const enriched = (cardsRes.data || []).map(c => ({
+        ...c,
+        assignees: (c.assignees || []).map(a => a.profile).filter(Boolean),
+        comment_count: countMap.get(c.id) || 0,
+      }))
+      setCards(sortCards(enriched))
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [moduleId])
 
   // Realtime: any change to hub_cards or hub_card_assignees in this module
   // triggers a refetch. (The full refetch is acceptable because card lists

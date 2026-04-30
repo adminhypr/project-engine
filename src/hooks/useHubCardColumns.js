@@ -26,11 +26,25 @@ export function useHubCardColumns(moduleId) {
     setLoading(false)
   }, [])
 
+  // Initial fetch — guarded by `cancelled` so a rapid module switch can't
+  // land stale columns on top of fresh state.
   useEffect(() => {
     if (!moduleId) { setColumns([]); setLoading(false); return }
+    let cancelled = false
     setLoading(true)
-    fetch()
-  }, [moduleId, fetch])
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('hub_card_columns')
+        .select('*')
+        .eq('module_id', moduleId)
+        .order('position')
+      if (cancelled) return
+      if (error) { console.warn('hub_card_columns fetch failed:', error.message); setLoading(false); return }
+      setColumns(data || [])
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [moduleId])
 
   useEffect(() => {
     if (!moduleId) return

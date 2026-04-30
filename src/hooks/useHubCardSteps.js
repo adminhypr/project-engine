@@ -24,11 +24,25 @@ export function useHubCardSteps(cardId) {
     setLoading(false)
   }, [])
 
+  // Initial fetch — guarded by `cancelled` so a rapid card switch can't
+  // land stale steps on top of fresh state.
   useEffect(() => {
     if (!cardId) { setSteps([]); setLoading(false); return }
+    let cancelled = false
     setLoading(true)
-    fetch()
-  }, [cardId, fetch])
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('hub_card_steps')
+        .select('*')
+        .eq('card_id', cardId)
+        .order('position')
+      if (cancelled) return
+      if (error) { console.warn('hub_card_steps fetch failed:', error.message); setLoading(false); return }
+      setSteps(data || [])
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [cardId])
 
   useEffect(() => {
     if (!cardId) return
