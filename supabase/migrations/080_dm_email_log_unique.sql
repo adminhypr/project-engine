@@ -7,14 +7,20 @@
 -- so a "claim BEFORE send" pattern can use ON CONFLICT to make at most
 -- one worker per 15-minute window send the email.
 --
--- Bucket = 15-minute window. Postgres generated columns require an
--- IMMUTABLE expression. `date_trunc('minute', sent_at)` is STABLE
--- (it depends on session timezone for timestamptz inputs), so it cannot
--- be used in a generated column. Instead we floor the epoch seconds:
+-- Bucket = 15-minute window. Postgres generated columns require a
+-- truly IMMUTABLE expression. The earlier draft tried
 --   to_timestamp(floor(extract(epoch from sent_at) / 900) * 900)
--- Both `extract(epoch from timestamptz)` and `to_timestamp(double)` are
--- IMMUTABLE, so the composed expression is IMMUTABLE and accepted by
--- a generated column.
+-- but `extract(epoch from timestamptz)` is declared STABLE (its
+-- volatility is conservative because the catalog can't prove
+-- timezone-independence at the function-signature level). Postgres
+-- rejected the generated column with "generation expression is not
+-- immutable" (SQLSTATE 42P17).
+--
+-- Workaround: wrap the bucket math in a SQL function declared
+-- IMMUTABLE. The expression body uses STABLE pieces, but for a
+-- timestamptz input the epoch IS truly UTC-anchored at storage level
+-- — the result is a deterministic function of the input bytes. The
+-- IMMUTABLE label is safe and standard practice for this pattern.
 --
 -- The existing PK on dm_email_log is (recipient_id, conversation_id,
 -- sent_at) from migration 028 — that uniqueness is too loose (sent_at
@@ -22,11 +28,17 @@
 -- the PK and provides the 15-min bucket dedupe we need.
 -- ─────────────────────────────────────────────
 
+create or replace function public.dm_email_bucket_15min(t timestamptz)
+returns timestamptz
+language sql
+immutable
+as $$
+  select to_timestamp(floor(extract(epoch from t) / 900) * 900)
+$$;
+
 alter table public.dm_email_log
   add column if not exists time_bucket timestamptz
-    generated always as (
-      to_timestamp(floor(extract(epoch from sent_at) / 900) * 900)
-    ) stored;
+    generated always as (public.dm_email_bucket_15min(sent_at)) stored;
 
 -- Dedupe historic rows that share a (recipient, conversation, bucket)
 -- before adding the unique index.
