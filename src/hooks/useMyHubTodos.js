@@ -40,7 +40,7 @@ export function useMyHubTodos() {
         list:hub_todo_lists!hub_todo_items_list_id_fkey(id, title, color),
         hub:hubs!hub_todo_items_hub_id_fkey(id, name, team_id),
         creator:profiles!hub_todo_items_created_by_fkey(id, full_name, avatar_url),
-        hub_todo_item_assignees!inner(profile_id, profiles(id, full_name, avatar_url))
+        hub_todo_item_assignees!inner(profile_id, profiles!hub_todo_item_assignees_profile_id_fkey(id, full_name, avatar_url))
       `)
       .in('hub_id', hubIds)
       .is('deleted_at', null)
@@ -84,7 +84,7 @@ export function useMyHubTodos() {
           list:hub_todo_lists!hub_todo_items_list_id_fkey(id, title, color),
           hub:hubs!hub_todo_items_hub_id_fkey(id, name, team_id),
           creator:profiles!hub_todo_items_created_by_fkey(id, full_name, avatar_url),
-          hub_todo_item_assignees!inner(profile_id, profiles(id, full_name, avatar_url))
+          hub_todo_item_assignees!inner(profile_id, profiles!hub_todo_item_assignees_profile_id_fkey(id, full_name, avatar_url))
         `)
         .in('hub_id', hubIds)
         .is('deleted_at', null)

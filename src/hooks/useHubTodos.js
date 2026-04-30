@@ -23,7 +23,7 @@ export function useHubTodos(hubId, moduleId = null) {
       .order('position')
     let itemQ = supabase
       .from('hub_todo_items')
-      .select('*, creator:profiles!hub_todo_items_created_by_fkey(id, full_name, avatar_url), completer:profiles!hub_todo_items_completed_by_fkey(id, full_name), hub_todo_item_assignees(profile_id, profiles(id, full_name, avatar_url))')
+      .select('*, creator:profiles!hub_todo_items_created_by_fkey(id, full_name, avatar_url), completer:profiles!hub_todo_items_completed_by_fkey(id, full_name), hub_todo_item_assignees(profile_id, profiles!hub_todo_item_assignees_profile_id_fkey(id, full_name, avatar_url))')
       .is('deleted_at', null)
       .order('position')
     // Lists scope by module_id; items scope by hub_id (joined to lists in the
@@ -60,7 +60,7 @@ export function useHubTodos(hubId, moduleId = null) {
         .order('position')
       let itemQ = supabase
         .from('hub_todo_items')
-        .select('*, creator:profiles!hub_todo_items_created_by_fkey(id, full_name, avatar_url), completer:profiles!hub_todo_items_completed_by_fkey(id, full_name), hub_todo_item_assignees(profile_id, profiles(id, full_name, avatar_url))')
+        .select('*, creator:profiles!hub_todo_items_created_by_fkey(id, full_name, avatar_url), completer:profiles!hub_todo_items_completed_by_fkey(id, full_name), hub_todo_item_assignees(profile_id, profiles!hub_todo_item_assignees_profile_id_fkey(id, full_name, avatar_url))')
         .is('deleted_at', null)
         .order('position')
       if (moduleId) listQ = listQ.eq('module_id', moduleId)
