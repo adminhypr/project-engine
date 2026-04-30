@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Users, Flame, ClipboardList, ChevronDown } from 'lucide-react'
 import ContactRow from './ContactRow'
 import { groupDisplayName, memberCountLabel } from '../../lib/groupConversations'
+import { totalUnread } from '../../lib/chatSectionUnread'
 import { useAuth } from '../../hooks/useAuth'
 
 // Per-user collapsed state for each section in the chat widget.
@@ -49,13 +50,17 @@ function useCollapsedSections() {
   return [state, toggle, setAll]
 }
 
-function SectionHeader({ title, count, collapsed, onToggle }) {
+function SectionHeader({ title, count, unreadCount = 0, collapsed, onToggle }) {
+  const ariaLabel = unreadCount > 0
+    ? `${title}, ${unreadCount} unread message${unreadCount === 1 ? '' : 's'}`
+    : title
   return (
     <button
       type="button"
       onClick={onToggle}
       className="w-full flex items-center gap-1.5 px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 select-none"
       aria-expanded={!collapsed}
+      aria-label={ariaLabel}
     >
       <motion.span
         animate={{ rotate: collapsed ? -90 : 0 }}
@@ -68,6 +73,14 @@ function SectionHeader({ title, count, collapsed, onToggle }) {
       {typeof count === 'number' && count > 0 && (
         <span className="text-[10px] font-medium text-slate-400 normal-case tracking-normal">
           ({count})
+        </span>
+      )}
+      {unreadCount > 0 && (
+        <span
+          className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-500 text-white normal-case tracking-normal leading-none"
+          title={`${unreadCount} unread`}
+        >
+          {unreadCount > 99 ? '99+' : unreadCount}
         </span>
       )}
     </button>
@@ -116,9 +129,10 @@ function truncate(s, n) {
 
 function PeopleSection({ sectionKey, title, rows, presence, onOpen, collapsed, onToggle }) {
   if (!rows || rows.length === 0) return null
+  const unread = totalUnread(rows, 'people')
   return (
     <div className="mb-2">
-      <SectionHeader title={title} count={rows.length} collapsed={collapsed} onToggle={() => onToggle(sectionKey)} />
+      <SectionHeader title={title} count={rows.length} unreadCount={unread} collapsed={collapsed} onToggle={() => onToggle(sectionKey)} />
       <CollapsibleBody collapsed={collapsed}>
         {rows.map(row => (
           <ContactRow
@@ -170,9 +184,10 @@ function GroupRow({ conversation, onClick, Icon = Users, iconClass = 'bg-brand-1
 
 function CampfiresSection({ campfires, onOpenCampfire, collapsed, onToggle }) {
   if (!campfires || campfires.length === 0) return null
+  const unread = totalUnread(campfires)
   return (
     <div className="mb-2">
-      <SectionHeader title="Campfires" count={campfires.length} collapsed={collapsed} onToggle={() => onToggle('campfires')} />
+      <SectionHeader title="Campfires" count={campfires.length} unreadCount={unread} collapsed={collapsed} onToggle={() => onToggle('campfires')} />
       <CollapsibleBody collapsed={collapsed}>
         {campfires.map(c => (
           <GroupRow
@@ -190,9 +205,10 @@ function CampfiresSection({ campfires, onOpenCampfire, collapsed, onToggle }) {
 
 function GroupsSection({ groups, onOpenGroup, collapsed, onToggle }) {
   if (!groups || groups.length === 0) return null
+  const unread = totalUnread(groups)
   return (
     <div className="mb-2">
-      <SectionHeader title="Groups" count={groups.length} collapsed={collapsed} onToggle={() => onToggle('groups')} />
+      <SectionHeader title="Groups" count={groups.length} unreadCount={unread} collapsed={collapsed} onToggle={() => onToggle('groups')} />
       <CollapsibleBody collapsed={collapsed}>
         {groups.map(g => (
           <GroupRow key={g.id} conversation={g} onClick={onOpenGroup} />
@@ -241,9 +257,10 @@ function TaskRow({ conversation, onClick }) {
 
 function TasksSection({ tasks, onOpenTask, collapsed, onToggle }) {
   if (!tasks || tasks.length === 0) return null
+  const unread = totalUnread(tasks)
   return (
     <div className="mb-2">
-      <SectionHeader title="Tasks" count={tasks.length} collapsed={collapsed} onToggle={() => onToggle('tasks')} />
+      <SectionHeader title="Tasks" count={tasks.length} unreadCount={unread} collapsed={collapsed} onToggle={() => onToggle('tasks')} />
       <CollapsibleBody collapsed={collapsed}>
         {tasks.map(t => (
           <TaskRow key={t.id} conversation={t} onClick={onOpenTask} />
