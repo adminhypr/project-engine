@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { X, Send, Check, RefreshCw, Pencil, Trash2, Plus, Users, Paperclip, CheckCircle2, Circle, Repeat } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
@@ -98,6 +99,21 @@ export default function TaskDetailPanel({ task, tasks = [], onClose, onUpdated }
   const [commentFiles, setCommentFiles] = useState([])
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [parentInfo, setParentInfo] = useState(null) // {id, title} when viewing a sub-task
+
+  const location = useLocation()
+
+  // Auto-open the Comments accordion when the URL is a deep-link to a
+  // specific comment (?comment=<id>) — otherwise the MyTasksPage poller
+  // can't find [data-comment-id] in the DOM and the email-link scroll +
+  // highlight silently no-ops. Only fires while ?comment is present;
+  // once MyTasksPage strips the param after consuming, this effect
+  // doesn't re-toggle, so the user's accordion preference is respected
+  // on subsequent re-opens of the same task.
+  useEffect(() => {
+    if (!task) return
+    const targetCommentId = new URLSearchParams(location.search).get('comment')
+    if (targetCommentId) setCommentsOpen(true)
+  }, [task?.id, location.search])
 
   const canEdit = isAdmin ||
     (task?.team_id && profile?.team_roles?.[task.team_id] === 'Manager') ||
