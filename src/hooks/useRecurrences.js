@@ -44,8 +44,39 @@ export function useRecurrences() {
     setLoading(false)
   }, [])
 
-  // Initial fetch + refetch when the user's profile is ready.
-  useEffect(() => { fetchAll() }, [profile?.id, fetchAll])
+  // Initial fetch + refetch when the user's profile is ready. Guarded by
+  // `cancelled` so an in-flight fetch can't land stale templates if the
+  // hook is unmounted (or profile.id flips on sign-in/sign-out) before
+  // the await resolves.
+  useEffect(() => {
+    if (!profile?.id) return
+    let cancelled = false
+    ;(async () => {
+      setError(null)
+      const { data, error } = await supabase
+        .from('task_recurrences')
+        .select(TEMPLATE_SELECT)
+        .order('created_at', { ascending: false })
+      if (cancelled) return
+      if (error) {
+        setError(error.message)
+        setLoading(false)
+        return
+      }
+      const enriched = (data || []).map(row => ({
+        ...row,
+        assignees: (row.task_recurrence_assignees || []).map(a => ({
+          id:         a.profile?.id || a.profile_id,
+          full_name:  a.profile?.full_name,
+          avatar_url: a.profile?.avatar_url,
+          is_primary: a.is_primary,
+        })),
+      }))
+      setTemplates(enriched)
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [profile?.id])
 
   // Mirror current templates so the realtime handler can answer
   // "is this row in my visible list?" without re-subscribing.

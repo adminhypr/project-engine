@@ -31,7 +31,24 @@ export function useTaskDependencies(taskId) {
     setLoading(false)
   }, [])
 
-  useEffect(() => { fetchAll() }, [taskId, fetchAll])
+  // Initial fetch — guarded by `cancelled` so a rapid task switch can't
+  // land stale blocker/blocked rows on top of fresh state.
+  useEffect(() => {
+    if (!taskId) { setBlockers([]); setBlocked([]); setLoading(false); return }
+    let cancelled = false
+    setLoading(true)
+    ;(async () => {
+      const [blockersRes, blockedRes] = await Promise.all([
+        supabase.from('task_dependencies').select('*').eq('blocked_id', taskId),
+        supabase.from('task_dependencies').select('*').eq('blocker_id', taskId),
+      ])
+      if (cancelled) return
+      if (!blockersRes.error) setBlockers(blockersRes.data || [])
+      if (!blockedRes.error)  setBlocked(blockedRes.data || [])
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [taskId])
 
   // Realtime — refetch on any change to task_dependencies. Filtered
   // client-side because postgres_changes filters on composite PKs are
