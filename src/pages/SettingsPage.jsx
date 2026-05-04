@@ -18,6 +18,8 @@ export default function SettingsPage() {
   const [teams,    setTeams]    = useState([])
   const [loading,  setLoading]  = useState(true)
   const [newTeam,  setNewTeam]  = useState('')
+  const [newTeamKind, setNewTeamKind] = useState('internal')
+  const [teamPopoverId, setTeamPopoverId] = useState(null)
   const [saving,   setSaving]   = useState({})
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole,  setInviteRole]  = useState('Staff')
@@ -54,7 +56,7 @@ export default function SettingsPage() {
 
   async function addTeam() {
     if (!newTeam.trim()) return
-    const { error } = await supabase.from('teams').insert({ name: newTeam.trim() })
+    const { error } = await supabase.from('teams').insert({ name: newTeam.trim(), kind: newTeamKind })
     if (error) showToast(error.message, 'error')
     else { showToast('Team added'); setNewTeam(''); fetchAll() }
   }
@@ -63,7 +65,13 @@ export default function SettingsPage() {
     if (!window.confirm('Delete this team? Members will be unassigned.')) return
     const { error } = await supabase.from('teams').delete().eq('id', id)
     if (error) showToast(error.message, 'error')
-    else { showToast('Team deleted'); fetchAll() }
+    else { showToast('Team deleted'); setTeamPopoverId(null); fetchAll() }
+  }
+
+  async function updateTeamKind(id, kind) {
+    const { error } = await supabase.from('teams').update({ kind }).eq('id', id)
+    if (error) showToast(error.message, 'error')
+    else { showToast(`Moved to ${kind === 'external' ? 'External' : 'Internal'}`); setTeamPopoverId(null); fetchAll() }
   }
 
   async function sendInvite() {
@@ -168,7 +176,7 @@ export default function SettingsPage() {
               transition={{ duration: 0.3 }}
             >
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Teams</p>
-              <div className="flex gap-2 mb-4">
+              <div className="flex flex-col sm:flex-row gap-2 mb-2">
                 <input
                   type="text"
                   value={newTeam}
@@ -177,23 +185,81 @@ export default function SettingsPage() {
                   className="form-input flex-1"
                   onKeyDown={e => e.key === 'Enter' && addTeam()}
                 />
-                <button className="btn-primary" onClick={addTeam}>Add Team</button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {teams.map(t => (
-                  <motion.div
-                    key={t.id}
-                    className="flex items-center gap-2 bg-white dark:bg-dark-surface rounded-xl px-3 py-1.5 border border-slate-100 dark:border-dark-border"
-                    layout
-                  >
-                    <span className="text-sm font-medium">{t.name}</span>
+                <div className="flex gap-2">
+                  <div className="inline-flex rounded-xl bg-slate-100 dark:bg-dark-bg border border-slate-200 dark:border-dark-border p-0.5">
                     <button
-                      onClick={() => deleteTeam(t.id)}
-                      className="text-slate-400 dark:text-slate-500 hover:text-red-500 text-xs transition-colors"
-                    >✕</button>
-                  </motion.div>
-                ))}
+                      type="button"
+                      onClick={() => setNewTeamKind('internal')}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${newTeamKind === 'internal' ? 'bg-white dark:bg-dark-surface shadow-soft text-slate-900 dark:text-slate-100' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                    >Internal</button>
+                    <button
+                      type="button"
+                      onClick={() => setNewTeamKind('external')}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${newTeamKind === 'external' ? 'bg-white dark:bg-dark-surface shadow-soft text-slate-900 dark:text-slate-100' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                    >External</button>
+                  </div>
+                  <button className="btn-primary" onClick={addTeam}>Add Team</button>
+                </div>
               </div>
+
+              {['internal', 'external'].map(kind => {
+                const list = teams.filter(t => (t.kind || 'internal') === kind)
+                const label = kind === 'internal' ? 'Internal Teams (Company)' : 'External Teams (Clients)'
+                return (
+                  <div key={kind} className="mt-5">
+                    <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">{label}</p>
+                    {list.length === 0 ? (
+                      <p className="text-xs text-slate-400 dark:text-slate-600 italic">No {kind} teams yet</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {list.map(t => (
+                          <div key={t.id} className="relative">
+                            <motion.button
+                              type="button"
+                              onClick={() => setTeamPopoverId(teamPopoverId === t.id ? null : t.id)}
+                              className="flex items-center gap-2 bg-white dark:bg-dark-surface rounded-xl px-3 py-1.5 border border-slate-100 dark:border-dark-border hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
+                              layout
+                            >
+                              <span className="text-sm font-medium">{t.name}</span>
+                            </motion.button>
+                            <AnimatePresence>
+                              {teamPopoverId === t.id && (
+                                <>
+                                  <div
+                                    className="fixed inset-0 z-40"
+                                    onClick={() => setTeamPopoverId(null)}
+                                  />
+                                  <motion.div
+                                    initial={{ opacity: 0, y: -4 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -4 }}
+                                    transition={{ duration: 0.12 }}
+                                    className="absolute z-50 left-0 top-full mt-1 min-w-[180px] bg-white dark:bg-dark-surface rounded-xl border border-slate-200 dark:border-dark-border shadow-elevated overflow-hidden"
+                                  >
+                                    <button
+                                      onClick={() => updateTeamKind(t.id, kind === 'internal' ? 'external' : 'internal')}
+                                      className="w-full text-left text-sm px-3 py-2 hover:bg-slate-50 dark:hover:bg-dark-bg transition-colors"
+                                    >
+                                      Move to {kind === 'internal' ? 'External' : 'Internal'}
+                                    </button>
+                                    <div className="border-t border-slate-100 dark:border-dark-border" />
+                                    <button
+                                      onClick={() => deleteTeam(t.id)}
+                                      className="w-full text-left text-sm px-3 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                    >
+                                      Delete team
+                                    </button>
+                                  </motion.div>
+                                </>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </motion.div>
           )}
 
