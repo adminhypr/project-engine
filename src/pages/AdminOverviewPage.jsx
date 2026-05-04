@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { useTasks, useTaskActions, useProfiles } from '../hooks/useTasks'
 import { useAuth } from '../hooks/useAuth'
 import { applyFilters } from '../lib/filters'
+import { buildTeamIdsByProfileId, taskOnTeam } from '../lib/teamMembership'
 import { PageHeader, StatsStrip, FilterRow, LoadingScreen, EmptyState, showToast } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
 import TaskTable from '../components/tasks/TaskTable'
@@ -50,30 +51,87 @@ export default function AdminOverviewPage() {
     return () => window.removeEventListener('open-task', handler)
   }, [])
 
-  const allTeams = [...new Map(tasks.map(t => [t.team_id, t.team])).values()].filter(Boolean)
+  // Team membership lookup keyed by profile id. Replaces the old t.team_id
+  // comparison so multi-team users and reassigned-across-teams tasks both
+  // surface under every team they actually belong to (see lib/teamMembership.js).
+  const teamIdsByProfileId = useMemo(() => buildTeamIdsByProfileId(profiles), [profiles])
 
-  // Team breakdown keyed by team_id for sidebar interactivity
-  const teamBreakdown = Object.entries(
-    tasks.reduce((acc, t) => {
-      const id = t.team_id || 'none'
-      const name = t.team?.name || 'No Team'
-      if (!acc[id]) acc[id] = { name, total: 0, red: 0, done: 0, blocked: 0 }
-      acc[id].total++
-      if (t.priority === 'red')    acc[id].red++
-      if (t.status === 'Done')     acc[id].done++
-      if (t.status === 'Blocked')  acc[id].blocked++
-      return acc
-    }, {})
-  ).sort((a, b) => b[1].total - a[1].total)
+  // Canonical team list sourced from profiles' team memberships, not from
+  // tasks.team_id. This way teams with no stale-tagged tasks still appear in
+  // the dropdown, and tasks reassigned across teams stop hiding entire teams.
+  const allTeams = useMemo(() => {
+    const map = new Map()
+    for (const p of profiles || []) {
+      for (const t of (p.all_teams || [])) {
+        if (t?.id && !map.has(t.id)) map.set(t.id, { id: t.id, name: t.name })
+      }
+    }
+    return [...map.values()].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+  }, [profiles])
 
-  // In board mode: pre-filter by sidebar team, strip status+team from filters
+  // Per-team breakdown by assignee membership: a task counts under every team
+  // any of its assignees belongs to. Tasks where no assignee is on any known
+  // team fall into a "No Team" bucket (only shown when non-empty). Note: a
+  // co-assigned task spanning two teams will appear in both teams' totals —
+  // intentional, since the filter shows it under both.
+  const teamBreakdown = useMemo(() => {
+    const acc = {}
+    for (const team of allTeams) {
+      acc[team.id] = { name: team.name, total: 0, red: 0, done: 0, blocked: 0 }
+    }
+    acc['none'] = { name: 'No Team', total: 0, red: 0, done: 0, blocked: 0 }
+    for (const t of tasks) {
+      const ids = t.assignees?.length
+        ? t.assignees.map(a => a.id)
+        : (t.assigned_to ? [t.assigned_to] : [])
+      const teamsForTask = new Set()
+      for (const id of ids) {
+        const set = teamIdsByProfileId.get(id)
+        if (set) for (const tid of set) teamsForTask.add(tid)
+      }
+      const buckets = teamsForTask.size === 0 ? ['none'] : [...teamsForTask].filter(tid => acc[tid])
+      for (const tid of buckets) {
+        acc[tid].total++
+        if (t.priority === 'red')    acc[tid].red++
+        if (t.status === 'Done')     acc[tid].done++
+        if (t.status === 'Blocked')  acc[tid].blocked++
+      }
+    }
+    if (acc['none'].total === 0) delete acc['none']
+    return Object.entries(acc).sort((a, b) => b[1].total - a[1].total)
+  }, [tasks, allTeams, teamIdsByProfileId])
+
+  // Board mode: pre-filter by sidebar team via membership predicate. Clicking
+  // the "No Team" row filters to tasks where no assignee belongs to any team
+  // (e.g. assigned to externals or to since-deleted users).
   const boardTasks = view === 'board' && sidebarTeamFilter
-    ? tasks.filter(t => t.team_id === sidebarTeamFilter)
+    ? (sidebarTeamFilter === 'none'
+        ? tasks.filter(t => {
+            const ids = t.assignees?.length
+              ? t.assignees.map(a => a.id)
+              : (t.assigned_to ? [t.assigned_to] : [])
+            return !ids.some(id => (teamIdsByProfileId.get(id)?.size || 0) > 0)
+          })
+        : tasks.filter(t => taskOnTeam(t, sidebarTeamFilter, teamIdsByProfileId)))
     : tasks
+
+  // Strip `team` from the filters object before passing to applyFilters so
+  // the shared filter (which compares t.team_id) doesn't double-apply or
+  // disagree with the membership predicate. Board mode also strips `statuses`
+  // (Kanban renders all statuses as columns).
   const effectiveFilters = view === 'board'
     ? (({ statuses, team, ...rest }) => rest)(filters)
-    : filters
-  const filtered = applyFilters(view === 'board' ? boardTasks : tasks, effectiveFilters)
+    : (({ team, ...rest }) => rest)(filters)
+
+  // List mode: apply the team filter via the membership predicate before
+  // applyFilters. Board mode already pre-filtered via boardTasks above.
+  const teamFilteredSource = view === 'board'
+    ? boardTasks
+    : (filters.team
+        ? tasks.filter(t => taskOnTeam(t, filters.team, teamIdsByProfileId))
+        : tasks)
+
+  const filtered = applyFilters(teamFilteredSource, effectiveFilters)
 
   const selectedTeamName = sidebarTeamFilter
     ? teamBreakdown.find(([id]) => id === sidebarTeamFilter)?.[1]?.name || 'Selected team'
