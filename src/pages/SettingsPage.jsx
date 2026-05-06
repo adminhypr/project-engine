@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
@@ -148,6 +148,28 @@ export default function SettingsPage() {
       })
 
   const unassignedCount = profiles.filter(p => !p.profile_teams || p.profile_teams.length === 0).length
+
+  // Admin view: split the user list into role-based sections so the table
+  // mirrors the global role hierarchy (Admin / Manager / Staff / Agent /
+  // Client). Pure display-side grouping — `profiles.role` is already
+  // synced to the canonical value via the role-sync trigger (010).
+  // Manager view keeps the flat list — small enough that grouping adds
+  // no value, and the filter above narrows to unassigned users + self.
+  const ROLE_SECTIONS = [
+    { key: 'Admin',   label: 'Admins' },
+    { key: 'Manager', label: 'Managers' },
+    { key: 'Staff',   label: 'Staff' },
+    { key: 'Agent',   label: 'Agents' },
+    { key: 'Client',  label: 'Clients' },
+  ]
+  const profilesByRole = isAdmin
+    ? ROLE_SECTIONS.map(s => ({ ...s, users: visibleProfiles.filter(p => p.role === s.key) }))
+    : null
+  // Defensive — surface any profile with an unrecognised role so we don't
+  // silently hide them. Should be empty in practice.
+  const unclassifiedProfiles = isAdmin
+    ? visibleProfiles.filter(p => !ROLE_SECTIONS.some(s => s.key === p.role))
+    : []
 
   if (loading) return <div className="p-8 text-slate-400 dark:text-slate-500">Loading...</div>
 
@@ -354,21 +376,88 @@ export default function SettingsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleProfiles.map(p => (
-                    <UserRow
-                      key={p.id}
-                      user={p}
-                      teams={isAdmin ? teams : managerTeams}
-                      allProfiles={profiles}
-                      isSelf={p.id === profile?.id}
-                      saving={saving[p.id]}
-                      onSave={(updates) => updateProfile(p.id, updates)}
-                      onTeamsChange={fetchAll}
-                      isAdmin={isAdmin}
-                      approverName={profile?.full_name}
-                      onDelete={() => setDeleteTarget(p)}
-                    />
-                  ))}
+                  {isAdmin ? (
+                    <>
+                      {profilesByRole.map(section => (
+                        <Fragment key={section.key}>
+                          <tr>
+                            <td
+                              colSpan={6}
+                              className="pt-5 pb-2 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider"
+                            >
+                              {section.label} ({section.users.length})
+                            </td>
+                          </tr>
+                          {section.users.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="text-xs text-slate-400 dark:text-slate-600 italic py-2">
+                                No {section.label.toLowerCase()} yet
+                              </td>
+                            </tr>
+                          ) : (
+                            section.users.map(p => (
+                              <UserRow
+                                key={p.id}
+                                user={p}
+                                teams={teams}
+                                allProfiles={profiles}
+                                isSelf={p.id === profile?.id}
+                                saving={saving[p.id]}
+                                onSave={(updates) => updateProfile(p.id, updates)}
+                                onTeamsChange={fetchAll}
+                                isAdmin={isAdmin}
+                                approverName={profile?.full_name}
+                                onDelete={() => setDeleteTarget(p)}
+                              />
+                            ))
+                          )}
+                        </Fragment>
+                      ))}
+                      {unclassifiedProfiles.length > 0 && (
+                        <Fragment>
+                          <tr>
+                            <td
+                              colSpan={6}
+                              className="pt-5 pb-2 text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider"
+                            >
+                              Other ({unclassifiedProfiles.length})
+                            </td>
+                          </tr>
+                          {unclassifiedProfiles.map(p => (
+                            <UserRow
+                              key={p.id}
+                              user={p}
+                              teams={teams}
+                              allProfiles={profiles}
+                              isSelf={p.id === profile?.id}
+                              saving={saving[p.id]}
+                              onSave={(updates) => updateProfile(p.id, updates)}
+                              onTeamsChange={fetchAll}
+                              isAdmin={isAdmin}
+                              approverName={profile?.full_name}
+                              onDelete={() => setDeleteTarget(p)}
+                            />
+                          ))}
+                        </Fragment>
+                      )}
+                    </>
+                  ) : (
+                    visibleProfiles.map(p => (
+                      <UserRow
+                        key={p.id}
+                        user={p}
+                        teams={managerTeams}
+                        allProfiles={profiles}
+                        isSelf={p.id === profile?.id}
+                        saving={saving[p.id]}
+                        onSave={(updates) => updateProfile(p.id, updates)}
+                        onTeamsChange={fetchAll}
+                        isAdmin={isAdmin}
+                        approverName={profile?.full_name}
+                        onDelete={() => setDeleteTarget(p)}
+                      />
+                    ))
+                  )}
                 </tbody>
               </table>
               </div>
