@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { PageHeader, showToast } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
-import { Star, X, Plus, Send, Mail, Pencil, Trash2, Check, AlertTriangle, Shield } from 'lucide-react'
+import { Star, X, Plus, Send, Mail, Pencil, Trash2, Check, AlertTriangle, Shield, ChevronDown, ChevronRight } from 'lucide-react'
 import { ModalWrapper } from '../components/ui/animations'
 import AvatarCard from '../components/settings/AvatarCard'
 import DisplayNameCard from '../components/settings/DisplayNameCard'
@@ -20,6 +20,10 @@ export default function SettingsPage() {
   const [newTeam,  setNewTeam]  = useState('')
   const [newTeamKind, setNewTeamKind] = useState('internal')
   const [teamPopoverId, setTeamPopoverId] = useState(null)
+  // Collapsed role sections in the Admin Users table. Defaults to all
+  // expanded; ephemeral (no localStorage). Adding 'Other' would be a
+  // no-op since that section only renders when non-empty.
+  const [collapsedRoles, setCollapsedRoles] = useState(() => new Set())
   const [saving,   setSaving]   = useState({})
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole,  setInviteRole]  = useState('Staff')
@@ -170,6 +174,26 @@ export default function SettingsPage() {
   const unclassifiedProfiles = isAdmin
     ? visibleProfiles.filter(p => !ROLE_SECTIONS.some(s => s.key === p.role))
     : []
+
+  function toggleRoleSection(key) {
+    setCollapsedRoles(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key); else next.add(key)
+      return next
+    })
+  }
+  function collapseAllRoles() {
+    const all = ROLE_SECTIONS.map(s => s.key)
+    if (unclassifiedProfiles.length > 0) all.push('Other')
+    setCollapsedRoles(new Set(all))
+  }
+  function expandAllRoles() {
+    setCollapsedRoles(new Set())
+  }
+  const allRoleKeys = isAdmin
+    ? [...ROLE_SECTIONS.map(s => s.key), ...(unclassifiedProfiles.length > 0 ? ['Other'] : [])]
+    : []
+  const allCollapsed = isAdmin && allRoleKeys.length > 0 && allRoleKeys.every(k => collapsedRoles.has(k))
 
   if (loading) return <div className="p-8 text-slate-400 dark:text-slate-500">Loading...</div>
 
@@ -352,9 +376,20 @@ export default function SettingsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.05 }}
           >
-            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">
-              {isAdmin ? `Users (${profiles.length})` : `New Users (${unassignedCount})`}
-            </p>
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                {isAdmin ? `Users (${profiles.length})` : `New Users (${unassignedCount})`}
+              </p>
+              {isAdmin && allRoleKeys.length > 0 && (
+                <button
+                  type="button"
+                  onClick={allCollapsed ? expandAllRoles : collapseAllRoles}
+                  className="text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+                >
+                  {allCollapsed ? 'Expand all' : 'Collapse all'}
+                </button>
+              )}
+            </div>
             <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
               {isAdmin
                 ? 'New users appear here after they sign in for the first time. Assign them teams and a role.'
@@ -378,24 +413,69 @@ export default function SettingsPage() {
                 <tbody>
                   {isAdmin ? (
                     <>
-                      {profilesByRole.map(section => (
-                        <Fragment key={section.key}>
-                          <tr>
-                            <td
-                              colSpan={6}
-                              className="pt-5 pb-2 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider"
-                            >
-                              {section.label} ({section.users.length})
-                            </td>
-                          </tr>
-                          {section.users.length === 0 ? (
+                      {profilesByRole.map(section => {
+                        const isCollapsed = collapsedRoles.has(section.key)
+                        return (
+                          <Fragment key={section.key}>
                             <tr>
-                              <td colSpan={6} className="text-xs text-slate-400 dark:text-slate-600 italic py-2">
-                                No {section.label.toLowerCase()} yet
+                              <td colSpan={6} className="pt-5 pb-2">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleRoleSection(section.key)}
+                                  className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+                                  aria-expanded={!isCollapsed}
+                                >
+                                  {isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+                                  <span>{section.label} ({section.users.length})</span>
+                                </button>
                               </td>
                             </tr>
-                          ) : (
-                            section.users.map(p => (
+                            {!isCollapsed && (
+                              section.users.length === 0 ? (
+                                <tr>
+                                  <td colSpan={6} className="text-xs text-slate-400 dark:text-slate-600 italic py-2 pl-5">
+                                    No {section.label.toLowerCase()} yet
+                                  </td>
+                                </tr>
+                              ) : (
+                                section.users.map(p => (
+                                  <UserRow
+                                    key={p.id}
+                                    user={p}
+                                    teams={teams}
+                                    allProfiles={profiles}
+                                    isSelf={p.id === profile?.id}
+                                    saving={saving[p.id]}
+                                    onSave={(updates) => updateProfile(p.id, updates)}
+                                    onTeamsChange={fetchAll}
+                                    isAdmin={isAdmin}
+                                    approverName={profile?.full_name}
+                                    onDelete={() => setDeleteTarget(p)}
+                                  />
+                                ))
+                              )
+                            )}
+                          </Fragment>
+                        )
+                      })}
+                      {unclassifiedProfiles.length > 0 && (() => {
+                        const isCollapsed = collapsedRoles.has('Other')
+                        return (
+                          <Fragment>
+                            <tr>
+                              <td colSpan={6} className="pt-5 pb-2">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleRoleSection('Other')}
+                                  className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider hover:text-amber-700 dark:hover:text-amber-300 transition-colors"
+                                  aria-expanded={!isCollapsed}
+                                >
+                                  {isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+                                  <span>Other ({unclassifiedProfiles.length})</span>
+                                </button>
+                              </td>
+                            </tr>
+                            {!isCollapsed && unclassifiedProfiles.map(p => (
                               <UserRow
                                 key={p.id}
                                 user={p}
@@ -409,37 +489,10 @@ export default function SettingsPage() {
                                 approverName={profile?.full_name}
                                 onDelete={() => setDeleteTarget(p)}
                               />
-                            ))
-                          )}
-                        </Fragment>
-                      ))}
-                      {unclassifiedProfiles.length > 0 && (
-                        <Fragment>
-                          <tr>
-                            <td
-                              colSpan={6}
-                              className="pt-5 pb-2 text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider"
-                            >
-                              Other ({unclassifiedProfiles.length})
-                            </td>
-                          </tr>
-                          {unclassifiedProfiles.map(p => (
-                            <UserRow
-                              key={p.id}
-                              user={p}
-                              teams={teams}
-                              allProfiles={profiles}
-                              isSelf={p.id === profile?.id}
-                              saving={saving[p.id]}
-                              onSave={(updates) => updateProfile(p.id, updates)}
-                              onTeamsChange={fetchAll}
-                              isAdmin={isAdmin}
-                              approverName={profile?.full_name}
-                              onDelete={() => setDeleteTarget(p)}
-                            />
-                          ))}
-                        </Fragment>
-                      )}
+                            ))}
+                          </Fragment>
+                        )
+                      })()}
                     </>
                   ) : (
                     visibleProfiles.map(p => (
