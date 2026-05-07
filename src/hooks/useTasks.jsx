@@ -13,19 +13,41 @@ import { buildSubtaskCounts } from '../lib/subtasks'
 // the tasks + task_assignees tables. Each assignee's useTasks hook
 // subscribes to user:{theirId}:task-poke; this function sends one
 // broadcast on that channel and tears the channel down.
+//
+// `ack: true` makes ch.send() resolve only when the realtime server has
+// acknowledged delivery, which means we can safely tear the channel down
+// right after. Without ack, send() returns immediately and a fast
+// removeChannel() can race the underlying socket flush — receivers see
+// nothing.
 async function pokeAssignee(userId) {
   const topic = `user:${userId}:task-poke`
-  const ch = supabase.channel(topic, { config: { broadcast: { self: false } } })
+  const ch = supabase.channel(topic, {
+    config: { broadcast: { self: false, ack: true } },
+  })
+  let subscribed = false
   await new Promise((resolve) => {
-    ch.subscribe((status) => { if (status === 'SUBSCRIBED') resolve() })
+    ch.subscribe((status) => {
+      if (status === 'SUBSCRIBED') { subscribed = true; resolve() }
+    })
     // Safety timeout so we don't hang if the socket is down.
     setTimeout(resolve, 1500)
   })
+  if (!subscribed) {
+    if (typeof window !== 'undefined' && window.__pe_debug) {
+      console.log('[pe-debug] pokeAssignee: subscribe timed out, send may be lost', { userId })
+    }
+    try { supabase.removeChannel(ch) } catch { /* noop */ }
+    return
+  }
   try {
-    await ch.send({ type: 'broadcast', event: 'task-changed', payload: {} })
+    const result = await ch.send({ type: 'broadcast', event: 'task-changed', payload: {} })
+    if (typeof window !== 'undefined' && window.__pe_debug) {
+      console.log('[pe-debug] pokeAssignee sent', { userId, topic, result })
+    }
   } finally {
-    // Leave a short beat for the broker to flush before removing.
-    setTimeout(() => { try { supabase.removeChannel(ch) } catch { /* noop */ } }, 250)
+    // ack: true means send resolved only after server flush; safe to
+    // tear down immediately, but a tiny grace beat is harmless.
+    setTimeout(() => { try { supabase.removeChannel(ch) } catch { /* noop */ } }, 50)
   }
 }
 
@@ -286,7 +308,10 @@ function useTasksImpl() {
     if (!profileId) return
 
     let refetchTimer = null
-    function scheduleRefetch() {
+    function scheduleRefetch(reason) {
+      if (typeof window !== 'undefined' && window.__pe_debug) {
+        console.log('[pe-debug] scheduleRefetch', { reason, alreadyScheduled: !!refetchTimer })
+      }
       if (refetchTimer) return
       refetchTimer = setTimeout(() => {
         refetchTimer = null
@@ -294,17 +319,26 @@ function useTasksImpl() {
       }, 250)
     }
 
-    // Reconnect-aware status tracking: the first SUBSCRIBED is the initial
-    // connect (no refetch — we've just fetched). Each subsequent transition
-    // from a non-SUBSCRIBED state back to SUBSCRIBED means we reconnected,
-    // and we refetch to catch anything missed during the outage.
-    let everConnected = false
-    function onStatus(status) {
-      if (status === 'SUBSCRIBED') {
-        if (everConnected) scheduleRefetch()
-        everConnected = true
-      } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        everConnected = false
+    // Reconnect-aware status tracking, per-channel. First SUBSCRIBED is the
+    // initial connect (no refetch — we've just fetched). Each subsequent
+    // transition from a non-SUBSCRIBED state back to SUBSCRIBED means we
+    // reconnected, and we refetch to catch anything missed during the
+    // outage. Each channel needs its own state since they reconnect
+    // independently — previously only `tasksChannel` carried this, so a
+    // silent drop on the assignees or poke channel left us blind until the
+    // next user-driven refetch.
+    function makeStatusHandler(label) {
+      let everConnected = false
+      return (status) => {
+        if (typeof window !== 'undefined' && window.__pe_debug) {
+          console.log('[pe-debug] channel status', { channel: label, status })
+        }
+        if (status === 'SUBSCRIBED') {
+          if (everConnected) scheduleRefetch(`reconnect:${label}`)
+          everConnected = true
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          everConnected = false
+        }
       }
     }
 
@@ -326,14 +360,23 @@ function useTasksImpl() {
             newRow?.assigned_to === profileId || newRow?.assigned_by === profileId ||
             oldRow?.assigned_to === profileId || oldRow?.assigned_by === profileId
           const inMyList = tasksRef.current.some(t => t.id === row.id)
+          if (typeof window !== 'undefined' && window.__pe_debug) {
+            console.log('[pe-debug] tasks postgres_changes', {
+              eventType: payload.eventType,
+              taskId: row.id,
+              assigned_to: newRow?.assigned_to,
+              assigned_by: newRow?.assigned_by,
+              involvesMe, inMyList,
+            })
+          }
           if (!involvesMe && !inMyList) return
 
           if (payload.eventType === 'INSERT' && newRow?.assigned_to === profileId && newRow?.assigned_by !== profileId) {
             playTaskSound()
           }
-          scheduleRefetch()
+          scheduleRefetch('tasks-postgres-changes')
         })
-      .subscribe(onStatus)
+      .subscribe(makeStatusHandler('tasks'))
 
     // Task-assignees channel — secondary assignees land here (tasks INSERT is
     // suppressed by RLS until their junction row exists).
@@ -357,16 +400,25 @@ function useTasksImpl() {
 
           const involvesMe = newRow?.profile_id === profileId || oldRow?.profile_id === profileId
           const inMyList = tasksRef.current.some(t => t.id === row.task_id)
+          if (typeof window !== 'undefined' && window.__pe_debug) {
+            console.log('[pe-debug] task_assignees postgres_changes', {
+              eventType: payload.eventType,
+              taskId: row.task_id,
+              profile_id: newRow?.profile_id,
+              is_primary: newRow?.is_primary,
+              involvesMe, inMyList,
+            })
+          }
           if (!involvesMe && !inMyList) return
 
           // Sound only on NEW assignments to the current user.
           if (payload.eventType === 'INSERT' && !row.is_primary && row.profile_id === profileId) {
             playTaskSound()
           }
-          scheduleRefetch()
+          scheduleRefetch('assignees-postgres-changes')
         }
       )
-      .subscribe()
+      .subscribe(makeStatusHandler('assignees'))
 
     // User-scoped broadcast channel — the sender-side "poke" from
     // assignTask fires here. This is RLS-free and filter-free, so it's the
@@ -375,10 +427,13 @@ function useTasksImpl() {
     const pokeChannel = supabase
       .channel(`user:${profileId}:task-poke`, { config: { broadcast: { self: false } } })
       .on('broadcast', { event: 'task-changed' }, () => {
+        if (typeof window !== 'undefined' && window.__pe_debug) {
+          console.log('[pe-debug] poke broadcast received')
+        }
         playTaskSound()
-        scheduleRefetch()
+        scheduleRefetch('poke-broadcast')
       })
-      .subscribe()
+      .subscribe(makeStatusHandler('poke'))
 
     return () => {
       if (refetchTimer) { clearTimeout(refetchTimer); refetchTimer = null }
