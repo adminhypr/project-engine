@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Project Engine is an internal task management web app. Users authenticate via Google OAuth through Supabase, get assigned roles (Staff/Manager/Admin), and manage tasks within teams. Priority colors are calculated live from timestamps (never stored). Assignment types (Superior/Peer/CrossTeam/Upward/Self) are stored at task creation time.
 
-In addition to task management, the app hosts **Project Hubs** — Basecamp-style collaboration spaces with chat (Campfire), message board, check-ins, shared calendar, and docs & files. Hubs can be team-scoped or independent (custom hubs with explicit membership).
+In addition to task management, the app hosts **Project Hubs** — Basecamp-style collaboration spaces with chat (Campfire), message board, to-do lists, docs & files, and a kanban Card Table. Hubs can be team-scoped or independent (custom hubs with explicit membership). Modules are first-class rows (`hub_modules`, migration 066) with admin-curated canonical layout + per-user drag overrides (migration 068). Check-ins and Calendar were removed in migration 065 — do not reintroduce.
 
 ## Commands
 
@@ -218,6 +218,7 @@ Schema in `supabase/migrations/` (apply in filename order):
 **Internal/External team division + audit-log constraint repair (101–102):**
 - **101_team_kind.sql** — Adds `teams.kind text not null default 'internal' check (kind in ('internal','external'))`. Purely additive metadata flag set by Admin — drives the Settings page's Internal vs External team grouping. No RLS change (001's `Admins can manage teams` already gates UPDATE), no edge functions / cron / spawn paths read it. Rollback is a clean column drop.
 - **102_fix_task_audit_log_event_type_constraint.sql** — Defensive constraint reset. Symptom: prod sub-task creation started failing with `task_audit_log_event_type_check` violation despite source-code review confirming every INSERT site writes a value already in 058's CHECK list. Root cause assumed to be drift between prod constraint and migration source (dashboard edit / partial apply / out-of-band change). Fix: drop and recreate with the canonical 20-value list spanning 002, 003, 012, 036, 044, 053, 056, 058, 079, 088. Idempotent — round-trip if already correct.
+- **103_fix_profile_teams_update_delete_recursion.sql** — Real prod bug: Admin removing a team chip on the Settings page failed with `42P17: infinite recursion detected in policy for relation "profile_teams"`. Root cause: migration 075's `profile_teams_update` / `profile_teams_delete` Manager/TeamLeader branches did inline `EXISTS (SELECT … FROM profile_teams self_pt …)`. Postgres applies `profile_teams_select` RLS to that inner SELECT and detects a cycle at plan time — even though the Admin OR branch would short-circuit at runtime, the planner refuses the query first. Same shape as the hub_members bug fixed in 093. Fix mirrors 093: new `is_team_manager_or_leader(p_team_id uuid)` SECURITY DEFINER STABLE helper bypasses RLS, then both policies are recreated calling the helper instead of the inline subquery. Behavior preserved exactly (Admin global, Manager/TeamLeader on team, no self-modify, no demoting Admins); INSERT/SELECT policies and the `guard_profile_teams_self_role_change` trigger untouched.
 
 ## Supabase Edge Functions
 
