@@ -109,7 +109,13 @@ export default function ChatWidget() {
 
   const { sections, groups, campfires, tasks, conversations, presence, createOrOpen, createGroup, markRead } =
     useContactList(query)
-  const total = sumUnread(conversations)
+  // Match the badge to what's actually rendered: Done task chats are hidden
+  // from the Tasks section (useConversations filters task_status !== 'Done')
+  // and have no other surface, so their unread would otherwise be uncleariable
+  // ghost unread on the launcher.
+  const total = sumUnread(
+    conversations.filter(c => !(c.kind === 'task' && c.task_status === 'Done'))
+  )
 
   // Keep the global DM sound-suppression context in sync so useDmRealtime
   // can skip the ping for muted conversations and the one the user is

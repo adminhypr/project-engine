@@ -31,6 +31,11 @@ export default function SettingsPage() {
   const [inviting,    setInviting]    = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting,     setDeleting]     = useState(false)
+  const [renamingTeamId, setRenamingTeamId] = useState(null)
+  const [renameValue,    setRenameValue]    = useState('')
+  const [deleteTeamTarget,      setDeleteTeamTarget]      = useState(null)
+  const [deleteTeamConfirmText, setDeleteTeamConfirmText] = useState('')
+  const [deletingTeam,          setDeletingTeam]          = useState(false)
 
   useEffect(() => { fetchAll() }, [])
 
@@ -65,11 +70,44 @@ export default function SettingsPage() {
     else { showToast('Team added'); setNewTeam(''); fetchAll() }
   }
 
-  async function deleteTeam(id) {
-    if (!window.confirm('Delete this team? Members will be unassigned.')) return
-    const { error } = await supabase.from('teams').delete().eq('id', id)
+  function startRenameTeam(team) {
+    setRenamingTeamId(team.id)
+    setRenameValue(team.name)
+    setTeamPopoverId(null)
+  }
+
+  function cancelRenameTeam() {
+    setRenamingTeamId(null)
+    setRenameValue('')
+  }
+
+  async function commitRenameTeam(team) {
+    const next = renameValue.trim()
+    if (!next || next === team.name) { cancelRenameTeam(); return }
+    const { error } = await supabase.from('teams').update({ name: next }).eq('id', team.id)
     if (error) showToast(error.message, 'error')
-    else { showToast('Team deleted'); setTeamPopoverId(null); fetchAll() }
+    else { showToast('Team renamed'); cancelRenameTeam(); fetchAll() }
+  }
+
+  function startDeleteTeam(team) {
+    setDeleteTeamTarget(team)
+    setDeleteTeamConfirmText('')
+    setTeamPopoverId(null)
+  }
+
+  async function confirmDeleteTeam() {
+    if (!deleteTeamTarget) return
+    if (deleteTeamConfirmText.trim() !== deleteTeamTarget.name) return
+    setDeletingTeam(true)
+    const { error } = await supabase.from('teams').delete().eq('id', deleteTeamTarget.id)
+    setDeletingTeam(false)
+    if (error) showToast(error.message, 'error')
+    else {
+      showToast('Team deleted')
+      setDeleteTeamTarget(null)
+      setDeleteTeamConfirmText('')
+      fetchAll()
+    }
   }
 
   async function updateTeamKind(id, kind) {
@@ -260,16 +298,48 @@ export default function SettingsPage() {
                       <div className="flex flex-wrap gap-2">
                         {list.map(t => (
                           <div key={t.id} className="relative">
-                            <motion.button
-                              type="button"
-                              onClick={() => setTeamPopoverId(teamPopoverId === t.id ? null : t.id)}
-                              className="flex items-center gap-2 bg-white dark:bg-dark-surface rounded-xl px-3 py-1.5 border border-slate-100 dark:border-dark-border hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
-                              layout
-                            >
-                              <span className="text-sm font-medium">{t.name}</span>
-                            </motion.button>
+                            {renamingTeamId === t.id ? (
+                              <div className="flex items-center gap-1 bg-white dark:bg-dark-surface rounded-xl px-2 py-1 border border-brand-300 dark:border-brand-600">
+                                <input
+                                  type="text"
+                                  value={renameValue}
+                                  onChange={e => setRenameValue(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') commitRenameTeam(t)
+                                    else if (e.key === 'Escape') cancelRenameTeam()
+                                  }}
+                                  autoFocus
+                                  className="form-input !py-1 !px-2 !text-sm w-32"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => commitRenameTeam(t)}
+                                  className="p-1 text-emerald-600 hover:text-emerald-700"
+                                  title="Save"
+                                >
+                                  <Check size={14} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={cancelRenameTeam}
+                                  className="p-1 text-slate-400 hover:text-slate-600"
+                                  title="Cancel"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            ) : (
+                              <motion.button
+                                type="button"
+                                onClick={() => setTeamPopoverId(teamPopoverId === t.id ? null : t.id)}
+                                className="flex items-center gap-2 bg-white dark:bg-dark-surface rounded-xl px-3 py-1.5 border border-slate-100 dark:border-dark-border hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
+                                layout
+                              >
+                                <span className="text-sm font-medium">{t.name}</span>
+                              </motion.button>
+                            )}
                             <AnimatePresence>
-                              {teamPopoverId === t.id && (
+                              {teamPopoverId === t.id && renamingTeamId !== t.id && (
                                 <>
                                   <div
                                     className="fixed inset-0 z-40"
@@ -283,6 +353,13 @@ export default function SettingsPage() {
                                     className="absolute z-50 left-0 top-full mt-1 min-w-[180px] bg-white dark:bg-dark-surface rounded-xl border border-slate-200 dark:border-dark-border shadow-elevated overflow-hidden"
                                   >
                                     <button
+                                      onClick={() => startRenameTeam(t)}
+                                      className="w-full text-left text-sm px-3 py-2 hover:bg-slate-50 dark:hover:bg-dark-bg transition-colors inline-flex items-center gap-2"
+                                    >
+                                      <Pencil size={13} />
+                                      Rename
+                                    </button>
+                                    <button
                                       onClick={() => updateTeamKind(t.id, kind === 'internal' ? 'external' : 'internal')}
                                       className="w-full text-left text-sm px-3 py-2 hover:bg-slate-50 dark:hover:bg-dark-bg transition-colors"
                                     >
@@ -290,9 +367,10 @@ export default function SettingsPage() {
                                     </button>
                                     <div className="border-t border-slate-100 dark:border-dark-border" />
                                     <button
-                                      onClick={() => deleteTeam(t.id)}
-                                      className="w-full text-left text-sm px-3 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                      onClick={() => startDeleteTeam(t)}
+                                      className="w-full text-left text-sm px-3 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors inline-flex items-center gap-2"
                                     >
+                                      <Trash2 size={13} />
                                       Delete team
                                     </button>
                                   </motion.div>
@@ -519,6 +597,65 @@ export default function SettingsPage() {
           )}
 
         </div>
+
+        {/* Delete team confirmation modal — requires typing the team name */}
+        <ModalWrapper
+          isOpen={!!deleteTeamTarget}
+          onClose={() => !deletingTeam && (setDeleteTeamTarget(null), setDeleteTeamConfirmText(''))}
+        >
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-500/15 flex items-center justify-center">
+                <AlertTriangle size={20} className="text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-900 dark:text-white">Delete Team</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">This action cannot be undone</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-700 dark:text-slate-200 mb-2">
+              Deleting <strong>{deleteTeamTarget?.name}</strong> will:
+            </p>
+            <ul className="text-xs text-slate-500 dark:text-slate-400 mb-4 list-disc pl-5 space-y-1">
+              <li>Remove every member's assignment to this team</li>
+              <li>Delete this team's group chat</li>
+              <li>Detach hubs and tasks (they remain, with no team)</li>
+            </ul>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">
+              Type <span className="font-mono text-slate-900 dark:text-white">{deleteTeamTarget?.name}</span> to confirm
+            </label>
+            <input
+              type="text"
+              value={deleteTeamConfirmText}
+              onChange={e => setDeleteTeamConfirmText(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && deleteTeamConfirmText.trim() === deleteTeamTarget?.name && !deletingTeam) {
+                  confirmDeleteTeam()
+                }
+              }}
+              className="form-input w-full mb-5"
+              autoFocus
+              disabled={deletingTeam}
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => { setDeleteTeamTarget(null); setDeleteTeamConfirmText('') }}
+                disabled={deletingTeam}
+                className="btn-ghost px-4 py-2 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteTeam}
+                disabled={deletingTeam || deleteTeamConfirmText.trim() !== deleteTeamTarget?.name}
+                className="btn-danger px-4 py-2 text-sm inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Trash2 size={14} />
+                {deletingTeam ? 'Deleting...' : 'Delete Team'}
+              </button>
+            </div>
+          </div>
+        </ModalWrapper>
 
         {/* Delete user confirmation modal */}
         <ModalWrapper isOpen={!!deleteTarget} onClose={() => !deleting && setDeleteTarget(null)}>
