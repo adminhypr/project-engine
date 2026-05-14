@@ -51,6 +51,12 @@ export default function GroupMembersModal({
   }
 
   const participants = conversation?.participants || []
+  // Hub campfires reuse the same conversations stack (mig 064) but their
+  // membership lives in `hub_members`, not `conversation_participants`.
+  // `add_group_member` / `leave_group` RPCs reject kind!='group', so for
+  // hub conversations we only show the participant list — adding/leaving
+  // happens in the Hub UI.
+  const isHubConversation = conversation?.kind === 'hub'
 
   return (
     <ModalWrapper isOpen={isOpen} onClose={busy ? () => {} : onClose}>
@@ -102,7 +108,7 @@ export default function GroupMembersModal({
             </div>
           </section>
 
-          {!isExternal && (
+          {!isExternal && !isHubConversation && (
           <section>
             <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
               Add people
@@ -155,7 +161,7 @@ export default function GroupMembersModal({
         </div>
 
         <footer className="px-4 py-3 border-t border-slate-200 dark:border-dark-border flex items-center justify-between gap-2">
-          {!isExternal ? (
+          {!isExternal && !isHubConversation ? (
             <button
               type="button"
               onClick={leave}
