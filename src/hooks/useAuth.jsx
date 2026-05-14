@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react'
+import * as Sentry from '@sentry/react'
 import { supabase } from '../lib/supabase'
 import { useDmRealtime } from './useDmRealtime'
 import { isAgent, isClient, isExternal } from '../lib/roleHelpers'
@@ -283,6 +284,13 @@ export function AuthProvider({ children }) {
     if (profile?.role === 'Admin') return true
     return profile?.team_roles?.[teamId] === 'Manager'
   }, [profile])
+
+  // Tag Sentry events with the authenticated profile id so errors can be
+  // correlated across sessions. Only the id — no email, no PII.
+  useEffect(() => {
+    if (profile?.id) Sentry.setUser({ id: profile.id })
+    else Sentry.setUser(null)
+  }, [profile?.id])
 
   // Sync activeTeamId after profile loads — prefer stored valid team, else default.
   useEffect(() => {

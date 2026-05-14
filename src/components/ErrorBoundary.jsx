@@ -1,4 +1,5 @@
 import { Component } from 'react'
+import * as Sentry from '@sentry/react'
 import { isChunkLoadError, reloadOnceForStaleChunk } from '../lib/chunkReload'
 
 export default class ErrorBoundary extends Component {
@@ -23,7 +24,11 @@ export default class ErrorBoundary extends Component {
     // chunk), reload here. Cooldown guards against loops.
     if (isChunkLoadError(error)) {
       reloadOnceForStaleChunk('ErrorBoundary')
+      return  // Don't ship chunk errors to Sentry — handled, expected noise.
     }
+    Sentry.captureException(error, {
+      contexts: { react: { componentStack: info.componentStack } },
+    })
   }
 
   render() {
