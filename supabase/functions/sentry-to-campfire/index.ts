@@ -29,7 +29,6 @@
 //     Sentry doesn't retry forever on a malformed delivery.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { createHmac, timingSafeEqual } from 'node:crypto'
 
 const SENTRY_BOT_ID = '00000000-0000-0000-0000-000000005e74'
 const DEDUPE_WINDOW_MS = 15 * 60 * 1000
@@ -42,28 +41,43 @@ const supabase = createClient(
 // ── Signature verification ─────────────────────────────────────
 // Sentry signs with HMAC-SHA256 over the raw body using the
 // Internal Integration's Client Secret. Header is `Sentry-Hook-Signature`.
+// Uses Deno's native Web Crypto rather than node:crypto compat — the
+// compat shim has historically returned subtly different bytes here.
 
-function verifySentrySignature(rawBody: string, headerSig: string | null): boolean {
+async function verifySentrySignature(rawBody: string, headerSig: string | null): Promise<boolean> {
   if (!headerSig) return false
   const secret = Deno.env.get('SENTRY_CLIENT_SECRET')
   if (!secret) {
     console.error('[sentry-to-campfire] SENTRY_CLIENT_SECRET not set — rejecting')
     return false
   }
-  const expected = createHmac('sha256', secret).update(rawBody).digest('hex')
+  const enc = new TextEncoder()
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  const sigBuf = await crypto.subtle.sign('HMAC', key, enc.encode(rawBody))
+  const expected = Array.from(new Uint8Array(sigBuf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
   if (expected.length !== headerSig.length) return false
-  try {
-    return timingSafeEqual(Buffer.from(expected), Buffer.from(headerSig))
-  } catch {
-    return false
+  // Constant-time string compare over hex characters.
+  let diff = 0
+  for (let i = 0; i < expected.length; i++) {
+    diff |= expected.charCodeAt(i) ^ headerSig.charCodeAt(i)
   }
+  return diff === 0
 }
 
 // ── Payload parsing ───────────────────────────────────────────
-// Sentry alert payloads vary slightly between `event_alert` and
-// `issue_alert` actions. The fields we need (issue id, level, env,
-// title, culprit, web URL) live in roughly the same places; we pull
-// defensively and fall back to sensible defaults.
+// Sentry has THREE webhook delivery paths with different payload shapes:
+//   • Issue resource webhook  (free plan):  data.issue.{...}      action=created|resolved|assigned|ignored|unresolved
+//   • Error resource webhook  (paid only):  data.error.{...}      action=created
+//   • Alert Rule action       (legacy):     data.event.{...}      action=triggered
+// We pull from all three. Whichever container yields an `issueId` wins.
 
 interface ParsedEvent {
   issueId: string
@@ -72,36 +86,57 @@ interface ParsedEvent {
   title: string
   culprit: string
   permalink: string | null
+  action: string
 }
 
 function parsePayload(payload: any): ParsedEvent | null {
-  const event = payload?.data?.event
-  if (!event) return null
+  const container =
+    payload?.data?.event ??
+    payload?.data?.error ??
+    payload?.data?.issue ??
+    null
+  if (!container) return null
 
-  // issue id — different shapes across action types
-  const issueId =
-    String(
-      event.issue_id ??
-      event.issue?.id ??
-      payload?.data?.issue?.id ??
-      ''
-    )
+  const issueId = String(
+    container.issue_id ??
+    container.issue?.id ??
+    container.id ??
+    payload?.data?.issue?.id ??
+    ''
+  )
   if (!issueId) return null
 
-  const environment = String(event.environment ?? 'unknown')
-  const level = normalizeLevel(event.level)
-  const title = String(event.title ?? event.metadata?.value ?? 'Unknown error')
-  const culprit = String(event.culprit ?? event.transaction ?? '')
+  // `environment` is only present on event/error payloads. Issue
+  // resource webhooks don't carry it directly — try `project.slug`
+  // as a fallback hint, else "unknown".
+  const environment = String(
+    container.environment ??
+    payload?.data?.event?.environment ??
+    'unknown'
+  )
 
-  // Sentry provides a permalink via `event.web_url` (newer) or
-  // `event.url` (older); some payloads only carry the issue URL.
+  const level = normalizeLevel(container.level)
+  const title = String(
+    container.title ??
+    container.metadata?.value ??
+    container.metadata?.title ??
+    'Unknown error'
+  )
+  const culprit = String(container.culprit ?? container.transaction ?? '')
+
   const permalink =
-    event.web_url ??
-    event.url ??
+    container.web_url ??
+    container.url ??
+    container.issue_url ??
+    container.permalink ??
     payload?.data?.issue?.web_url ??
     null
 
-  return { issueId, environment, level, title, culprit, permalink }
+  // Pass action verb through so the message can say "resolved" vs
+  // "created" — useful with the issue webhook which fires on lifecycle.
+  const action = String(payload?.action ?? 'created')
+
+  return { issueId, environment, level, title, culprit, permalink, action }
 }
 
 function normalizeLevel(raw: unknown): ParsedEvent['level'] {
@@ -135,6 +170,17 @@ function formatTime(iso: string): string {
   return `${hh}:${mm}`
 }
 
+// Friendly verb for the issue-resource webhook actions. Lifecycle
+// events get a short prefix so the campfire reads naturally.
+const ACTION_PREFIX: Record<string, string> = {
+  created:    '',           // default — no prefix
+  resolved:   '✅ resolved: ',
+  unresolved: '⚠️ reopened: ',
+  assigned:   '👤 assigned: ',
+  ignored:    '🔇 ignored: ',
+  archived:   '📦 archived: ',
+}
+
 function renderMessage(args: {
   level: ParsedEvent['level']
   environment: string
@@ -143,10 +189,13 @@ function renderMessage(args: {
   permalink: string | null
   count: number
   firstSeenAt: string
+  action: string
 }): string {
-  const { level, environment, title, culprit, permalink, count, firstSeenAt } = args
-  const icon = iconFor(level)
-  const header = `${icon} [${environment}] ${title}`
+  const { level, environment, title, culprit, permalink, count, firstSeenAt, action } = args
+  const prefix = ACTION_PREFIX[action] ?? ''
+  const icon = prefix ? '' : `${iconFor(level)} `  // skip icon if prefix already conveys meaning
+  const env  = environment !== 'unknown' ? `[${environment}] ` : ''
+  const header = `${icon}${prefix}${env}${title}`
   const where  = culprit ? `\nin ${culprit}` : ''
   const seen   = count > 1
     ? `\n\nSeen ${count}× since ${formatTime(firstSeenAt)}`
@@ -165,7 +214,7 @@ Deno.serve(async (req) => {
 
   const rawBody = await req.text()
   const sig = req.headers.get('sentry-hook-signature')
-  if (!verifySentrySignature(rawBody, sig)) {
+  if (!(await verifySentrySignature(rawBody, sig))) {
     return new Response(JSON.stringify({ error: 'invalid_signature' }), { status: 401 })
   }
 
@@ -198,7 +247,11 @@ Deno.serve(async (req) => {
   }
 
   const now = Date.now()
+  // Only fold `created` actions into the existing dedupe row. Lifecycle
+  // actions (resolved/assigned/unresolved/...) are rare and meaningful —
+  // they always post fresh so they don't get hidden inside a "Seen N×".
   const inWindow = existing
+    && parsed.action === 'created'
     && (now - new Date(existing.last_seen_at).getTime()) < DEDUPE_WINDOW_MS
 
   if (inWindow) {
@@ -211,6 +264,7 @@ Deno.serve(async (req) => {
       permalink: parsed.permalink,
       count: newCount,
       firstSeenAt: existing.first_seen_at,
+      action: parsed.action,
     })
 
     const { error: msgErr } = await supabase
@@ -234,7 +288,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ action: 'updated', count: newCount }), { status: 200 })
   }
 
-  // Fresh post — new fingerprint or window expired.
+  // Fresh post — new fingerprint, window expired, or a non-'created' action.
   const firstSeen = new Date().toISOString()
   const content = renderMessage({
     level: parsed.level,
@@ -244,6 +298,7 @@ Deno.serve(async (req) => {
     permalink: parsed.permalink,
     count: 1,
     firstSeenAt: firstSeen,
+    action: parsed.action,
   })
 
   const { data: inserted, error: insertErr } = await supabase

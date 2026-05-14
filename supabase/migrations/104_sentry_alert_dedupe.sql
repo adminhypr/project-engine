@@ -53,9 +53,10 @@ begin
       bot_id,
       'authenticated', 'authenticated',
       'sentry-bot@hyprassistants.com',
-      -- bcrypt hash of a random string. Bot has no real password —
-      -- this just satisfies the NOT NULL constraint and prevents login.
-      '$2a$10$' || encode(gen_random_bytes(40), 'hex'),
+      -- Bcrypt-shaped dummy. Not a real hash — no password will ever
+      -- match it. Avoids depending on pgcrypto's gen_random_bytes (lives
+      -- in `extensions` schema in Supabase, not on the default path).
+      '$2a$10$' || repeat('x', 53),
       now(),
       '{"provider":"system","providers":["system"]}'::jsonb,
       '{"full_name":"Sentry"}'::jsonb,
