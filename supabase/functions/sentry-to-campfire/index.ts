@@ -181,6 +181,17 @@ const ACTION_PREFIX: Record<string, string> = {
   archived:   '📦 archived: ',
 }
 
+interface Enrichment {
+  userLabel: string | null    // resolved profile full_name (or email fallback)
+  pagePath: string | null     // request.url → pathname only
+  browser: string | null      // tag: browser
+  os: string | null           // tag: os
+  release: string | null      // tag: release
+  envFromTags: string | null  // tag: environment (fallback when issue payload lacks it)
+  userCount: number | null    // issue.userCount (total users affected)
+  totalCount: number | null   // issue.count (total occurrences in Sentry)
+}
+
 function renderMessage(args: {
   level: ParsedEvent['level']
   environment: string
@@ -190,18 +201,147 @@ function renderMessage(args: {
   count: number
   firstSeenAt: string
   action: string
+  enrichment: Enrichment | null
 }): string {
-  const { level, environment, title, culprit, permalink, count, firstSeenAt, action } = args
+  const { level, environment, title, culprit, permalink, count, firstSeenAt, action, enrichment } = args
   const prefix = ACTION_PREFIX[action] ?? ''
-  const icon = prefix ? '' : `${iconFor(level)} `  // skip icon if prefix already conveys meaning
-  const env  = environment !== 'unknown' ? `[${environment}] ` : ''
+  const icon = prefix ? '' : `${iconFor(level)} `
+  const env  = environment !== 'unknown'
+    ? `[${environment}] `
+    : enrichment?.envFromTags ? `[${enrichment.envFromTags}] ` : ''
   const header = `${icon}${prefix}${env}${title}`
   const where  = culprit ? `\nin ${culprit}` : ''
+
+  // Enrichment line: only render if we have at least one piece of info.
+  const enrichBits: string[] = []
+  if (enrichment?.userLabel) enrichBits.push(`👤 ${enrichment.userLabel}`)
+  if (enrichment?.pagePath)  enrichBits.push(`🌐 ${enrichment.pagePath}`)
+  if (enrichment?.browser)   enrichBits.push(`🖥️ ${enrichment.browser}`)
+  const enrichLine = enrichBits.length ? `\n${enrichBits.join(' · ')}` : ''
+
+  // Stats line — aggregates from Sentry's issue payload.
+  const statsBits: string[] = []
+  if (enrichment?.totalCount && enrichment.totalCount > 1) {
+    statsBits.push(`${enrichment.totalCount}× total`)
+  }
+  if (enrichment?.userCount && enrichment.userCount > 1) {
+    statsBits.push(`${enrichment.userCount} users`)
+  }
+  if (enrichment?.release) statsBits.push(`release ${enrichment.release}`)
+  const statsLine = statsBits.length ? `\n${statsBits.join(' · ')}` : ''
+
   const seen   = count > 1
-    ? `\n\nSeen ${count}× since ${formatTime(firstSeenAt)}`
+    ? `\n\nSeen ${count}× since ${formatTime(firstSeenAt)} (this 15-min window)`
     : ''
   const link   = permalink ? ` — [view in Sentry ↗](${permalink})` : ''
-  return `${header}${where}${seen}${link}`
+  return `${header}${where}${enrichLine}${statsLine}${seen}${link}`
+}
+
+// ── Enrichment via Sentry API ─────────────────────────────────
+// The issue webhook only carries issue-level data. To show the user
+// who triggered it and the page URL, we fetch the latest event for the
+// issue via Sentry's REST API. Token comes from the same Internal
+// Integration that posts the webhook.
+//
+// Failure mode: any error here returns null and the message posts with
+// what we have from the webhook. Never blocks the campfire post.
+
+async function fetchEnrichment(
+  issueId: string,
+  issuePayload: any,
+): Promise<Enrichment | null> {
+  const token = Deno.env.get('SENTRY_API_TOKEN')
+  if (!token) return baseEnrichmentFromPayload(issuePayload)
+
+  let event: any = null
+  try {
+    const res = await fetch(
+      `https://sentry.io/api/0/issues/${issueId}/events/latest/`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(8000),
+      },
+    )
+    if (!res.ok) {
+      console.warn(`[sentry-to-campfire] events/latest ${res.status}`)
+      return baseEnrichmentFromPayload(issuePayload)
+    }
+    event = await res.json()
+  } catch (err) {
+    console.warn('[sentry-to-campfire] events/latest fetch failed:', err)
+    return baseEnrichmentFromPayload(issuePayload)
+  }
+
+  // Sentry tags come in either [["k","v"], ...] or [{key,value}, ...] form.
+  const tagMap: Record<string, string> = {}
+  for (const t of event?.tags ?? []) {
+    if (Array.isArray(t)) tagMap[t[0]] = t[1]
+    else if (t?.key) tagMap[t.key] = t.value
+  }
+
+  // user.id from the SDK is our profiles.id (set in useAuth via
+  // Sentry.setUser({id:profile.id})). Resolve to a name.
+  let userLabel: string | null = null
+  const sentryUserId = event?.user?.id ?? null
+  if (sentryUserId) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('full_name, email')
+      .eq('id', sentryUserId)
+      .maybeSingle()
+    userLabel = data?.full_name || data?.email || `user ${sentryUserId.slice(0, 8)}`
+  } else if (event?.user?.email) {
+    userLabel = event.user.email
+  } else if (event?.user?.username) {
+    userLabel = event.user.username
+  }
+
+  // Trim request.url to pathname for readability. Skip query string.
+  let pagePath: string | null = null
+  const rawUrl = event?.request?.url ?? null
+  if (rawUrl) {
+    try {
+      const u = new URL(rawUrl)
+      pagePath = u.pathname || '/'
+    } catch {
+      pagePath = rawUrl
+    }
+  }
+
+  const base = baseEnrichmentFromPayload(issuePayload)
+  return {
+    userLabel: userLabel ?? base?.userLabel ?? null,
+    pagePath:  pagePath  ?? null,
+    browser:   tagMap['browser'] ?? tagMap['browser.name'] ?? null,
+    os:        tagMap['os'] ?? tagMap['os.name'] ?? null,
+    release:   tagMap['release'] ?? null,
+    envFromTags: tagMap['environment'] ?? null,
+    userCount:  base?.userCount  ?? null,
+    totalCount: base?.totalCount ?? null,
+  }
+}
+
+// Without an API token we can still pull aggregate counts straight off
+// the issue webhook payload (no per-event detail).
+function baseEnrichmentFromPayload(issuePayload: any): Enrichment | null {
+  const issue = issuePayload?.data?.issue
+  if (!issue) return null
+  return {
+    userLabel: null,
+    pagePath: null,
+    browser: null,
+    os: null,
+    release: null,
+    envFromTags: null,
+    userCount:  toIntOrNull(issue.userCount),
+    totalCount: toIntOrNull(issue.count),
+  }
+}
+
+function toIntOrNull(v: unknown): number | null {
+  if (v == null) return null
+  const n = typeof v === 'string' ? parseInt(v, 10) : Number(v)
+  return Number.isFinite(n) ? n : null
 }
 
 // ── HTTP handler ──────────────────────────────────────────────
@@ -256,6 +396,15 @@ Deno.serve(async (req) => {
 
   if (inWindow) {
     const newCount = existing.event_count + 1
+    // Don't refetch from Sentry on each dedup hit — the original message
+    // already has the enrichment baked in. We just bump the counter line.
+    // But we lose the enrichment lines on the rewritten message body
+    // unless we either (a) store them, or (b) keep the original message
+    // body and only append the counter. Simpler: refetch only when we
+    // really want fresh detail. For now, keep it cheap and accept that
+    // the enrichment shows only on the original post; subsequent dedup
+    // hits write a shorter "Seen N× since X" body. The Sentry link still
+    // gets you the full detail.
     const content = renderMessage({
       level: parsed.level,
       environment: parsed.environment,
@@ -265,6 +414,7 @@ Deno.serve(async (req) => {
       count: newCount,
       firstSeenAt: existing.first_seen_at,
       action: parsed.action,
+      enrichment: null,
     })
 
     const { error: msgErr } = await supabase
@@ -289,6 +439,9 @@ Deno.serve(async (req) => {
   }
 
   // Fresh post — new fingerprint, window expired, or a non-'created' action.
+  // Enrich via Sentry API to pull user, page, browser. Failures here are
+  // logged but don't block the campfire post.
+  const enrichment = await fetchEnrichment(parsed.issueId, payload)
   const firstSeen = new Date().toISOString()
   const content = renderMessage({
     level: parsed.level,
@@ -299,6 +452,7 @@ Deno.serve(async (req) => {
     count: 1,
     firstSeenAt: firstSeen,
     action: parsed.action,
+    enrichment,
   })
 
   const { data: inserted, error: insertErr } = await supabase
