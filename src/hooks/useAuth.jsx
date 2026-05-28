@@ -245,6 +245,12 @@ export function AuthProvider({ children }) {
           }
           try { supabase.realtime.setAuth(token); lastSetToken = token } catch { /* noop */ }
         }
+      }).catch(() => {
+        // getSession can reject with NavigatorLockAcquireTimeoutError when the
+        // tab regains visibility while another auth op (auto-refresh tick,
+        // another tab) holds the auth-token Web Lock and steals it. Benign and
+        // self-recovering — swallow so it doesn't surface as an unhandled
+        // rejection. (Global filter also lives in main.jsx beforeSend.)
       })
     }
     document.addEventListener('visibilitychange', handleVisibility)

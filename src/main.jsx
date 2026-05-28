@@ -22,6 +22,11 @@ if (import.meta.env.VITE_SENTRY_DSN) {
     beforeSend(event, hint) {
       const err = hint?.originalException
       if (err && isChunkLoadError(err)) return null
+      // Supabase auth-js Web Lock contention (e.g. a backgrounded tab regaining
+      // visibility while the auto-refresh tick holds the auth-token lock and
+      // steals it). Transient and self-recovering — auth-js intends callers to
+      // filter it. Drop so it doesn't spam Sentry / the Errors campfire.
+      if (err && (err.isAcquireTimeout || err.name === 'NavigatorLockAcquireTimeoutError')) return null
       return event
     },
     // Capture browser performance + tracing but at a conservative
