@@ -1,10 +1,11 @@
-import { X, Image as ImageIcon } from 'lucide-react'
+import { X, Image as ImageIcon, Loader2, Check } from 'lucide-react'
 import { useRef } from 'react'
 
 const MAX_BYTES = 5 * 1024 * 1024
 
-export default function ImageAttachments({ items, onAdd, onRemove }) {
+export default function ImageAttachments({ items, onAdd, onRemove, uploadingIndex = null }) {
   const inputRef = useRef(null)
+  const busy = uploadingIndex != null
 
   function handleFiles(files) {
     for (const file of files) {
@@ -21,15 +22,31 @@ export default function ImageAttachments({ items, onAdd, onRemove }) {
         <div className="flex gap-2 p-2 flex-wrap">
           {items.map((it, i) => (
             <div key={i} className="relative">
-              <img src={it.preview} alt="" className="w-14 h-14 rounded-md object-cover" />
-              <button
-                type="button"
-                onClick={() => onRemove(i)}
-                className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-slate-800 text-white flex items-center justify-center"
-                aria-label="Remove image"
-              >
-                <X className="w-3 h-3" />
-              </button>
+              <img
+                src={it.preview}
+                alt=""
+                className={`w-14 h-14 rounded-md object-cover ${busy && i > uploadingIndex ? 'opacity-50' : ''}`}
+              />
+              {busy && i === uploadingIndex && (
+                <span className="absolute inset-0 rounded-md bg-black/40 flex items-center justify-center">
+                  <Loader2 className="w-5 h-5 text-white animate-spin" />
+                </span>
+              )}
+              {busy && i < uploadingIndex && (
+                <span className="absolute inset-0 rounded-md bg-black/25 flex items-center justify-center">
+                  <Check className="w-5 h-5 text-white" />
+                </span>
+              )}
+              {!busy && (
+                <button
+                  type="button"
+                  onClick={() => onRemove(i)}
+                  className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-slate-800 text-white flex items-center justify-center"
+                  aria-label="Remove image"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
             </div>
           ))}
         </div>

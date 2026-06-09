@@ -8,7 +8,7 @@ import { AssignmentBadge } from '../components/ui'
 import { getAssignmentType } from '../lib/assignmentType'
 import { useAuth } from '../hooks/useAuth'
 import { PageTransition, SuccessBurst } from '../components/ui/animations'
-import { CheckCircle, Users, X, Repeat as RepeatIcon } from 'lucide-react'
+import { CheckCircle, Users, X, Repeat as RepeatIcon, Loader2 } from 'lucide-react'
 import { computeNextRun, formatCountdown } from '../lib/recurrence'
 import TaskIconPicker from '../components/ui/TaskIconPicker'
 import { FilePickerInput, hasOversizedFiles } from '../components/ui/FileAttachment'
@@ -39,6 +39,9 @@ export default function AssignTaskPage() {
   const [selectedTeamId, setSelectedTeamId] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [result,     setResult]     = useState(null)
+  // Per-field validation errors, shown inline next to the offending field
+  // instead of as fire-and-forget toasts.
+  const [errors, setErrors] = useState({})
 
   // Recurrence state — sits next to the form but doesn't merge into it
   // because it only applies when repeat !== 'none'.
@@ -74,7 +77,10 @@ export default function AssignTaskPage() {
     setSearchParams({}, { replace: true })
   }, [profilesLoading, searchParams, setSearchParams])
 
-  function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
+  function set(k, v) {
+    setForm(f => ({ ...f, [k]: v }))
+    setErrors(e => (e[k] ? { ...e, [k]: undefined } : e))
+  }
 
   // Primary assignee is the first selected
   const primaryAssignee = profiles.find(p => p.id === form.assigneeIds[0])
@@ -100,6 +106,7 @@ export default function AssignTaskPage() {
     if (!assigneeId || form.assigneeIds.includes(assigneeId)) return
     const newIds = [...form.assigneeIds, assigneeId]
     set('assigneeIds', newIds)
+    setErrors(e => (e.assignees ? { ...e, assignees: undefined } : e))
     // Auto-select primary team from first assignee
     if (newIds.length === 1) {
       const assignee = profiles.find(p => p.id === assigneeId)
@@ -165,34 +172,35 @@ export default function AssignTaskPage() {
     return p.teams?.name || p.all_teams?.[0]?.name || 'No team'
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault()
-    if (!form.assigneeIds.length || !form.title.trim()) {
-      showToast('Please select at least one assignee and add a task description', 'error')
-      return
-    }
-    // One-off path validates the dueDate field. Recurring path uses startAt
-    // instead and validates that the start is at least 1 minute in the future.
+  // One-off path validates the dueDate field. Recurring path uses startAt
+  // instead and validates that the start is at least 1 minute in the future.
+  function validate() {
+    const errs = {}
+    if (!form.assigneeIds.length) errs.assignees = 'Select at least one assignee'
+    if (!form.title.trim()) errs.title = 'Describe what needs to be done'
     if (repeat === 'none') {
       if (form.dueDate && new Date(form.dueDate) < new Date()) {
-        showToast('Due date must be in the future', 'error')
-        return
+        errs.dueDate = 'Due date must be in the future'
       }
     } else {
       const startMs = startAt ? new Date(startAt).getTime() : NaN
       if (!Number.isFinite(startMs)) {
-        showToast('Pick a Start date for the recurring task', 'error')
-        return
-      }
-      if (startMs < Date.now() + 60 * 1000) {
-        showToast('Start must be at least 1 minute in the future', 'error')
-        return
+        errs.startAt = 'Pick a Start date for the recurring task'
+      } else if (startMs < Date.now() + 60 * 1000) {
+        errs.startAt = 'Start must be at least 1 minute in the future'
       }
     }
     if (hasOversizedFiles(pendingFiles)) {
-      showToast('Remove files over 5 MB before submitting', 'error')
-      return
+      errs.files = 'Remove files over 5 MB before submitting'
     }
+    return errs
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    const errs = validate()
+    setErrors(errs)
+    if (Object.values(errs).some(Boolean)) return
     setSubmitting(true)
 
     // Recurrence path — create a template; the hook handles the immediate
@@ -298,7 +306,9 @@ export default function AssignTaskPage() {
                   <select
                     value=""
                     onChange={e => handleAddAssignee(e.target.value)}
-                    className="form-input"
+                    className={`form-input ${errors.assignees ? 'border-red-400 dark:border-red-500' : ''}`}
+                    aria-required="true"
+                    aria-invalid={!!errors.assignees}
                   >
                     <option value="">— Add person —</option>
                     {profiles.filter(p => !form.assigneeIds.includes(p.id)).map(p => (
@@ -307,6 +317,7 @@ export default function AssignTaskPage() {
                       </option>
                     ))}
                   </select>
+                  {errors.assignees && <p className="text-xs text-red-500 mt-1">{errors.assignees}</p>}
                   {form.assigneeIds.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {form.assigneeIds.map((id, i) => {
@@ -418,9 +429,11 @@ export default function AssignTaskPage() {
                   onChange={e => set('title', e.target.value)}
                   placeholder="Describe what needs to be done..."
                   rows={3}
-                  className="form-input resize-none"
-                  required
+                  className={`form-input resize-none ${errors.title ? 'border-red-400 dark:border-red-500' : ''}`}
+                  aria-required="true"
+                  aria-invalid={!!errors.title}
                 />
+                {errors.title && <p className="text-xs text-red-500 mt-1">{errors.title}</p>}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -432,8 +445,10 @@ export default function AssignTaskPage() {
                       value={form.dueDate}
                       onChange={e => set('dueDate', e.target.value)}
                       min={new Date().toISOString().slice(0, 16)}
-                      className="form-input"
+                      className={`form-input ${errors.dueDate ? 'border-red-400 dark:border-red-500' : ''}`}
+                      aria-invalid={!!errors.dueDate}
                     />
+                    {errors.dueDate && <p className="text-xs text-red-500 mt-1">{errors.dueDate}</p>}
                   </div>
                 ) : (
                   <div>
@@ -513,9 +528,11 @@ export default function AssignTaskPage() {
                     <input
                       type="datetime-local"
                       value={startAt}
-                      onChange={e => setStartAt(e.target.value)}
-                      className="form-input"
+                      onChange={e => { setStartAt(e.target.value); setErrors(er => (er.startAt ? { ...er, startAt: undefined } : er)) }}
+                      className={`form-input ${errors.startAt ? 'border-red-400 dark:border-red-500' : ''}`}
+                      aria-invalid={!!errors.startAt}
                     />
+                    {errors.startAt && <p className="text-xs text-red-500 mt-1">{errors.startAt}</p>}
                     {recurrencePreview?.next && (
                       <p className="text-xs text-brand-700 dark:text-brand-300 mt-1.5">
                         <strong>First spawn:</strong>{' '}
@@ -540,7 +557,8 @@ export default function AssignTaskPage() {
               <div>
                 <label className="form-label">Attachments (optional)</label>
                 <p className="text-xs text-slate-400 dark:text-slate-500 mb-1">Max 5 MB per file. For larger files, upload to Google Drive and paste the link in Notes.</p>
-                <FilePickerInput files={pendingFiles} onChange={setPendingFiles} />
+                <FilePickerInput files={pendingFiles} onChange={files => { setPendingFiles(files); setErrors(er => (er.files ? { ...er, files: undefined } : er)) }} />
+                {errors.files && <p className="text-xs text-red-500 mt-1">{errors.files}</p>}
               </div>
 
               <div>
@@ -552,10 +570,11 @@ export default function AssignTaskPage() {
                 <motion.button
                   type="submit"
                   disabled={submitting || hasOversizedFiles(pendingFiles)}
-                  className="btn-primary"
+                  className="btn-primary flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                   whileTap={{ scale: 0.97 }}
                 >
-                  {submitting ? 'Assigning...' : 'Assign Task →'}
+                  {submitting && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
+                  {submitting ? 'Assigning…' : 'Assign Task →'}
                 </motion.button>
                 <button type="button" className="btn-secondary" onClick={() => {
                   setForm({ assigneeIds: [], title: '', urgency: 'Med', dueDate: '', whoTo: '', notes: '', icon: '' })

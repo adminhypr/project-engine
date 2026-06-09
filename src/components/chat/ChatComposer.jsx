@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Send, X, CornerUpLeft } from 'lucide-react'
+import { Send, X, CornerUpLeft, Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { showToast } from '../ui'
 import ImageAttachments from './ImageAttachments'
@@ -12,9 +12,10 @@ import { readDraft, writeDraft, clearDraft } from '../../lib/draftStorage'
 const MAX_LEN = 4000
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
-async function uploadImages(conversationId, items) {
+async function uploadImages(conversationId, items, onItemStart) {
   const uploaded = []
-  for (const it of items) {
+  for (const [i, it] of items.entries()) {
+    onItemStart?.(i)
     const messageUuid = crypto.randomUUID()
     const ext = (it.name.split('.').pop() || 'png').toLowerCase()
     const path = `${conversationId}/${messageUuid}/${messageUuid}.${ext}`
@@ -38,6 +39,9 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [images, setImages] = useState([])
+  // Index of the image currently uploading during send (null when idle) —
+  // drives the per-thumbnail overlay and the "Uploading n of m" line.
+  const [uploadingIndex, setUploadingIndex] = useState(null)
   const [textareaHeight, setTextareaHeight] = useState(DEFAULT_H)
   const [pickedMentions, setPickedMentions] = useState([])
   const [mentionQuery, setMentionQuery] = useState(null) // { query, startIndex } | null
@@ -161,7 +165,10 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
     const trimmed = value.trim()
     if ((!trimmed && images.length === 0) || busy || disabled) return
     setBusy(true)
-    const uploaded = images.length > 0 ? await uploadImages(conversationId, images) : []
+    const uploaded = images.length > 0
+      ? await uploadImages(conversationId, images, setUploadingIndex)
+      : []
+    setUploadingIndex(null)
     // Only forward mentions that still appear in the outgoing text — users
     // may have deleted an inserted @name after picking it.
     const effectiveMentions = pickedMentions.filter(m =>
@@ -282,7 +289,13 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
         items={images}
         onAdd={item => setImages(s => [...s, item])}
         onRemove={idx => setImages(s => s.filter((_, i) => i !== idx))}
+        uploadingIndex={uploadingIndex}
       />
+      {uploadingIndex != null && images.length > 0 && (
+        <div className="px-3 pb-1 text-[11px] text-slate-500 dark:text-slate-400" role="status">
+          Uploading image {Math.min(uploadingIndex + 1, images.length)} of {images.length}…
+        </div>
+      )}
       <div
         onPointerDown={startResize}
         onDoubleClick={() => setTextareaHeight(DEFAULT_H)}
@@ -321,9 +334,9 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
           onClick={submit}
           disabled={busy || disabled || (!value.trim() && images.length === 0)}
           className="w-9 h-9 rounded-full bg-brand-500 hover:bg-brand-600 text-white disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center justify-center"
-          aria-label="Send"
+          aria-label={busy ? 'Sending…' : 'Send'}
         >
-          <Send className="w-4 h-4" />
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
         </button>
       </div>
     </div>
