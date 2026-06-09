@@ -18,10 +18,12 @@ import MassActionBar from '../components/tasks/MassActionBar'
 import KanbanBoard from '../components/kanban/KanbanBoard'
 import QuickAddModal from '../components/kanban/QuickAddModal'
 import { List, Columns3 } from 'lucide-react'
+import { usePageTitle } from '../hooks/usePageTitle'
 
 const VIEW_KEY = 'pe-task-view'
 
 export default function MyTasksPage() {
+  usePageTitle('My Tasks')
   const { profile, isManager } = useAuth()
   const { myTasks, tasks, loading, refetch } = useTasks()
   const { templates: recurringTemplates } = useRecurrences()

@@ -14,8 +14,10 @@ import TaskIconPicker from '../components/ui/TaskIconPicker'
 import { FilePickerInput, hasOversizedFiles } from '../components/ui/FileAttachment'
 import { useAttachments } from '../hooks/useAttachments'
 import { parsePrefillParams } from '../lib/dmPrefillUrl'
+import { usePageTitle } from '../hooks/usePageTitle'
 
 export default function AssignTaskPage() {
+  usePageTitle('Assign a Task')
   const { profile, isAdmin } = useAuth()
   const { assignTask } = useTaskActions()
   const { createTemplate } = useRecurrences()

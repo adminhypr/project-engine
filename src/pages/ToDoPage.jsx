@@ -8,8 +8,10 @@ import { PageTransition } from '../components/ui/animations'
 import { getPriority } from '../lib/priority'
 import { CheckCircle2, Circle, Calendar, Boxes } from 'lucide-react'
 import { formatDate } from '../lib/helpers'
+import { usePageTitle } from '../hooks/usePageTitle'
 
 export default function ToDoPage() {
+  usePageTitle('My To-dos')
   const { profile } = useAuth()
   const { items, loading, error } = useMyHubTodos()
   const [status, setStatus] = useState('open')

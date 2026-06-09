@@ -6,8 +6,10 @@ import { LoadingScreen } from '../ui/index'
 import HubCard from './HubCard'
 import CreateHubModal from './CreateHubModal'
 import { Plus, Boxes } from 'lucide-react'
+import { usePageTitle } from '../../hooks/usePageTitle'
 
 export default function HubList({ onSelectHub }) {
+  usePageTitle('Hubs')
   const { hubs, loading, createHub } = useHubs()
   const { isExternal } = useAuth()
   const [showCreate, setShowCreate] = useState(false)

@@ -212,7 +212,6 @@ export function FilterRow({ filters, onChange, onClear, showTeamFilter, teams })
 }
 
 // ── Toast notification ─────────────────────────
-let toastTimeout
 // Dedupe identical (message, type) toasts within a 1.5s window. A 5s
 // Supabase blip during typing previously fired 15 "Failed to load X"
 // calls back-to-back; the existing single-toast slot would chaotically
@@ -221,6 +220,22 @@ let toastTimeout
 let lastToastKey = null
 let lastToastAt = 0
 const TOAST_DEDUPE_MS = 1500
+const TOAST_MAX_STACK = 4
+
+// Shared aria-live container so toasts stack instead of replacing each
+// other, and screen readers announce them.
+function getToastRoot() {
+  let root = document.getElementById('app-toast-root')
+  if (!root) {
+    root = document.createElement('div')
+    root.id = 'app-toast-root'
+    root.setAttribute('role', 'status')
+    root.setAttribute('aria-live', 'polite')
+    root.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none'
+    document.body.appendChild(root)
+  }
+  return root
+}
 
 export function showToast(msg, type = 'success') {
   const key = `${type}:${msg}`
@@ -229,35 +244,46 @@ export function showToast(msg, type = 'success') {
   lastToastKey = key
   lastToastAt = now
 
-  const existing = document.getElementById('app-toast')
-  if (existing) existing.remove()
-  clearTimeout(toastTimeout)
+  const root = getToastRoot()
+  while (root.children.length >= TOAST_MAX_STACK) root.firstChild.remove()
 
   const el = document.createElement('div')
-  el.id = 'app-toast'
-  el.className = `fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 rounded-xl text-sm font-medium
-    z-50 transition-all duration-300 shadow-elevated
+  el.className = `pointer-events-auto cursor-pointer flex items-center gap-3 px-5 py-3 rounded-xl
+    text-sm font-medium transition-all duration-300 shadow-elevated max-w-[90vw]
     ${type === 'error'
       ? 'bg-red-600 text-white'
       : 'bg-slate-900 text-white'}`
-  el.style.transform = 'translate(-50%, 20px)'
+  el.style.transform = 'translateY(20px)'
   el.style.opacity = '0'
-  el.textContent = msg
-  document.body.appendChild(el)
 
+  const text = document.createElement('span')
+  text.textContent = msg
+  el.appendChild(text)
+
+  const close = document.createElement('span')
+  close.textContent = '✕'
+  close.setAttribute('aria-hidden', 'true')
+  close.className = 'text-white/60 text-xs shrink-0'
+  el.appendChild(close)
+
+  let removed = false
+  let timer
+  function dismiss() {
+    if (removed) return
+    removed = true
+    clearTimeout(timer)
+    el.style.transform = 'translateY(20px)'
+    el.style.opacity = '0'
+    setTimeout(() => el.remove(), 300)
+  }
+  el.addEventListener('click', dismiss)
+
+  root.appendChild(el)
   requestAnimationFrame(() => {
-    el.style.transform = 'translate(-50%, 0)'
+    el.style.transform = 'translateY(0)'
     el.style.opacity = '1'
   })
 
-  toastTimeout = setTimeout(() => {
-    el.style.transform = 'translate(-50%, 20px)'
-    el.style.opacity = '0'
-    setTimeout(() => el.remove(), 300)
-  }, 2700)
-}
-
-// ── Confirm dialog ────────────────────────────
-export function useConfirm() {
-  return (msg) => window.confirm(msg)
+  // Errors stay up longer — users need time to read what went wrong.
+  timer = setTimeout(dismiss, type === 'error' ? 6000 : 2700)
 }

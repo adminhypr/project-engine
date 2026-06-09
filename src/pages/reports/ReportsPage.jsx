@@ -17,6 +17,7 @@ import CompletedTrendReport from './CompletedTrendReport'
 import CommentActivityReport from './CommentActivityReport'
 import PriorityTrendReport from './PriorityTrendReport'
 import AuditLogReport from './AuditLogReport'
+import { usePageTitle } from '../../hooks/usePageTitle'
 
 const REPORTS = [
   { id: 'team-tasks',        label: 'Tasks by Team' },
@@ -33,6 +34,7 @@ const REPORTS = [
 ]
 
 export default function ReportsPage() {
+  usePageTitle('Reports')
   const { profile, isAdmin } = useAuth()
   const [activeReport, setActiveReport] = useState('team-tasks')
   const [tasks,    setTasks]    = useState([])

@@ -9,6 +9,7 @@ import RichTextField from './RichTextField'
 import TodoBreadcrumb from './TodoBreadcrumb'
 import TodoSubscribers from './TodoSubscribers'
 import TrashedToast from './TrashedToast'
+import ConfirmModal from '../../ui/ConfirmModal'
 import { Spinner } from '../../ui/index'
 import { Trash2, Calendar, Users, Check } from 'lucide-react'
 
@@ -30,6 +31,7 @@ export default function TodoItemPage({ hubId, hub, lists, items, updateItem, del
   const [commentText, setCommentText] = useState('')
   const [saving, setSaving] = useState(false)
   const [trashed, setTrashed] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const notesSubmitRef = useRef(null)
   const commentSubmitRef = useRef(null)
@@ -74,8 +76,8 @@ export default function TodoItemPage({ hubId, hub, lists, items, updateItem, del
     setCommentText('')
   }
   async function handleDelete() {
-    if (!window.confirm('Delete this to-do?')) return
     await deleteItem(item.id)
+    setConfirmingDelete(false)
     setTrashed(true)
     setTimeout(() => navigate(`/hub/${hubId}/todos/${listId}`), 250)
   }
@@ -107,7 +109,7 @@ export default function TodoItemPage({ hubId, hub, lists, items, updateItem, del
           onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }}
           className={`flex-1 text-xl font-bold bg-transparent outline-none ${item.completed ? 'line-through text-slate-400' : 'text-slate-900 dark:text-white'}`}
         />
-        <button onClick={handleDelete} className="p-1.5 text-slate-400 hover:text-red-500" title="Delete">
+        <button onClick={() => setConfirmingDelete(true)} className="p-1.5 text-slate-400 hover:text-red-500" title="Delete" aria-label="Delete to-do">
           <Trash2 size={16} />
         </button>
       </div>
@@ -238,6 +240,15 @@ export default function TodoItemPage({ hubId, hub, lists, items, updateItem, del
           onDismiss={() => setTrashed(false)}
         />
       )}
+
+      <ConfirmModal
+        open={confirmingDelete}
+        title="Delete this to-do?"
+        body={<><strong>{item.title || 'This to-do'}</strong> will be moved to the trash. You can undo right after.</>}
+        confirmLabel="Delete to-do"
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmingDelete(false)}
+      />
     </div>
   )
 }

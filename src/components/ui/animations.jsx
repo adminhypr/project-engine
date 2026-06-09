@@ -1,6 +1,23 @@
 import { motion, AnimatePresence, useMotionValue, useTransform, animate } from 'framer-motion'
 import { useEffect, useRef } from 'react'
 
+// Close on Escape while an overlay (modal / slide panel) is open. Attached on
+// document so it works regardless of where focus sits. Skips when the event
+// was already handled (e.g. a nested autocomplete consuming Escape).
+function useEscapeToClose(isOpen, onClose) {
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  useEffect(() => {
+    if (!isOpen) return
+    function onKeyDown(e) {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      onCloseRef.current?.()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [isOpen])
+}
+
 // ── Page transition wrapper ──────────────────
 export function PageTransition({ children }) {
   return (
@@ -63,6 +80,7 @@ export function StaggerItem({ children, className = '' }) {
 // ── Slide panel (right side) ─────────────────
 export function SlidePanel({ isOpen, onClose, children, width = 520 }) {
   const previousFocusRef = useRef(null)
+  useEscapeToClose(isOpen, onClose)
 
   useEffect(() => {
     if (isOpen) {
@@ -88,6 +106,8 @@ export function SlidePanel({ isOpen, onClose, children, width = 520 }) {
             onClick={onClose}
           />
           <motion.div
+            role="dialog"
+            aria-modal="true"
             className="fixed top-0 right-0 h-full w-full sm:w-auto bg-white dark:bg-dark-surface shadow-panel z-50 flex flex-col border-l border-slate-200 dark:border-dark-border"
             style={{ maxWidth: width }}
             initial={{ x: '100%' }}
@@ -158,6 +178,7 @@ export function ShakeReject({ children, trigger }) {
 // ── Modal wrapper ────────────────────────────
 export function ModalWrapper({ isOpen, onClose, children }) {
   const previousFocusRef = useRef(null)
+  useEscapeToClose(isOpen, onClose)
 
   useEffect(() => {
     if (isOpen) {
@@ -185,6 +206,8 @@ export function ModalWrapper({ isOpen, onClose, children }) {
             className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 pointer-events-none"
           >
             <motion.div
+              role="dialog"
+              aria-modal="true"
               className="bg-white dark:bg-dark-card rounded-2xl shadow-panel border border-slate-200 dark:border-dark-border pointer-events-auto w-full max-w-md"
               initial={{ opacity: 0, scale: 0.95, y: 8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}

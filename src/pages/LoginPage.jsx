@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { signInWithGoogle, signInWithPassword } from '../lib/auth'
+import { usePageTitle } from '../hooks/usePageTitle'
 
 export default function LoginPage() {
+  usePageTitle('Sign in')
   const [devOpen, setDevOpen] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
