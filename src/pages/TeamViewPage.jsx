@@ -14,6 +14,7 @@ import DeleteConfirmModal from '../components/tasks/DeleteConfirmModal'
 import KanbanBoard from '../components/kanban/KanbanBoard'
 import QuickAddModal from '../components/kanban/QuickAddModal'
 import { Bookmark, X, List, Columns3 } from 'lucide-react'
+import { usePageTitle } from '../hooks/usePageTitle'
 
 const SAVED_VIEW_KEY = 'pe-team-view-filters'
 const VIEW_KEY = 'pe-team-view-mode'
@@ -38,6 +39,7 @@ const TEAM_COLORS = [
 ]
 
 export default function TeamViewPage() {
+  usePageTitle('Team View')
   const { profile, isAdmin } = useAuth()
   const { tasks, teamTasks, loading, refetch } = useTasks()
   const { deleteTasks, updateTasks, updateTask, deleteTask, assignTask } = useTaskActions()

@@ -11,8 +11,10 @@ import DisplayNameCard from '../components/settings/DisplayNameCard'
 import NotificationSoundCard from '../components/settings/NotificationSoundCard'
 import EmailDigestCard from '../components/settings/EmailDigestCard'
 import { setPendingInvite, getPendingInvite, clearPendingInvite } from '../lib/pendingInvites'
+import { usePageTitle } from '../hooks/usePageTitle'
 
 export default function SettingsPage() {
+  usePageTitle('Settings')
   const { profile, isAdmin, isExternal } = useAuth()
   const [profiles, setProfiles] = useState([])
   const [teams,    setTeams]    = useState([])

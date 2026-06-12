@@ -13,10 +13,12 @@ import MassActionBar from '../components/tasks/MassActionBar'
 import KanbanBoard from '../components/kanban/KanbanBoard'
 import QuickAddModal from '../components/kanban/QuickAddModal'
 import { List, Columns3 } from 'lucide-react'
+import { usePageTitle } from '../hooks/usePageTitle'
 
 const VIEW_KEY = 'pe-admin-view-mode'
 
 export default function AdminOverviewPage() {
+  usePageTitle('Admin Overview')
   const { profile } = useAuth()
   const { tasks, loading, refetch } = useTasks()
   const { deleteTasks, updateTasks, updateTask, deleteTask, assignTask } = useTaskActions()

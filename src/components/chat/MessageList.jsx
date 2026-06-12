@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, Fragment } from 'react'
+import { useEffect, useMemo, useRef, useState, Fragment } from 'react'
+import { ArrowDown } from 'lucide-react'
 import DmChatMessage from './DmChatMessage'
 import DateSeparator, { isSameDay } from '../ui/DateSeparator'
 import { useMessageReactions } from '../../hooks/useMessageReactions'
@@ -16,9 +17,47 @@ export default function MessageList({
   )
   const threadCounts = useThreadCounts(conversationId, messageIds)
   const bottomRef = useRef(null)
+
+  // Auto-scroll only when the reader is already near the bottom (or the new
+  // message is their own). Scrolled-up readers keep their place and get a
+  // "new messages" pill instead of being yanked to the bottom.
+  const nearBottomRef = useRef(true)
+  const initializedRef = useRef(false)
+  const [unseenCount, setUnseenCount] = useState(0)
+  const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null
+  const lastId = lastMsg?.id ?? null
+  const lastIsMine = lastMsg ? lastMsg.author_id === myId : false
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'auto' })
-  }, [messages.length])
+    const root = scrollRootRef?.current
+    if (!root) return
+    const onScroll = () => {
+      nearBottomRef.current = root.scrollHeight - root.scrollTop - root.clientHeight < 120
+      if (nearBottomRef.current) setUnseenCount(0)
+    }
+    onScroll()
+    root.addEventListener('scroll', onScroll, { passive: true })
+    return () => root.removeEventListener('scroll', onScroll)
+  }, [scrollRootRef, loading])
+
+  useEffect(() => {
+    if (!lastId) return
+    const first = !initializedRef.current
+    initializedRef.current = true
+    // No scroll root (caller didn't wire one) falls back to always-scroll.
+    if (first || lastIsMine || !scrollRootRef?.current || nearBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'auto' })
+      setUnseenCount(0)
+    } else {
+      setUnseenCount(c => c + 1)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastId])
+
+  const jumpToBottom = () => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    setUnseenCount(0)
+  }
 
   // Receipt is displayed only on my latest sent (non-deleted, non-system)
   // message to avoid per-bubble clutter — matches Messenger/iMessage UX.
@@ -85,6 +124,19 @@ export default function MessageList({
           </Fragment>
         )
       })}
+      {unseenCount > 0 && (
+        <div className="sticky bottom-1 flex justify-center pointer-events-none">
+          <button
+            type="button"
+            onClick={jumpToBottom}
+            className="pointer-events-auto flex items-center gap-1 px-3 py-1.5 rounded-full bg-slate-900/90 dark:bg-slate-700 text-white text-xs font-medium shadow-elevated hover:bg-slate-900 dark:hover:bg-slate-600 transition-colors"
+            aria-label={`${unseenCount} new ${unseenCount === 1 ? 'message' : 'messages'} — jump to latest`}
+          >
+            <ArrowDown size={13} aria-hidden="true" />
+            {unseenCount} new {unseenCount === 1 ? 'message' : 'messages'}
+          </button>
+        </div>
+      )}
       <div ref={bottomRef} />
     </div>
   )

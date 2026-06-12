@@ -6,12 +6,14 @@ import { PageTransition } from '../components/ui/animations'
 import TodosIndex from '../components/hub/todos/TodosIndex'
 import TodoListPage from '../components/hub/todos/TodoListPage'
 import TodoItemPage from '../components/hub/todos/TodoItemPage'
+import { usePageTitle } from '../hooks/usePageTitle'
 
 export default function HubTodosPage() {
   const { hubId } = useParams()
   const todos = useHubTodos(hubId)
   const { hubs } = useHubs()
   const hub = hubs.find(h => h.id === hubId)
+  usePageTitle(hub ? `To-dos — ${hub.name}` : 'To-dos')
 
   if (todos.loading) return <div className="py-20 flex justify-center"><Spinner /></div>
 

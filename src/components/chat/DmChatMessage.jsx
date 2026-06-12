@@ -114,7 +114,7 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt, reac
               )}
             </div>
           )}
-          <div className={`px-3 py-2 rounded-2xl text-sm ${
+          <div className={`px-3 py-2 rounded-2xl text-sm min-w-0 break-words ${
             isMine
               ? 'bg-brand-500 text-white'
               : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white'

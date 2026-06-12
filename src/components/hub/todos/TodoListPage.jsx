@@ -6,6 +6,7 @@ import NewItemForm from './NewItemForm'
 import TodoItemRow from './TodoItemRow'
 import TrashedToast from './TrashedToast'
 import RichContentRenderer from '../../ui/RichContentRenderer'
+import ConfirmModal from '../../ui/ConfirmModal'
 import { todoColorClass } from './todoColors'
 
 export default function TodoListPage({ hubId, hub, lists, items, createItem, toggleItem, deleteItem, undoDeleteItem, deleteList, undoDeleteList }) {
@@ -14,6 +15,7 @@ export default function TodoListPage({ hubId, hub, lists, items, createItem, tog
   const [showNew, setShowNew] = useState(false)
   const [hideCompleted, setHideCompleted] = useState(false)
   const [trashedItemId, setTrashedItemId] = useState(null)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const list = lists.find(l => l.id === listId)
   const listItems = useMemo(() => items.filter(i => i.list_id === listId), [items, listId])
@@ -31,8 +33,8 @@ export default function TodoListPage({ hubId, hub, lists, items, createItem, tog
   const visible = hideCompleted ? listItems.filter(i => !i.completed) : listItems
 
   async function handleDeleteList() {
-    if (!window.confirm(`Delete "${list.title}" and all its to-dos?`)) return
     await deleteList(list.id)
+    setConfirmingDelete(false)
     navigate(`/hub/${hubId}/todos`)
   }
 
@@ -60,7 +62,7 @@ export default function TodoListPage({ hubId, hub, lists, items, createItem, tog
             {hideCompleted ? 'Show completed' : 'Hide completed'}
           </button>
         )}
-        <button onClick={handleDeleteList} className="btn btn-ghost text-xs text-red-500 flex items-center gap-1">
+        <button onClick={() => setConfirmingDelete(true)} className="btn btn-ghost text-xs text-red-500 flex items-center gap-1">
           <Trash2 size={12} /> Delete list
         </button>
       </div>
@@ -119,6 +121,15 @@ export default function TodoListPage({ hubId, hub, lists, items, createItem, tog
           onDismiss={() => setTrashedItemId(null)}
         />
       )}
+
+      <ConfirmModal
+        open={confirmingDelete}
+        title="Delete this list?"
+        body={<><strong>{list.title}</strong> and all its to-dos will be deleted.</>}
+        confirmLabel="Delete list"
+        onConfirm={handleDeleteList}
+        onCancel={() => setConfirmingDelete(false)}
+      />
     </div>
   )
 }

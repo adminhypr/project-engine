@@ -31,6 +31,7 @@ import {
   Users, Flame, MessageSquare, FolderOpen, ArrowLeft, CheckSquare,
   Pencil, Check, X as XIcon, Plus, RotateCcw, LayoutGrid, Trash2,
 } from 'lucide-react'
+import { usePageTitle } from '../hooks/usePageTitle'
 
 const DEFAULT_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4']
 
@@ -127,6 +128,7 @@ function moduleCollisionDetection(args) {
 
 function HubDashboard({ hubId }) {
   const { hubs, loading, updateHub, deleteHub } = useHubs()
+  usePageTitle(hubs.find(h => h.id === hubId)?.name || 'Hub')
   const { isAdmin } = useAuth()
   const {
     columns, addModule, renameModule, deleteModule, saveLayout,

@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import { usePresence } from '../hooks/PresenceContext'
 import { useConversations } from '../hooks/useConversations'
 import ConversationPane from '../components/chat/ConversationPane'
+import { usePageTitle } from '../hooks/usePageTitle'
 
 // ConversationPane expects a fully shaped `conversation` object (not just an
 // id) — same shape returned by useConversations. So we:
@@ -14,6 +15,7 @@ import ConversationPane from '../components/chat/ConversationPane'
 // If the RPC returns an id that isn't in useConversations yet, we call
 // refetch() so the membership trigger (migration 033) has a chance to land.
 export default function TeamChatPage() {
+  usePageTitle('Team Chat')
   const { activeTeamId } = useAuth()
   const presence = usePresence()
   const { conversations, refetch, markRead } = useConversations()
