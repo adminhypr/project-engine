@@ -76,12 +76,16 @@ export function useHubTodos(hubId, moduleId = null) {
     return () => { cancelled = true }
   }, [hubId, moduleId])
 
+  // Per-mount suffix so two instances of this hook (dashboard card +
+  // to-dos page during a route transition) never share a channel topic.
+  const chanKey = useRef(Math.random().toString(36).slice(2, 9))
+
   /* ── Realtime ── */
   useEffect(() => {
     if (!hubId) return
     const listFilter = moduleId ? `module_id=eq.${moduleId}` : `hub_id=eq.${hubId}`
     const channel = supabase
-      .channel(`hub-todos-${moduleId || hubId}`)
+      .channel(`hub-todos-${moduleId || hubId}-${chanKey.current}`)
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'hub_todo_lists', filter: listFilter },
         () => fetchData()
