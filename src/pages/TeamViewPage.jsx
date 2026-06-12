@@ -240,7 +240,7 @@ export default function TeamViewPage() {
                 <select
                   value={filters.urgency || ''}
                   onChange={e => setFilters(f => ({ ...f, urgency: e.target.value }))}
-                  className="form-input w-[calc(50%-0.25rem)] sm:w-36"
+                  className="form-input w-full sm:w-36"
                 >
                   <option value="">All urgencies</option>
                   <option>High</option>
@@ -250,7 +250,7 @@ export default function TeamViewPage() {
                 <select
                   value={filters.priority || ''}
                   onChange={e => setFilters(f => ({ ...f, priority: e.target.value }))}
-                  className="form-input w-[calc(50%-0.25rem)] sm:w-36"
+                  className="form-input w-full sm:w-36"
                 >
                   <option value="">All priorities</option>
                   <option value="red">Red</option>
@@ -262,7 +262,7 @@ export default function TeamViewPage() {
                   <select
                     value={filters.team || ''}
                     onChange={e => setFilters(f => ({ ...f, team: e.target.value }))}
-                    className="form-input w-[calc(50%-0.25rem)] sm:w-36"
+                    className="form-input w-full sm:w-36"
                   >
                     <option value="">All teams</option>
                     {allTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}

@@ -178,7 +178,7 @@ export function FilterRow({ filters, onChange, onClear, showTeamFilter, teams })
       <select
         value={filters.urgency || ''}
         onChange={e => onChange('urgency', e.target.value)}
-        className="form-input w-[calc(50%-0.25rem)] sm:w-36"
+        className="form-input w-full sm:w-36"
       >
         <option value="">All urgencies</option>
         <option>High</option>
@@ -188,7 +188,7 @@ export function FilterRow({ filters, onChange, onClear, showTeamFilter, teams })
       <select
         value={filters.priority || ''}
         onChange={e => onChange('priority', e.target.value)}
-        className="form-input w-[calc(50%-0.25rem)] sm:w-36"
+        className="form-input w-full sm:w-36"
       >
         <option value="">All priorities</option>
         <option value="red">Red</option>
@@ -200,7 +200,7 @@ export function FilterRow({ filters, onChange, onClear, showTeamFilter, teams })
         <select
           value={filters.team || ''}
           onChange={e => onChange('team', e.target.value)}
-          className="form-input w-[calc(50%-0.25rem)] sm:w-36"
+          className="form-input w-full sm:w-36"
         >
           <option value="">All teams</option>
           {(teams || []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
