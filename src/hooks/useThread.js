@@ -97,12 +97,13 @@ export function useThread({ conversationId, rootMessage }) {
     return () => supabase.removeChannel(channel)
   }, [effectiveRootId, conversationId])
 
-  const sendMessage = useCallback(async (content, inlineImages = [], replyTo = null, mentions = []) => {
+  const sendMessage = useCallback(async (content, inlineImages = [], replyTo = null, mentions = [], attachments = []) => {
     const rootId = effectiveRootIdRef.current
     if (!conversationId || !rootId || !profile?.id) return false
     const trimmed = (content || '').trim()
     const hasImages = Array.isArray(inlineImages) && inlineImages.length > 0
-    if (!trimmed && !hasImages) return false
+    const hasAttachments = Array.isArray(attachments) && attachments.length > 0
+    if (!trimmed && !hasImages && !hasAttachments) return false
     const { data, error } = await supabase
       .from('dm_messages')
       .insert({
@@ -111,6 +112,7 @@ export function useThread({ conversationId, rootMessage }) {
         kind: 'user',
         content: trimmed,
         inline_images: inlineImages.map(({ preview, ...rest }) => rest),
+        attachments: (Array.isArray(attachments) ? attachments : []).map(({ preview, ...rest }) => rest),
         mentions: Array.isArray(mentions) ? mentions : [],
         reply_to_id:        replyTo?.id        || null,
         reply_to_author_id: replyTo?.author_id || null,

@@ -25,6 +25,8 @@ export default function ChatMessage({ message, isOwn, onDelete }) {
             content={message.content}
             mentions={message.mentions}
             inlineImages={message.inline_images}
+            attachments={message.attachments}
+            attachmentBucket="dm-attachments"
           />
         </div>
       </div>

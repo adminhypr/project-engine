@@ -127,6 +127,8 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt, reac
                 mentions={message.mentions || []}
                 inlineImages={message.inline_images || []}
                 imagesBucket="dm-attachments"
+                attachments={message.attachments || []}
+                attachmentBucket="dm-attachments"
               />
             )}
           </div>

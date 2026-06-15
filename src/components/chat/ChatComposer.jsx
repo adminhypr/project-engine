@@ -3,6 +3,7 @@ import { Send, X, CornerUpLeft, Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { showToast } from '../ui'
 import ImageAttachments from './ImageAttachments'
+import ChatAttachmentPicker from './ChatAttachmentPicker'
 import { useReplyContext } from './ReplyContext'
 import MentionPopover from './MentionPopover'
 import { parseMentionQuery, insertMention } from '../../lib/mentions'
@@ -39,6 +40,9 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [images, setImages] = useState([])
+  // Generic (non-image) file attachments — uploaded immediately to
+  // dm-attachments by ChatAttachmentPicker, persisted on the message.
+  const [attachments, setAttachments] = useState([])
   // Index of the image currently uploading during send (null when idle) —
   // drives the per-thumbnail overlay and the "Uploading n of m" line.
   const [uploadingIndex, setUploadingIndex] = useState(null)
@@ -163,7 +167,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
 
   async function submit() {
     const trimmed = value.trim()
-    if ((!trimmed && images.length === 0) || busy || disabled) return
+    if ((!trimmed && images.length === 0 && attachments.length === 0) || busy || disabled) return
     setBusy(true)
     const uploaded = images.length > 0
       ? await uploadImages(conversationId, images, setUploadingIndex)
@@ -174,12 +178,13 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
     const effectiveMentions = pickedMentions.filter(m =>
       trimmed.includes(`@${m.display_name}`)
     )
-    const ok = await onSend(trimmed, uploaded, replyTarget, effectiveMentions)
+    const ok = await onSend(trimmed, uploaded, replyTarget, effectiveMentions, attachments)
     setBusy(false)
     if (ok) {
       setValue('')
       images.forEach(i => URL.revokeObjectURL(i.preview))
       setImages([])
+      setAttachments([])
       setPickedMentions([])
       setMentionQuery(null)
       clearReply()
@@ -296,6 +301,14 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
           Uploading image {Math.min(uploadingIndex + 1, images.length)} of {images.length}…
         </div>
       )}
+      <div className="px-2 pt-1">
+        <ChatAttachmentPicker
+          conversationId={conversationId}
+          attachments={attachments}
+          onChange={setAttachments}
+          disabled={busy || disabled}
+        />
+      </div>
       <div
         onPointerDown={startResize}
         onDoubleClick={() => setTextareaHeight(DEFAULT_H)}
@@ -332,7 +345,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
         <button
           type="button"
           onClick={submit}
-          disabled={busy || disabled || (!value.trim() && images.length === 0)}
+          disabled={busy || disabled || (!value.trim() && images.length === 0 && attachments.length === 0)}
           className="w-9 h-9 rounded-full bg-brand-500 hover:bg-brand-600 text-white disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center justify-center"
           aria-label={busy ? 'Sending…' : 'Send'}
         >

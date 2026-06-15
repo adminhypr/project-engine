@@ -90,12 +90,13 @@ export function useHubChat(moduleId) {
     })
   }, [conversationId])
 
-  const sendMessage = useCallback(async (content, mentions = [], inlineImages = []) => {
+  const sendMessage = useCallback(async (content, mentions = [], inlineImages = [], attachments = []) => {
     const cid = cidRef.current
     if (!cid || !profile?.id) return false
     const trimmed = (content || '').trim()
     const hasImages = Array.isArray(inlineImages) && inlineImages.length > 0
-    if (!trimmed && !hasImages) return false
+    const hasAttachments = Array.isArray(attachments) && attachments.length > 0
+    if (!trimmed && !hasImages && !hasAttachments) return false
     const { data, error } = await supabase
       .from('dm_messages')
       .insert({
@@ -104,6 +105,7 @@ export function useHubChat(moduleId) {
         kind: 'user',
         content: trimmed,
         inline_images: inlineImages.map(({ preview, ...rest }) => rest),
+        attachments: (Array.isArray(attachments) ? attachments : []).map(({ preview, ...rest }) => rest),
         mentions: Array.isArray(mentions) ? mentions : [],
       })
       .select(MSG_SELECT)
@@ -151,5 +153,5 @@ export function useHubChat(moduleId) {
   }, [fetchPage])
   useDocumentVisible(resync)
 
-  return { messages, loading, sendMessage, deleteMessage, loadMore, hasMore }
+  return { messages, loading, sendMessage, deleteMessage, loadMore, hasMore, conversationId }
 }
