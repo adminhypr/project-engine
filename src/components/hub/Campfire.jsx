@@ -8,7 +8,7 @@ import DateSeparator, { isSameDay } from '../ui/DateSeparator'
 
 function Campfire({ hubId, moduleId, expanded = false }) {
   const { profile } = useAuth()
-  const { messages, loading, sendMessage, deleteMessage, loadMore, hasMore } = useHubChat(moduleId)
+  const { messages, loading, sendMessage, deleteMessage, loadMore, hasMore, conversationId } = useHubChat(moduleId)
   const bottomRef = useRef(null)
   const containerRef = useRef(null)
 
@@ -57,7 +57,7 @@ function Campfire({ hubId, moduleId, expanded = false }) {
         <div ref={bottomRef} />
       </div>
       <div className="mt-3 pt-3 border-t border-slate-200/60 dark:border-dark-border">
-        <ChatInput hubId={hubId} onSend={sendMessage} />
+        <ChatInput hubId={hubId} conversationId={conversationId} onSend={sendMessage} />
       </div>
     </div>
   )

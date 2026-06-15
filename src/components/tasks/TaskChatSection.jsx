@@ -62,11 +62,12 @@ export default function TaskChatSection({ taskId }) {
 
   // Adapter: ChatComposer calls onSend(content, images, replyTarget, mentions).
   // useTaskChat expects an object with { body, mentions, inline_images, reply_to_* }.
-  async function handleSend(content, inlineImages = [], replyTarget = null, mentions = []) {
+  async function handleSend(content, inlineImages = [], replyTarget = null, mentions = [], attachments = []) {
     const { error } = await sendMessage({
       body: content,
       mentions,
       inline_images: inlineImages,
+      attachments,
       reply_to_id:        replyTarget?.id        || null,
       reply_to_author_id: replyTarget?.author_id || null,
       reply_to_preview:   replyTarget?.preview   || null,

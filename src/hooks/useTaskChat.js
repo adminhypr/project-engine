@@ -153,12 +153,13 @@ export function useTaskChat(taskId) {
 
   // 4. Send — object signature per plan Task 4, insert shape per
   //    useConversation (real columns: mentions, inline_images, reply_to_*).
-  const sendMessage = useCallback(async ({ body, mentions = [], inline_images = [], reply_to_id = null, reply_to_author_id = null, reply_to_preview = null } = {}) => {
+  const sendMessage = useCallback(async ({ body, mentions = [], inline_images = [], attachments = [], reply_to_id = null, reply_to_author_id = null, reply_to_preview = null } = {}) => {
     const cid = cidRef.current
     if (!cid || !profile?.id) return { data: null, error: new Error('not ready') }
     const trimmed = (body || '').trim()
     const hasImages = Array.isArray(inline_images) && inline_images.length > 0
-    if (!trimmed && !hasImages) return { data: null, error: new Error('empty message') }
+    const hasAttachments = Array.isArray(attachments) && attachments.length > 0
+    if (!trimmed && !hasImages && !hasAttachments) return { data: null, error: new Error('empty message') }
     const { data, error } = await supabase
       .from('dm_messages')
       .insert({
@@ -167,6 +168,7 @@ export function useTaskChat(taskId) {
         kind: 'user',
         content: trimmed,
         inline_images: inline_images.map(({ preview, ...rest }) => rest),
+        attachments: (Array.isArray(attachments) ? attachments : []).map(({ preview, ...rest }) => rest),
         mentions: Array.isArray(mentions) ? mentions : [],
         reply_to_id: reply_to_id || null,
         reply_to_author_id: reply_to_author_id || null,
