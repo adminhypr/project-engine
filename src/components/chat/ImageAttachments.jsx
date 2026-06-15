@@ -3,7 +3,7 @@ import { useRef } from 'react'
 
 const MAX_BYTES = 5 * 1024 * 1024
 
-export default function ImageAttachments({ items, onAdd, onRemove, uploadingIndex = null }) {
+export default function ImageAttachments({ items, onAdd, onRemove, uploadingIndex = null, hideButton = false }) {
   const inputRef = useRef(null)
   const busy = uploadingIndex != null
 
@@ -51,26 +51,30 @@ export default function ImageAttachments({ items, onAdd, onRemove, uploadingInde
           ))}
         </div>
       )}
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        hidden
-        onChange={e => {
-          handleFiles(e.target.files || [])
-          e.target.value = ''
-        }}
-      />
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
-        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-2"
-        aria-label="Attach image"
-        title="Attach image (max 5 MB)"
-      >
-        <ImageIcon className="w-4 h-4" />
-      </button>
+      {!hideButton && (
+        <>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            onChange={e => {
+              handleFiles(e.target.files || [])
+              e.target.value = ''
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-2"
+            aria-label="Attach image"
+            title="Attach image (max 5 MB)"
+          >
+            <ImageIcon className="w-4 h-4" />
+          </button>
+        </>
+      )}
     </div>
   )
 }

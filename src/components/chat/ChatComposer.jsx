@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Send, X, CornerUpLeft, Loader2 } from 'lucide-react'
+import { Send, X, CornerUpLeft, Loader2, Paperclip, FileText } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { showToast } from '../ui'
 import ImageAttachments from './ImageAttachments'
-import ChatAttachmentPicker from './ChatAttachmentPicker'
 import { useReplyContext } from './ReplyContext'
+import {
+  isInlineImage,
+  attachmentStoragePath,
+  buildAttachmentDescriptor,
+  formatFileSize,
+} from '../../lib/chatAttachments'
+
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024 // dm-attachments cap (mig 105)
 import MentionPopover from './MentionPopover'
 import { parseMentionQuery, insertMention } from '../../lib/mentions'
 import { useAuth } from '../../hooks/useAuth'
@@ -41,8 +48,11 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
   const [busy, setBusy] = useState(false)
   const [images, setImages] = useState([])
   // Generic (non-image) file attachments — uploaded immediately to
-  // dm-attachments by ChatAttachmentPicker, persisted on the message.
+  // dm-attachments, persisted on the message.
   const [attachments, setAttachments] = useState([])
+  const [attUploading, setAttUploading] = useState([]) // [{ id, name }]
+  const [dragOver, setDragOver] = useState(false)
+  const fileInputRef = useRef(null)
   // Index of the image currently uploading during send (null when idle) —
   // drives the per-thumbnail overlay and the "Uploading n of m" line.
   const [uploadingIndex, setUploadingIndex] = useState(null)
@@ -240,34 +250,82 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
     refreshMentionQuery(next, e.target.selectionStart ?? next.length)
   }
 
+  // Upload a generic (non-image) file to dm-attachments immediately so it
+  // shows as a chip; persisted on the message at send.
+  async function uploadAttachment(file) {
+    if (file.size === 0) { showToast(`${file.name || 'File'} is empty`, 'error'); return }
+    if (file.size > MAX_ATTACHMENT_BYTES) { showToast(`${file.name || 'File'} exceeds 25 MB limit`, 'error'); return }
+    if (!conversationId) { showToast('Cannot attach yet — chat still loading', 'error'); return }
+    const tempId = crypto.randomUUID()
+    setAttUploading(prev => [...prev, { id: tempId, name: file.name || 'file' }])
+    const storagePath = attachmentStoragePath(conversationId, crypto.randomUUID(), file.name)
+    const { error } = await supabase.storage
+      .from('dm-attachments')
+      .upload(storagePath, file, { contentType: file.type || undefined })
+    setAttUploading(prev => prev.filter(u => u.id !== tempId))
+    if (error) { showToast('Upload failed', 'error'); return }
+    setAttachments(prev => [...prev, buildAttachmentDescriptor({ storage_path: storagePath, file })])
+  }
+
+  // Single entry point for picker / paste / drop. Raster images go to the
+  // inline-image tray (uploaded at send); everything else uploads now as a
+  // download chip.
+  function handleIncomingFile(file, pasted = false) {
+    if (!file) return
+    if (isInlineImage(file.type)) {
+      if (file.size > MAX_IMAGE_BYTES) { showToast('Image exceeds 5 MB', 'error'); return }
+      const ext = (file.type.split('/')[1] || 'png').split('+')[0]
+      const name = pasted && (!file.name || file.name === 'image.png')
+        ? `pasted-${Date.now()}.${ext}`
+        : (file.name || `image.${ext}`)
+      setImages(prev => [...prev, { file, name, type: file.type, size: file.size, preview: URL.createObjectURL(file) }])
+      return
+    }
+    uploadAttachment(file)
+  }
+
+  function handlePickFiles(e) {
+    const files = e.target.files
+    if (!files) return
+    for (const file of files) handleIncomingFile(file)
+    e.target.value = ''
+  }
+
+  function handleDrop(e) {
+    e.preventDefault()
+    setDragOver(false)
+    const files = e.dataTransfer?.files
+    if (!files) return
+    for (const file of files) handleIncomingFile(file)
+  }
+
+  function removeAttachment(index) {
+    const att = attachments[index]
+    if (att?.storage_path) supabase.storage.from('dm-attachments').remove([att.storage_path]).then(() => {})
+    setAttachments(prev => prev.filter((_, i) => i !== index))
+  }
+
   function handlePaste(e) {
     const items = e.clipboardData?.items
     if (!items || items.length === 0) return
-    const files = []
+    const fileItems = []
     for (const item of items) {
-      if (item.kind !== 'file' || !item.type.startsWith('image/')) continue
+      if (item.kind !== 'file') continue
       const file = item.getAsFile()
-      if (!file) continue
-      if (file.size > MAX_IMAGE_BYTES) {
-        showToast('Pasted image exceeds 5 MB', 'error')
-        continue
-      }
-      const ext = (file.type.split('/')[1] || 'png').split('+')[0]
-      const name = file.name && file.name !== 'image.png'
-        ? file.name
-        : `pasted-${Date.now()}.${ext}`
-      files.push({ file, name, type: file.type, size: file.size })
+      if (file) fileItems.push(file)
     }
-    if (files.length === 0) return
+    if (fileItems.length === 0) return
     e.preventDefault()
-    setImages(prev => [
-      ...prev,
-      ...files.map(f => ({ ...f, preview: URL.createObjectURL(f.file) })),
-    ])
+    for (const file of fileItems) handleIncomingFile(file, true)
   }
 
   return (
-    <div className="border-t border-slate-200 dark:border-dark-border">
+    <div
+      className={`border-t border-slate-200 dark:border-dark-border ${dragOver ? 'ring-2 ring-inset ring-brand-400' : ''}`}
+      onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={handleDrop}
+    >
       {replyTarget && (
         <div className="flex items-start gap-2 px-3 pt-2 pb-1 border-b border-slate-200/60 dark:border-dark-border/60 bg-slate-50 dark:bg-slate-800/40">
           <CornerUpLeft className="w-3.5 h-3.5 text-brand-500 mt-0.5 shrink-0" />
@@ -295,20 +353,41 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
         onAdd={item => setImages(s => [...s, item])}
         onRemove={idx => setImages(s => s.filter((_, i) => i !== idx))}
         uploadingIndex={uploadingIndex}
+        hideButton
       />
       {uploadingIndex != null && images.length > 0 && (
         <div className="px-3 pb-1 text-[11px] text-slate-500 dark:text-slate-400" role="status">
           Uploading image {Math.min(uploadingIndex + 1, images.length)} of {images.length}…
         </div>
       )}
-      <div className="px-2 pt-1">
-        <ChatAttachmentPicker
-          conversationId={conversationId}
-          attachments={attachments}
-          onChange={setAttachments}
-          disabled={busy || disabled}
-        />
-      </div>
+      {(attachments.length > 0 || attUploading.length > 0) && (
+        <div className="flex flex-wrap gap-1.5 px-2 pt-2">
+          {attachments.map((att, i) => (
+            <div
+              key={`${att.storage_path}-${i}`}
+              className="group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-dark-bg/50 border border-slate-200 dark:border-dark-border text-xs"
+            >
+              <FileText size={12} className="shrink-0 text-slate-400" />
+              <span className="text-slate-700 dark:text-slate-300 truncate max-w-[160px]" title={att.file_name}>{att.file_name}</span>
+              {att.size != null && <span className="text-slate-400 shrink-0">({formatFileSize(att.size)})</span>}
+              <button
+                type="button"
+                onClick={() => removeAttachment(i)}
+                className="ml-0.5 p-0.5 rounded text-slate-300 hover:text-red-500"
+                aria-label={`Remove ${att.file_name}`}
+              >
+                <X size={11} />
+              </button>
+            </div>
+          ))}
+          {attUploading.map(u => (
+            <div key={u.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-dark-bg/50 border border-slate-200 dark:border-dark-border text-xs text-slate-500">
+              <Loader2 size={12} className="animate-spin text-brand-500" />
+              <span className="truncate max-w-[160px]">{u.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <div
         onPointerDown={startResize}
         onDoubleClick={() => setTextareaHeight(DEFAULT_H)}
@@ -328,6 +407,17 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
             onHover={setMentionIdx}
           />
         )}
+        <input ref={fileInputRef} type="file" multiple hidden onChange={handlePickFiles} />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={busy || disabled}
+          className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40"
+          aria-label="Attach a file or image"
+          title="Attach a file or image (drag & drop or paste too)"
+        >
+          <Paperclip className="w-4 h-4" />
+        </button>
         <textarea
           ref={textareaRef}
           value={value}
