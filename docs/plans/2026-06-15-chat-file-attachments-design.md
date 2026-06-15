@@ -122,6 +122,28 @@ Composer/renderer verified manually (repo has no component tests).
 2. Renderer + force-download — old messages unaffected (`attachments` defaults `[]`).
 3. Composers + send paths — feature goes live.
 
+## UX revision (2026-06-15, post-ship)
+
+First cut shipped a *second* paperclip (ChatAttachmentPicker) next to each
+composer's existing image affordance — confusing, no drag-drop, and campfire
+couldn't send attachment-only (RichInput's submit gate ignored attachments).
+Reworked to a single unified picker per composer:
+
+- **One attach control** (`accept="*/*"`) per composer. On pick/paste/drop it
+  routes by MIME: raster images → existing inline-image flow (campfire→hub-files,
+  widget→dm-attachments, both preview inline); everything else → dm-attachments
+  download chip. `ChatAttachmentPicker` deleted.
+- **Drag-and-drop** files anywhere on the composer (RichInput already had it for
+  images — generalized; widget gained a drop zone).
+- **Attachment-only send** — RichInput's submit gate + `enableAttachments` now
+  counts attachments; campfire can send a file with no text.
+- **Reaction picker** moved to a viewport-clamped fixed portal so it no longer
+  clips at the narrow chat pane's right edge.
+
+RichInput gained opt-in `enableAttachments` / `conversationId` / controlled
+`attachments` props; image-only surfaces (card notes, todos, message board) are
+unaffected (default off).
+
 ## Out of scope
 
 - Opening up the `hub-files` allowlist (deferred; would need docs/cards open-path

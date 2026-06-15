@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Trash2, Check, CheckCheck, CornerUpLeft, SmilePlus, MessageSquare } from 'lucide-react'
 import RichContentRenderer from '../ui/RichContentRenderer'
 import { renderChatInlineMarkdown, extractTaskIdFromMessage } from '../../lib/chatInlineMarkdown'
@@ -40,6 +41,23 @@ function QuotedReply({ message, isMine, onJump }) {
 export default function DmChatMessage({ message, isMine, onDelete, receipt, reactions, onToggleReaction, reactionProfileLookup, myId, seenBy, threadInfo, onOpenThread }) {
   const { requestReply, scrollToMessage } = useReplyContext()
   const [pickerOpen, setPickerOpen] = useState(false)
+  // Portal position for the reaction picker. The chat pane is narrow and
+  // overflow-hidden, so an absolutely-positioned popover gets clipped at
+  // the right edge — render it in a viewport-clamped fixed portal instead.
+  const [pickerPos, setPickerPos] = useState(null)
+  const triggerRef = useRef(null)
+  const PICKER_W = 248
+  const togglePicker = useCallback(() => {
+    setPickerOpen(open => {
+      if (open) return false
+      const r = triggerRef.current?.getBoundingClientRect()
+      if (r) {
+        const left = Math.min(Math.max(8, r.left), window.innerWidth - PICKER_W - 8)
+        setPickerPos({ top: r.top - 46, left })
+      }
+      return true
+    })
+  }, [])
   const isSystem = message.kind === 'system'
   const isDeleted = !!message.deleted_at
 
@@ -64,6 +82,15 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt, reac
       className={`group flex my-2 ${isMine ? 'justify-end' : 'justify-start'}`}
       data-message-id={message.id}
     >
+      {pickerOpen && pickerPos && createPortal(
+        <div className="fixed z-[9999]" style={{ top: pickerPos.top, left: pickerPos.left }}>
+          <ReactionPicker
+            onPick={(emoji) => onToggleReaction?.(message.id, emoji)}
+            onClose={() => setPickerOpen(false)}
+          />
+        </div>,
+        document.body
+      )}
       <div className={`max-w-[75%] ${isMine ? 'items-end' : 'items-start'} flex flex-col`}>
         {!isMine && (
           <div className="text-[11px] text-slate-500 dark:text-slate-400 mb-0.5">
@@ -85,8 +112,9 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt, reac
                 <CornerUpLeft className="w-3.5 h-3.5" />
               </button>
               <button
+                ref={triggerRef}
                 type="button"
-                onClick={() => setPickerOpen(v => !v)}
+                onClick={togglePicker}
                 className={`text-slate-400 hover:text-brand-500 ${pickerOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                 aria-label="Add reaction"
                 title="Add reaction"
@@ -103,14 +131,6 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt, reac
                 >
                   <MessageSquare className="w-3.5 h-3.5" />
                 </button>
-              )}
-              {pickerOpen && (
-                <div className="absolute bottom-full left-0 mb-1 z-20">
-                  <ReactionPicker
-                    onPick={(emoji) => onToggleReaction?.(message.id, emoji)}
-                    onClose={() => setPickerOpen(false)}
-                  />
-                </div>
               )}
             </div>
           )}
@@ -135,8 +155,9 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt, reac
           {isMine && !isDeleted && (
             <div className="relative flex items-center gap-1">
               <button
+                ref={triggerRef}
                 type="button"
-                onClick={() => setPickerOpen(v => !v)}
+                onClick={togglePicker}
                 className={`text-slate-400 hover:text-brand-500 ${pickerOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                 aria-label="Add reaction"
                 title="Add reaction"
@@ -162,14 +183,6 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt, reac
                 >
                   <MessageSquare className="w-3.5 h-3.5" />
                 </button>
-              )}
-              {pickerOpen && (
-                <div className="absolute bottom-full right-0 mb-1 z-20">
-                  <ReactionPicker
-                    onPick={(emoji) => onToggleReaction?.(message.id, emoji)}
-                    onClose={() => setPickerOpen(false)}
-                  />
-                </div>
               )}
             </div>
           )}

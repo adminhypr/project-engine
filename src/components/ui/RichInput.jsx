@@ -1,14 +1,21 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Loader2, Paperclip } from 'lucide-react'
+import { X, Loader2, Paperclip, FileText } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { useHubMembers } from '../../hooks/useHubMembers'
 import { parseMentionQuery, insertMention } from '../../lib/mentions'
 import { showToast } from './index'
 import { isBlockedImageType } from '../../lib/uploadGuards'
+import {
+  isInlineImage,
+  attachmentStoragePath,
+  buildAttachmentDescriptor,
+  formatFileSize,
+} from '../../lib/chatAttachments'
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5 MB
+const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024 // 25 MB (dm-attachments cap, mig 105)
 const MAX_DROPDOWN = 6
 
 export default function RichInput({
@@ -31,6 +38,16 @@ export default function RichInput({
   // For the same surfaces, keep the inline images in state after submit
   // so the user keeps seeing them. Chat-style surfaces leave this true.
   clearOnSubmit = true,
+  // Generic file attachments (chat surfaces). When enabled, the single
+  // paperclip accepts ANY file: raster images route to the inline-image
+  // flow (rendered inline), everything else uploads to dm-attachments and
+  // shows as a removable chip. Controlled by the parent so the Send button
+  // can reflect "has attachment". Requires `conversationId` for the
+  // dm-attachments path (RLS keys on the leading conversation-id folder).
+  enableAttachments = false,
+  conversationId = null,
+  attachments = [],
+  onAttachmentsChange,
 }) {
   const { profile } = useAuth()
   const { members } = useHubMembers(hubId)
@@ -48,6 +65,7 @@ export default function RichInput({
   // separate read-only block above it).
   const [inlineImages, setInlineImages] = useState(() => initialInlineImages || [])
   const [uploading, setUploading] = useState([])
+  const [attUploading, setAttUploading] = useState([]) // [{ id, name }] generic-file uploads
   const [dragOver, setDragOver] = useState(false)
 
   // Filter members for autocomplete
@@ -135,16 +153,19 @@ export default function RichInput({
     // Chat-style surfaces (clearOnSubmit=true) bail on empty submit so the
     // Post button doesn't fire a no-op message. Edit-in-place surfaces
     // (clearOnSubmit=false) need to allow empty saves — clearing the notes
-    // back to nothing is a valid intent.
-    if (clearOnSubmit && !value.trim() && inlineImages.length === 0) return
+    // back to nothing is a valid intent. An attachment alone is enough to
+    // send (fixes attachment-only sends being blocked).
+    if (clearOnSubmit && !value.trim() && inlineImages.length === 0 && attachments.length === 0) return
     onSubmit?.({
       content: value.trim(),
       mentions,
       inlineImages,
+      attachments,
     })
     if (clearOnSubmit) {
       setMentions([])
       setInlineImages([])
+      onAttachmentsChange?.([])
     }
     setMentionState({ active: false, query: '', startIndex: -1 })
   }
@@ -210,6 +231,42 @@ export default function RichInput({
     }])
   }
 
+  // Generic (non-image) file → dm-attachments bucket. Rendered as a chip,
+  // opened via a forced-download signed URL (RichContentRenderer), so any
+  // file type is safe regardless of MIME.
+  async function uploadAttachment(file) {
+    if (file.size === 0) { showToast(`${file.name || 'File'} is empty`, 'error'); return }
+    if (file.size > MAX_ATTACHMENT_SIZE) { showToast(`${file.name || 'File'} exceeds 25 MB limit`, 'error'); return }
+    if (!conversationId) { showToast('Cannot attach yet — chat still loading', 'error'); return }
+
+    const tempId = crypto.randomUUID()
+    setAttUploading(prev => [...prev, { id: tempId, name: file.name || 'file' }])
+    const storagePath = attachmentStoragePath(conversationId, crypto.randomUUID(), file.name)
+    const { error } = await supabase.storage
+      .from('dm-attachments')
+      .upload(storagePath, file, { contentType: file.type || undefined })
+    setAttUploading(prev => prev.filter(u => u.id !== tempId))
+    if (error) { showToast('Upload failed', 'error'); return }
+    onAttachmentsChange?.([...attachments, buildAttachmentDescriptor({ storage_path: storagePath, file })])
+  }
+
+  // Single entry point for picker / paste / drop. Raster images go inline;
+  // everything else becomes a download chip (only when attachments enabled).
+  function handleIncomingFile(file) {
+    if (!file) return
+    if (isInlineImage(file.type)) { uploadImage(file); return }
+    if (enableAttachments) { uploadAttachment(file); return }
+    // Image-only surface fed a non-image (e.g. drag of a PDF) — ignore.
+  }
+
+  function removeAttachment(index) {
+    const att = attachments[index]
+    if (att?.storage_path) {
+      supabase.storage.from('dm-attachments').remove([att.storage_path]).then(() => {})
+    }
+    onAttachmentsChange?.(attachments.filter((_, i) => i !== index))
+  }
+
   function removeImage(index) {
     const img = inlineImages[index]
     if (img.file_id) {
@@ -220,21 +277,26 @@ export default function RichInput({
     setInlineImages(prev => prev.filter((_, i) => i !== index))
   }
 
+  const acceptsFiles = enableImages || enableAttachments
+
   function handlePaste(e) {
-    if (!enableImages) return
+    if (!acceptsFiles) return
     const items = e.clipboardData?.items
     if (!items) return
     for (const item of items) {
-      if (item.type.startsWith('image/')) {
+      if (item.kind !== 'file') continue
+      const file = item.getAsFile()
+      if (!file) continue
+      // Only intercept the paste for things we'll actually take.
+      if (isInlineImage(file.type) || enableAttachments) {
         e.preventDefault()
-        const file = item.getAsFile()
-        if (file) uploadImage(file)
+        handleIncomingFile(file)
       }
     }
   }
 
   function handleDragOver(e) {
-    if (!enableImages) return
+    if (!acceptsFiles) return
     e.preventDefault()
     setDragOver(true)
   }
@@ -244,14 +306,12 @@ export default function RichInput({
   }
 
   function handleDrop(e) {
-    if (!enableImages) return
+    if (!acceptsFiles) return
     e.preventDefault()
     setDragOver(false)
     const files = e.dataTransfer?.files
     if (!files) return
-    for (const file of files) {
-      if (file.type.startsWith('image/')) uploadImage(file)
-    }
+    for (const file of files) handleIncomingFile(file)
   }
 
   useEffect(() => {
@@ -283,14 +343,13 @@ export default function RichInput({
   }, [mentionState.active])
 
   const hasImages = inlineImages.length > 0 || uploading.length > 0
+  const hasAttachments = attachments.length > 0 || attUploading.length > 0
 
   function handlePickerChange(e) {
-    if (!enableImages) return
+    if (!acceptsFiles) return
     const files = e.target.files
     if (!files) return
-    for (const file of files) {
-      if (file.type.startsWith('image/')) uploadImage(file)
-    }
+    for (const file of files) handleIncomingFile(file)
     // Reset so picking the same file twice still fires onChange.
     e.target.value = ''
   }
@@ -319,12 +378,12 @@ export default function RichInput({
           rows={singleLine ? 1 : rows}
           className={`form-input w-full resize-none text-sm ${singleLine ? 'py-1.5 pr-9' : 'pr-9'} ${className}`}
         />
-        {enableImages && (
+        {acceptsFiles && (
           <>
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept={enableAttachments ? undefined : 'image/*'}
               multiple
               hidden
               onChange={handlePickerChange}
@@ -333,8 +392,8 @@ export default function RichInput({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               className="absolute right-2 bottom-2 p-1 rounded text-slate-400 hover:text-brand-600 dark:text-slate-500 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-dark-hover"
-              aria-label="Attach image"
-              title="Attach image (max 5 MB)"
+              aria-label={enableAttachments ? 'Attach file' : 'Attach image'}
+              title={enableAttachments ? 'Attach a file or image (drag, paste, or click)' : 'Attach image (max 5 MB)'}
             >
               <Paperclip size={15} />
             </button>
@@ -405,6 +464,40 @@ export default function RichInput({
               <div className="absolute inset-0 flex items-center justify-center">
                 <Loader2 size={16} className="animate-spin text-brand-500" />
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {hasAttachments && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {attachments.map((att, i) => (
+            <div
+              key={`${att.storage_path}-${i}`}
+              className="group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-dark-bg/50 border border-slate-200 dark:border-dark-border text-xs"
+            >
+              <FileText size={12} className="shrink-0 text-slate-400" />
+              <span className="text-slate-700 dark:text-slate-300 truncate max-w-[160px]" title={att.file_name}>
+                {att.file_name}
+              </span>
+              {att.size != null && <span className="text-slate-400 shrink-0">({formatFileSize(att.size)})</span>}
+              <button
+                type="button"
+                onClick={() => removeAttachment(i)}
+                className="ml-0.5 p-0.5 rounded text-slate-300 hover:text-red-500"
+                aria-label={`Remove ${att.file_name}`}
+              >
+                <X size={11} />
+              </button>
+            </div>
+          ))}
+          {attUploading.map(u => (
+            <div
+              key={u.id}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-dark-bg/50 border border-slate-200 dark:border-dark-border text-xs text-slate-500"
+            >
+              <Loader2 size={12} className="animate-spin text-brand-500" />
+              <span className="truncate max-w-[160px]">{u.name}</span>
             </div>
           ))}
         </div>
