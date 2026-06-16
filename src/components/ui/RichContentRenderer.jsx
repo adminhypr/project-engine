@@ -138,8 +138,15 @@ export default function RichContentRenderer({ content, mentions = [], inlineImag
     async function signAll() {
       const urls = {}
       for (const img of inlineImages) {
+        // Sign each image against the bucket where it ACTUALLY lives, not a
+        // per-surface default. A campfire image can be authored from the hub
+        // module (RichInput → hub-files, carries a file_id) OR the /chat page
+        // / widget (ChatComposer → dm-attachments). Without this, the same
+        // image signed against the wrong bucket fails to load — visible to the
+        // sender on their surface but not to members on the other surface.
+        const bucket = img.bucket || (img.file_id ? 'hub-files' : imagesBucket)
         const { data } = await supabase.storage
-          .from(imagesBucket)
+          .from(bucket)
           .createSignedUrl(img.storage_path, 3600)
         if (data?.signedUrl) urls[img.storage_path] = data.signedUrl
       }

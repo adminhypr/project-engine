@@ -227,6 +227,7 @@ export default function RichInput({
       storage_path: storagePath,
       file_name: fileName,
       mime_type: file.type,
+      bucket: 'hub-files',
       preview,
     }])
   }

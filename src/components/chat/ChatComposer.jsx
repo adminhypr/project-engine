@@ -31,7 +31,9 @@ async function uploadImages(conversationId, items, onItemStart) {
       .from('dm-attachments')
       .upload(path, it.file, { contentType: it.type, upsert: false })
     if (error) { showToast('Image upload failed', 'error'); continue }
-    uploaded.push({ storage_path: path, name: it.name, size: it.size, type: it.type })
+    // Stamp the bucket so the renderer signs against the right one regardless
+    // of which surface (widget / chat page / hub module) displays the message.
+    uploaded.push({ storage_path: path, name: it.name, size: it.size, type: it.type, bucket: 'dm-attachments' })
   }
   return uploaded
 }
