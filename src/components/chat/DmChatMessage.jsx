@@ -15,6 +15,29 @@ function formatTime(iso) {
   catch { return '' }
 }
 
+// Sender avatar shown beside incoming messages (image, or initial fallback) —
+// matches the sidebar / campfire-module look so you can tell who's talking in
+// group + campfire chats at a glance.
+function SenderAvatar({ author }) {
+  const name = author?.full_name || author?.email || '?'
+  const initial = name.charAt(0).toUpperCase()
+  return author?.avatar_url ? (
+    <img
+      src={author.avatar_url}
+      alt={name}
+      title={name}
+      className="w-7 h-7 rounded-full object-cover shrink-0"
+    />
+  ) : (
+    <div
+      title={name}
+      className="w-7 h-7 rounded-full bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-200 text-xs font-semibold flex items-center justify-center shrink-0"
+    >
+      {initial}
+    </div>
+  )
+}
+
 function QuotedReply({ message, isMine, onJump }) {
   const hasRef = !!message.reply_to_id
   if (!hasRef) return null
@@ -109,7 +132,7 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt, reac
 
   return (
     <div
-      className={`group flex my-2 ${isMine ? 'justify-end' : 'justify-start'}`}
+      className={`group flex my-2 gap-2 items-start ${isMine ? 'justify-end' : 'justify-start'}`}
       data-message-id={message.id}
     >
       {pickerOpen && pickerPos && createPortal(
@@ -121,6 +144,7 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt, reac
         </div>,
         document.body
       )}
+      {!isMine && <SenderAvatar author={message.author} />}
       <div className={`max-w-[75%] ${isMine ? 'items-end' : 'items-start'} flex flex-col`}>
         {!isMine && (
           <div className="text-[11px] text-slate-500 dark:text-slate-400 mb-0.5">
