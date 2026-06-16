@@ -1,4 +1,4 @@
-import { Minus, X, ClipboardList, CheckSquare, Maximize2, Minimize2, Users, ArrowUpRight } from 'lucide-react'
+import { Minus, X, ClipboardList, CheckSquare, Maximize2, Minimize2, Users, ArrowUpRight, Video, Loader2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import PresenceDot from './PresenceDot'
 import { groupDisplayName, memberCountLabel } from '../../lib/groupConversations'
@@ -28,6 +28,7 @@ export default function ConversationHeader({
   conversation, otherProfile, online, onMinimize, onClose,
   onAssignTask, canAssignTask,
   onAddTodo, canAddTodo,
+  onStartCall, callStarting,
   dragHandleProps, isMaximized, onToggleMaximize, onOpenMembers,
 }) {
   const navigate = useNavigate()
@@ -116,6 +117,18 @@ export default function ConversationHeader({
         >
           <CheckSquare className="w-3.5 h-3.5" />
           Add to-do
+        </button>
+      )}
+      {onStartCall && (
+        <button
+          type="button"
+          onClick={onStartCall}
+          disabled={callStarting}
+          className="text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 disabled:opacity-50 disabled:cursor-wait"
+          aria-label="Start video call"
+          title="Start a video call"
+        >
+          {callStarting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />}
         </button>
       )}
       {isGroup && onOpenMembers && (

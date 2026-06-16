@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { supabase } from '../../lib/supabase'
+import { showToast } from '../ui'
 import { useAuth } from '../../hooks/useAuth'
 import { useConversation } from '../../hooks/useConversation'
 import { useDmTyping } from '../../hooks/useDmTyping'
@@ -53,6 +55,31 @@ export default function ConversationPane({
 
   const [membersOpen, setMembersOpen] = useState(false)
   const [todoOpen, setTodoOpen] = useState(false)
+  const [callStarting, setCallStarting] = useState(false)
+  // Video calls ship behind a flag so the button stays hidden in prod until
+  // the Google Meet setup is done + secrets are set (see the design doc).
+  const callsEnabled = import.meta.env.VITE_CALLS_ENABLED === 'true'
+
+  // Start a Google Meet call for this conversation: the edge function mints
+  // the space, posts the call card (realtime fans it to everyone), and we
+  // open the link for the starter. Button is disabled while in flight.
+  const startCall = useCallback(async () => {
+    if (callStarting) return
+    setCallStarting(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('create-meet-link', {
+        body: { conversation_id: conversation.id },
+      })
+      if (error) { showToast('Could not start the call', 'error'); return }
+      if (data?.error === 'not_configured') { showToast('Video calls aren’t set up yet', 'error'); return }
+      if (data?.url) { window.open(data.url, '_blank', 'noopener,noreferrer'); return }
+      showToast('Could not start the call', 'error')
+    } catch {
+      showToast('Could not start the call', 'error')
+    } finally {
+      setCallStarting(false)
+    }
+  }, [callStarting, conversation.id])
   // Thread state is lifted to ChatWidget so only one thread can be open
   // across the whole widget, and the stack can focus that pane (same
   // idea as maximize) to avoid overflowing the right-anchored row.
@@ -188,6 +215,8 @@ export default function ConversationPane({
             onAssignTask={() => onAssignTask?.(conversation)}
             canAddTodo={isExternal && (conversation.kind === 'dm' || conversation.kind === 'group' || conversation.kind === 'hub')}
             onAddTodo={() => setTodoOpen(true)}
+            onStartCall={callsEnabled ? startCall : undefined}
+            callStarting={callStarting}
             onMinimize={() => onMinimize?.(conversation.id)}
             onClose={() => onClose?.(conversation.id)}
             dragHandleProps={dragHandleProps}
