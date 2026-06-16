@@ -28,12 +28,13 @@ export default function Layout({ children }) {
     ? [
         { to: '/to-do',     icon: ListChecks,    label: 'To-Do',     show: true },
         { to: '/hub',       icon: Boxes,         label: 'Hubs',      show: true },
-        { to: '/team-chat', icon: MessageCircle, label: 'Team Chat', show: true },
+        { to: '/chat',      icon: MessageCircle, label: 'Chat',      show: true },
         { to: '/settings',  icon: Settings,      label: 'Settings',  show: true },
       ]
     : [
         { to: '/my-tasks', icon: CheckSquare,     label: 'My Tasks',        show: true },
         { to: '/assign',   icon: Plus,            label: 'Assign a Task',   show: true },
+        { to: '/chat',     icon: MessageCircle,   label: 'Chat',            show: true },
         { to: '/hub',      icon: Boxes,           label: 'Project Hub',     show: true, badge: 'BETA' },
         { to: '/team',     icon: Users,           label: 'Team View',       show: isManager },
         { to: '/admin',    icon: LayoutDashboard, label: 'Admin Overview',  show: isAdmin },

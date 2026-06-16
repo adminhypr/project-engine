@@ -20,7 +20,7 @@ const SettingsPage       = lazy(() => import('./pages/SettingsPage'))
 const HubPage            = lazy(() => import('./pages/HubPage'))
 const HubTodosPage       = lazy(() => import('./pages/HubTodosPage'))
 const ToDoPage           = lazy(() => import('./pages/ToDoPage'))
-const TeamChatPage       = lazy(() => import('./pages/TeamChatPage'))
+const ChatPage           = lazy(() => import('./pages/ChatPage'))
 import ErrorBoundary from './components/ErrorBoundary'
 import { ThemeProvider } from './hooks/useTheme'
 import ChatWidget from './components/chat/ChatWidget'
@@ -90,7 +90,10 @@ function AppRoutes() {
                   <Route path="/my-tasks" element={<InternalOnly><Profiler id="MyTasksPage" onRender={logRender}><MyTasksPage /></Profiler></InternalOnly>} />
                   <Route path="/assign"   element={<InternalOnly><AssignTaskPage /></InternalOnly>} />
                   <Route path="/to-do"    element={<ToDoPage />} />
-                  <Route path="/team-chat" element={<TeamChatPage />} />
+                  <Route path="/chat"                  element={<ChatPage />} />
+                  <Route path="/chat/:conversationId"  element={<ChatPage />} />
+                  {/* /team-chat retired → dedicated chat page (the team group shows in the sidebar). */}
+                  <Route path="/team-chat" element={<Navigate to="/chat" replace />} />
                   <Route path="/hub"        element={<HubPage />} />
                   <Route path="/hub/:hubId" element={<HubPage />} />
                   <Route path="/hub/:hubId/todos/*" element={<HubTodosPage />} />
