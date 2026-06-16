@@ -1,5 +1,5 @@
 import { Profiler, lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import { AuthProvider, useAuth } from './hooks/useAuth'
 import { logRender } from './lib/refreshDiagnostic'
@@ -35,6 +35,10 @@ function RouteFallback() {
 
 function AppRoutes() {
   const { session, loading, profile, refreshProfile, isExternal } = useAuth()
+  const location = useLocation()
+  // The floating chat widget is redundant on the dedicated chat page — hide it
+  // there so the launcher bubble doesn't overlap the conversation composer.
+  const onChatPage = location.pathname === '/chat' || location.pathname.startsWith('/chat/')
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg">
@@ -108,7 +112,7 @@ function AppRoutes() {
           </ErrorBoundary>
         </Layout>
       </Profiler>
-      {!isExternal && (
+      {!isExternal && !onChatPage && (
         <Profiler id="ChatWidget" onRender={logRender}>
           <ChatWidget />
         </Profiler>
