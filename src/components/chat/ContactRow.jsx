@@ -1,6 +1,6 @@
 import PresenceDot from './PresenceDot'
 
-export default function ContactRow({ row, online, onClick }) {
+export default function ContactRow({ row, online, onClick, selected = false }) {
   const { profile, conversation } = row
   const initial = (profile.full_name || '?').charAt(0).toUpperCase()
   const unread = conversation?.unread || 0
@@ -9,7 +9,12 @@ export default function ContactRow({ row, online, onClick }) {
     <button
       type="button"
       onClick={() => onClick(profile.id)}
-      className="w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-left"
+      aria-current={selected ? 'true' : undefined}
+      className={`w-full flex items-center gap-3 px-3 py-2 text-left ${
+        selected
+          ? 'bg-brand-50 dark:bg-brand-500/10'
+          : 'hover:bg-slate-50 dark:hover:bg-slate-800'
+      }`}
     >
       <div className="relative w-9 h-9 flex-shrink-0">
         {profile.avatar_url ? (

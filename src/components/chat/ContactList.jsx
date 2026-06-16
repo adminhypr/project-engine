@@ -127,7 +127,7 @@ function truncate(s, n) {
   return s.length > n ? s.slice(0, n - 1) + '…' : s
 }
 
-function PeopleSection({ sectionKey, title, rows, presence, onOpen, collapsed, onToggle }) {
+function PeopleSection({ sectionKey, title, rows, presence, onOpen, collapsed, onToggle, selectedId }) {
   if (!rows || rows.length === 0) return null
   const unread = totalUnread(rows, 'people')
   return (
@@ -140,6 +140,7 @@ function PeopleSection({ sectionKey, title, rows, presence, onOpen, collapsed, o
             row={row}
             online={presence.get(row.profile.id)?.online || false}
             onClick={onOpen}
+            selected={!!selectedId && row.conversation?.id === selectedId}
           />
         ))}
       </CollapsibleBody>
@@ -149,14 +150,17 @@ function PeopleSection({ sectionKey, title, rows, presence, onOpen, collapsed, o
 
 // Used for both Groups (Users icon) and Campfires (Flame icon, warmer tint).
 // Campfires are kind='hub' conversations — one per project hub, named by hub.
-function GroupRow({ conversation, onClick, Icon = Users, iconClass = 'bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-200' }) {
+function GroupRow({ conversation, onClick, selected = false, Icon = Users, iconClass = 'bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-200' }) {
   const unread = conversation.unread || 0
   const preview = conversation.last_message_preview
   return (
     <button
       type="button"
       onClick={() => onClick(conversation.id)}
-      className="w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-left"
+      aria-current={selected ? 'true' : undefined}
+      className={`w-full flex items-center gap-3 px-3 py-2 text-left ${
+        selected ? 'bg-brand-50 dark:bg-brand-500/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800'
+      }`}
     >
       <div className="relative w-9 h-9 flex-shrink-0">
         <div className={`w-9 h-9 rounded-full ${iconClass} flex items-center justify-center`}>
@@ -182,7 +186,7 @@ function GroupRow({ conversation, onClick, Icon = Users, iconClass = 'bg-brand-1
   )
 }
 
-function CampfiresSection({ campfires, onOpenCampfire, collapsed, onToggle }) {
+function CampfiresSection({ campfires, onOpenCampfire, collapsed, onToggle, selectedId }) {
   if (!campfires || campfires.length === 0) return null
   const unread = totalUnread(campfires)
   return (
@@ -194,6 +198,7 @@ function CampfiresSection({ campfires, onOpenCampfire, collapsed, onToggle }) {
             key={c.id}
             conversation={c}
             onClick={onOpenCampfire}
+            selected={c.id === selectedId}
             Icon={Flame}
             iconClass="bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-300"
           />
@@ -203,7 +208,7 @@ function CampfiresSection({ campfires, onOpenCampfire, collapsed, onToggle }) {
   )
 }
 
-function GroupsSection({ groups, onOpenGroup, collapsed, onToggle }) {
+function GroupsSection({ groups, onOpenGroup, collapsed, onToggle, selectedId }) {
   if (!groups || groups.length === 0) return null
   const unread = totalUnread(groups)
   return (
@@ -211,7 +216,7 @@ function GroupsSection({ groups, onOpenGroup, collapsed, onToggle }) {
       <SectionHeader title="Groups" count={groups.length} unreadCount={unread} collapsed={collapsed} onToggle={() => onToggle('groups')} />
       <CollapsibleBody collapsed={collapsed}>
         {groups.map(g => (
-          <GroupRow key={g.id} conversation={g} onClick={onOpenGroup} />
+          <GroupRow key={g.id} conversation={g} onClick={onOpenGroup} selected={g.id === selectedId} />
         ))}
       </CollapsibleBody>
     </div>
@@ -272,6 +277,10 @@ function TasksSection({ tasks, onOpenTask, collapsed, onToggle }) {
 
 export default function ContactList({
   sections, groups = [], campfires = [], tasks = [], presence, onOpen, onOpenGroup, onOpenCampfire, onOpenTask, onCreateGroup,
+  // Conversation id of the currently-open conversation (chat page). When set,
+  // the matching row gets an active highlight. Undefined in the widget → no
+  // highlight, behavior unchanged.
+  selectedId,
 }) {
   const { isExternal } = useAuth()
   const [collapsed, toggle, setAll] = useCollapsedSections()
@@ -340,12 +349,14 @@ export default function ContactList({
             onOpenCampfire={handleOpenCampfire}
             collapsed={!!collapsed.campfires}
             onToggle={toggle}
+            selectedId={selectedId}
           />
           <GroupsSection
             groups={groups}
             onOpenGroup={onOpenGroup}
             collapsed={!!collapsed.groups}
             onToggle={toggle}
+            selectedId={selectedId}
           />
           <TasksSection
             tasks={tasks}
@@ -363,6 +374,7 @@ export default function ContactList({
                 onOpen={onOpen}
                 collapsed={!!collapsed.recent}
                 onToggle={toggle}
+                selectedId={selectedId}
               />
               <PeopleSection
                 sectionKey="teammates"
@@ -372,6 +384,7 @@ export default function ContactList({
                 onOpen={onOpen}
                 collapsed={!!collapsed.teammates}
                 onToggle={toggle}
+                selectedId={selectedId}
               />
               <PeopleSection
                 sectionKey="company"
@@ -381,6 +394,7 @@ export default function ContactList({
                 onOpen={onOpen}
                 collapsed={!!collapsed.company}
                 onToggle={toggle}
+                selectedId={selectedId}
               />
             </>
           )}

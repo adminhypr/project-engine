@@ -10,7 +10,7 @@ export function useContactList(searchQuery = '') {
   const { profile } = useAuth()
   const presence = usePresence()
   const { profiles, loading: profilesLoading } = useProfiles()
-  const { conversations, tasks, loading: convsLoading, createOrOpen, createGroup, markRead } = useConversations()
+  const { conversations, tasks, loading: convsLoading, createOrOpen, createGroup, markRead, refetch } = useConversations()
 
   const sections = useMemo(() => {
     if (!profile?.id) return { recent: [], teammates: [], company: [] }
@@ -54,5 +54,6 @@ export function useContactList(searchQuery = '') {
     createOrOpen,
     createGroup,
     markRead,
+    refetch,
   }
 }
