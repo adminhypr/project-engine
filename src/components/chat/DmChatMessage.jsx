@@ -1,8 +1,9 @@
 import { useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Trash2, Check, CheckCheck, CornerUpLeft, SmilePlus, MessageSquare } from 'lucide-react'
+import { Trash2, Check, CheckCheck, CornerUpLeft, SmilePlus, MessageSquare, Video } from 'lucide-react'
 import RichContentRenderer from '../ui/RichContentRenderer'
 import { renderChatInlineMarkdown, extractTaskIdFromMessage } from '../../lib/chatInlineMarkdown'
+import { extractMeetUrl } from '../../lib/meetLink'
 import ChatTaskCard from './ChatTaskCard'
 import { useReplyContext } from './ReplyContext'
 import ReactionPicker from './ReactionPicker'
@@ -59,6 +60,7 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt, reac
     })
   }, [])
   const isSystem = message.kind === 'system'
+  const isCall = message.kind === 'call'
   const isDeleted = !!message.deleted_at
 
   if (isSystem) {
@@ -69,6 +71,34 @@ export default function DmChatMessage({ message, isMine, onDelete, receipt, reac
           {renderChatInlineMarkdown(message.content)}
         </span>
         {linkedTaskId && <ChatTaskCard taskId={linkedTaskId} />}
+      </div>
+    )
+  }
+
+  if (isCall) {
+    const url = extractMeetUrl(message.content)
+    const who = isMine ? 'You' : (message.author?.full_name || 'Someone')
+    return (
+      <div className="my-2 flex justify-center" data-message-id={message.id}>
+        <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card shadow-soft max-w-[90%]">
+          <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+            <Video className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-slate-800 dark:text-slate-200">{who} started a call</div>
+            <div className="text-[11px] text-slate-400">{formatTime(message.created_at)}</div>
+          </div>
+          {url && (
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-2 shrink-0 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium"
+            >
+              Join
+            </a>
+          )}
+        </div>
       </div>
     )
   }
