@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, Fragment } from 'react'
 import { ChevronDown } from 'lucide-react'
 import MessageRow from './MessageRow'
+import { useTheme } from '../../../hooks/useTheme'
 import { useMessageReactions } from '../../../hooks/useMessageReactions'
 import { useThreadCounts } from '../../../hooks/useThreadCounts'
 import { computeSeenByMessage } from '../../../lib/groupSeenBy'
@@ -54,6 +55,22 @@ export default function SlackMessageList({
   onEdit,
   wallpaperBackground,
 }) {
+  const { dark } = useTheme()
+  // Composite the wallpaper with a theme-matched scrim baked INTO the background
+  // itself: `linear-gradient(scrim, scrim), <wallpaper>`. The scrim layer paints
+  // over the wallpaper but stays a *background* (behind all content), so message
+  // text always renders on top at full contrast — no absolute overlay competing
+  // with the static rows, no z-index fragility. The scrim color follows the
+  // theme so any wallpaper (light preset or uploaded photo) reads as a gentle
+  // ambient tint while text stays legible in both light and dark mode.
+  const wallpaperStyle = useMemo(() => {
+    if (!wallpaperBackground) return undefined
+    const scrim = dark ? 'rgba(17,19,26,0.86)' : 'rgba(255,255,255,0.85)'
+    return {
+      background: `linear-gradient(${scrim}, ${scrim}), ${wallpaperBackground}`,
+      backgroundAttachment: 'local',
+    }
+  }, [wallpaperBackground, dark])
   const { byMessageId, toggle } = useMessageReactions(conversationId)
   const messageIds = useMemo(
     () => messages.filter(m => m.kind !== 'system' && !m.deleted_at).map(m => m.id),
@@ -183,11 +200,8 @@ export default function SlackMessageList({
     return (
       <div
         className="relative flex-1 flex flex-col items-center justify-center gap-1 p-8 text-center"
-        style={wallpaperBackground ? { background: wallpaperBackground } : undefined}
+        style={wallpaperStyle}
       >
-        {wallpaperBackground && (
-          <div className="absolute inset-0 bg-white/78 dark:bg-dark-bg/78 pointer-events-none" aria-hidden="true" />
-        )}
         <div className="relative z-10 flex flex-col items-center gap-1">
         <span className="text-3xl" aria-hidden="true">👋</span>
         <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
@@ -203,16 +217,9 @@ export default function SlackMessageList({
     <div
       ref={scrollRootRef}
       className="relative flex-1 overflow-y-auto"
-      style={wallpaperBackground ? { background: wallpaperBackground, backgroundAttachment: 'local' } : undefined}
+      style={wallpaperStyle}
     >
       <div className="relative min-h-full flex flex-col justify-end py-2">
-      {/* Readability scrim — a semi-opaque theme-bg layer between the wallpaper
-          and the message rows. As an absolute child of this min-h-full track it
-          spans the full scrollable content height, so messages stay legible over
-          an image in both light and dark. Rows render above it (relative z-10). */}
-      {wallpaperBackground && (
-        <div className="absolute inset-0 bg-white/78 dark:bg-dark-bg/78 pointer-events-none" aria-hidden="true" />
-      )}
       {hasMore && (
         <div className="text-center mb-2">
           <button
