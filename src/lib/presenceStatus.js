@@ -77,6 +77,31 @@ export function effectiveStatus(override, autoStatus) {
   return isValid(autoStatus) && autoStatus !== 'auto' ? autoStatus : 'offline'
 }
 
+// Resolve a single effective status from ALL of a user's presence metas
+// (one meta per open tab/connection). Slack-correct rule: a user is "active"
+// if they're active in ANY tab; otherwise "away" if away anywhere; otherwise
+// "offline". This fixes the bug where picking an arbitrary meta (e.g. a hidden
+// background tab, or a stale ghost connection) made an active user show as
+// away/offline to everyone else. Metas with no status field (older clients)
+// count as 'active' (they only tracked while online). Returns the freshest
+// online_at across metas for the display timestamp.
+const STATUS_RANK = { active: 3, away: 2, offline: 1 }
+export function resolvePresenceMetas(metas) {
+  if (!Array.isArray(metas) || metas.length === 0) {
+    return { status: 'offline', onlineAt: null }
+  }
+  let best = 'offline'
+  let onlineAt = null
+  for (const m of metas) {
+    const raw = m && m.status
+    const s = raw === 'away' || raw === 'offline' ? raw : 'active'
+    if ((STATUS_RANK[s] || 0) > (STATUS_RANK[best] || 0)) best = s
+    const at = m && m.online_at
+    if (at && (!onlineAt || at > onlineAt)) onlineAt = at
+  }
+  return { status: best, onlineAt }
+}
+
 // ── Subscription ─────────────────────────────
 const subscribers = new Set()
 

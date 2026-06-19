@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { getStatus, effectiveStatus, subscribe as subscribeStatus } from '../lib/presenceStatus'
+import { getStatus, effectiveStatus, resolvePresenceMetas, subscribe as subscribeStatus } from '../lib/presenceStatus'
 
 // Global presence channel mounted once in AuthProvider. Other users see
 // you online while:
@@ -132,16 +132,16 @@ export function useGlobalPresence(profile) {
           // and panel that calls useAuth(). That's the "task page
           // refreshes when I switch back to the tab" report.
           if (userId === profile.id) continue
-          // Pick the freshest meta for a display timestamp + status. Presence
-          // from *any* tab of this user is enough; if multiple tabs disagree
-          // on status the freshest meta wins (matches the online_at choice).
-          const latest = metas[metas.length - 1]
-          // status defaults to 'active' for older clients that tracked before
-          // the status field existed (they were only tracked while online).
-          const status = latest?.status || 'active'
+          // Aggregate across ALL of this user's tabs/connections: active if
+          // they're active in ANY tab, else away if away anywhere, else
+          // offline (Slack semantics). Picking a single arbitrary meta made an
+          // active user with a hidden background tab — or a stale ghost
+          // connection — show as away/offline to everyone else. Older clients
+          // with no status field count as active.
+          const { status, onlineAt } = resolvePresenceMetas(metas)
           next.set(userId, {
             online: status === 'active',
-            onlineAt: latest?.online_at,
+            onlineAt,
             status,
           })
         }

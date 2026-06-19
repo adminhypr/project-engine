@@ -114,3 +114,40 @@ describe('subscribe', () => {
     expect(good).toHaveBeenCalled()
   })
 })
+
+import { resolvePresenceMetas } from '../presenceStatus'
+
+describe('resolvePresenceMetas', () => {
+  it('returns offline for empty/invalid input', () => {
+    expect(resolvePresenceMetas([])).toEqual({ status: 'offline', onlineAt: null })
+    expect(resolvePresenceMetas(null)).toEqual({ status: 'offline', onlineAt: null })
+  })
+  it('is active if ANY tab is active (active-anywhere wins)', () => {
+    const metas = [
+      { status: 'offline', online_at: '2026-06-19T10:00:00Z' },
+      { status: 'active', online_at: '2026-06-19T09:00:00Z' },
+    ]
+    expect(resolvePresenceMetas(metas).status).toBe('active')
+  })
+  it('picks away over offline when no active tab', () => {
+    expect(resolvePresenceMetas([
+      { status: 'offline', online_at: '2026-06-19T10:00:00Z' },
+      { status: 'away', online_at: '2026-06-19T09:00:00Z' },
+    ]).status).toBe('away')
+  })
+  it('all tabs away/offline → not active (manual away preserved)', () => {
+    expect(resolvePresenceMetas([
+      { status: 'away', online_at: '2026-06-19T10:00:00Z' },
+      { status: 'away', online_at: '2026-06-19T11:00:00Z' },
+    ]).status).toBe('away')
+  })
+  it('treats missing status field as active (older clients)', () => {
+    expect(resolvePresenceMetas([{ online_at: '2026-06-19T10:00:00Z' }]).status).toBe('active')
+  })
+  it('returns the freshest online_at across metas', () => {
+    expect(resolvePresenceMetas([
+      { status: 'away', online_at: '2026-06-19T10:00:00Z' },
+      { status: 'active', online_at: '2026-06-19T12:00:00Z' },
+    ]).onlineAt).toBe('2026-06-19T12:00:00Z')
+  })
+})
