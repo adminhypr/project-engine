@@ -15,36 +15,10 @@ import { SIDEBAR_THEMES } from '../../../lib/chatPrefs'
 // Props: { open, onClose, profileId }
 export default function PreferencesModal({ open, onClose, profileId }) {
   const [prefs, setPref] = useChatPrefs(profileId)
-  const theme = useTheme()
-
-  // Theme delegates to the real theme system. useTheme exposes { dark, toggle }
-  // with persistence in `pe-theme`. We add 'system' support here: choosing
-  // System clears the override and follows prefers-color-scheme; Light/Dark set
-  // it explicitly. We mirror the selection into the prefs store so the panel
-  // shows the right segment.
-  const applyTheme = (next) => {
-    setPref('theme', next)
-    if (next === 'system') {
-      try {
-        localStorage.removeItem('pe-theme')
-      } catch { /* noop */ }
-      const prefersDark = typeof window !== 'undefined'
-        && window.matchMedia('(prefers-color-scheme: dark)').matches
-      // useTheme only flips via toggle(); align it to the system preference.
-      if (prefersDark !== theme.dark) theme.toggle()
-      // toggle() will re-persist pe-theme; clear it again so it stays "system".
-      try {
-        localStorage.removeItem('pe-theme')
-      } catch { /* noop */ }
-    } else {
-      const wantDark = next === 'dark'
-      if (wantDark !== theme.dark) theme.toggle()
-    }
-  }
-
-  // The Theme segment reflects the explicit stored choice if set; otherwise the
-  // live dark/light state. Default pref is 'system'.
-  const themeValue = prefs.theme || 'system'
+  // Theme is owned by useTheme (source of truth): `mode` is 'system'|'light'|
+  // 'dark' persisted under `pe-theme`. 'system' follows prefers-color-scheme
+  // live + on reload; light/dark are explicit. No chatPrefs mirror needed.
+  const { mode: themeValue, setMode: applyTheme } = useTheme()
 
   const handleDesktopNotifications = async (turnOn) => {
     if (!turnOn) {
