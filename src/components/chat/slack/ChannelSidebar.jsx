@@ -66,6 +66,7 @@ export default function ChannelSidebar({
   createOrOpen,
   selectedId,
   onSelectConversation,
+  onCloseActive,
   onCompose,
   onCreateChannel,
   onBackToApp,
@@ -111,9 +112,15 @@ export default function ChannelSidebar({
   )
 
   // Hidden / closed DMs (localStorage, per profile, no DB). A hidden DM is
-  // filtered out of the list UNLESS it has unread (a new message arrived) or
-  // it's the currently-open conversation (it was reopened) — in which case it
-  // reappears AND is un-hidden so it stays visible going forward.
+  // filtered out of the list UNLESS it has unread (a new message arrived) — in
+  // which case it reappears AND is un-hidden so it stays visible going forward.
+  //
+  // Being merely "currently selected" no longer keeps a DM visible: that's what
+  // let clicking × on the OPEN DM do nothing (it stayed selected → counted as
+  // reappeared → got un-hidden immediately). Closing the open DM now also
+  // deselects it (onCloseActive → navigate('/chat')) so the active highlight
+  // moves away and the row filters out. An explicit user reopen (clicking a
+  // still-visible hidden-but-unread row) un-hides it in selectDm.
   const [hiddenVersion, setHiddenVersion] = useState(0)
   const hiddenSet = useMemo(
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -125,20 +132,25 @@ export default function ChannelSidebar({
     if (!convId || !profileId) return
     hideDm(profileId, convId)
     setHiddenVersion(v => v + 1)
-  }, [profileId])
+    // If we just closed the conversation that's currently open, deselect it so
+    // it's no longer the active row — otherwise the active highlight would point
+    // at a row that's about to vanish, and (historically) it counted as
+    // "reopened". Navigating to bare /chat clears selectedId.
+    if (convId === selectedId) onCloseActive?.()
+  }, [profileId, selectedId, onCloseActive])
 
   const visibleDms = useMemo(() => {
     return directMessages.filter((dm) => {
       const convId = dm.conversationId
       if (!convId) return true // conversation-less search candidates are never hidden
       if (!hiddenSet.has(convId)) return true
-      const reappear = (dm.conversation?.unread || 0) > 0 || convId === selectedId
-      return reappear
+      // Hidden DMs reappear ONLY on genuine unread (a new message arrived).
+      return (dm.conversation?.unread || 0) > 0
     })
-  }, [directMessages, hiddenSet, selectedId])
+  }, [directMessages, hiddenSet])
 
-  // Un-hide any DM that has reappeared (unread/reopened) so it stays visible
-  // going forward — keeps the localStorage set in sync with what's shown.
+  // Un-hide any DM that has reappeared via unread so it stays visible going
+  // forward — keeps the localStorage set in sync with what's shown.
   const reappearedKey = useMemo(
     () => visibleDms
       .filter(dm => dm.conversationId && hiddenSet.has(dm.conversationId))
@@ -162,12 +174,18 @@ export default function ChannelSidebar({
   // select the returned id — mirrors ChatPage.openContact / ContactRow.onClick.
   const selectDm = useCallback(async (dm) => {
     if (dm.conversationId) {
+      // Explicit reopen: un-hide so it stays visible going forward (this is the
+      // only "reopen" signal now — being selected alone no longer un-hides).
+      if (profileId && hiddenSet.has(dm.conversationId)) {
+        unhideDm(profileId, dm.conversationId)
+        setHiddenVersion(v => v + 1)
+      }
       onSelectConversation?.(dm.conversationId)
       return
     }
     const convId = await createOrOpen?.(dm.profileId)
     if (convId) onSelectConversation?.(convId)
-  }, [createOrOpen, onSelectConversation])
+  }, [createOrOpen, onSelectConversation, profileId, hiddenSet])
 
   // Resizable width (desktop only). The inline width is applied via md:[width]
   // so mobile keeps its full-width single-pane layout (ChatPage wraps the aside

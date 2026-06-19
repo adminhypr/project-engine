@@ -111,7 +111,7 @@ export default function SidebarRow({
           aria-label={`Close ${label || 'conversation'}`}
           title="Close"
           onClick={(e) => { e.stopPropagation(); onHide() }}
-          className="ml-auto shrink-0 grid place-items-center w-5 h-5 rounded text-white/50 hover:text-white hover:bg-white/10 opacity-0 group-hover/row:opacity-100 focus:opacity-100 focus:outline-none"
+          className="ml-auto mr-1 shrink-0 grid place-items-center w-5 h-5 rounded text-white/50 hover:text-white hover:bg-white/10 opacity-0 group-hover/row:opacity-100 focus:opacity-100 focus:outline-none"
         >
           <X className="w-3.5 h-3.5" />
         </button>

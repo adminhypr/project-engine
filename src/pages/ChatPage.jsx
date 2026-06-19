@@ -103,6 +103,11 @@ export default function ChatPage() {
 
   const onBackToApp = useCallback(() => navigate('/my-tasks'), [navigate])
 
+  // Deselect the open conversation (used when the sidebar closes the DM that's
+  // currently active — navigating to bare /chat clears selectedId so the row
+  // can filter out of the list).
+  const onCloseActive = useCallback(() => navigate('/chat'), [navigate])
+
   // Workspace rail view: 'home' (full sidebar) or 'dms' (Direct messages only).
   const [railActive, setRailActive] = useState('home')
 
@@ -276,6 +281,7 @@ export default function ChatPage() {
           createOrOpen={createOrOpen}
           selectedId={conversationId}
           onSelectConversation={onSelectConversation}
+          onCloseActive={onCloseActive}
           onCompose={isExternal ? undefined : openCreateGroup}
           onCreateChannel={isExternal ? undefined : openCreateGroup}
           onBackToApp={onBackToApp}
