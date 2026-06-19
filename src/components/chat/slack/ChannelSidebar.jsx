@@ -4,6 +4,7 @@ import { useAuth } from '../../../hooks/useAuth'
 import { useChatPrefs } from '../../../hooks/useChatPrefs'
 import { buildSidebarSections } from '../../../lib/slackSidebar'
 import { readHiddenDms, hideDm, unhideDm } from '../../../lib/hiddenDms'
+import { readStarred, starConversation, unstarConversation } from '../../../lib/starredConversations'
 import { groupDisplayName } from '../../../lib/groupConversations'
 import { Spinner } from '../../ui/index'
 import WorkspaceHeader from './WorkspaceHeader'
@@ -164,6 +165,27 @@ export default function ChannelSidebar({
     setHiddenVersion(v => v + 1)
   }, [reappearedKey, profileId])
 
+  // Starred / favorite conversations (localStorage, per profile, no DB). Mirrors
+  // the hiddenSet/hiddenVersion pattern. Any conversation (channel, DM, or task)
+  // whose id is in starredSet is lifted into a dedicated "Starred" section at the
+  // top of the sidebar and removed from its normal section (Slack behavior).
+  const [starredVersion, setStarredVersion] = useState(0)
+  const starredSet = useMemo(
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    () => new Set(readStarred(profileId)),
+    [profileId, starredVersion],
+  )
+
+  const onToggleStar = useCallback((convId) => {
+    if (!convId || !profileId) return
+    if (readStarred(profileId).includes(convId)) {
+      unstarConversation(profileId, convId)
+    } else {
+      starConversation(profileId, convId)
+    }
+    setStarredVersion(v => v + 1)
+  }, [profileId])
+
   // Open a channel/group/campfire/task row — always by conversation id.
   const selectById = useCallback((convId) => {
     if (convId) onSelectConversation?.(convId)
@@ -186,6 +208,86 @@ export default function ChannelSidebar({
     const convId = await createOrOpen?.(dm.profileId)
     if (convId) onSelectConversation?.(convId)
   }, [createOrOpen, onSelectConversation, profileId, hiddenSet])
+
+  // Row renderers shared between the normal sections and the Starred section, so
+  // a starred channel/DM/task renders identically wherever it appears. Each
+  // wires the star toggle (DM rows also keep the hide ×).
+  const searching = (query || '').trim().length > 0
+
+  const renderChannelRow = useCallback((c) => (
+    <SidebarRow
+      key={c.id}
+      kind="channel"
+      label={groupDisplayName(c)}
+      unread={(c.unread || 0) > 0}
+      active={c.id === selectedId}
+      onClick={() => selectById(c.id)}
+      starred={starredSet.has(c.id)}
+      onToggleStar={() => onToggleStar(c.id)}
+    />
+  ), [selectedId, selectById, starredSet, onToggleStar])
+
+  const renderDmRow = useCallback((dm) => (
+    <SidebarRow
+      key={dm.conversationId || dm.profileId}
+      kind="dm"
+      label={dm.name || 'Unknown'}
+      profile={dm.profile}
+      online={!!presence.get(dm.profileId)?.online}
+      status={presence.get(dm.profileId)?.status}
+      unread={(dm.conversation?.unread || 0) > 0}
+      active={!!dm.conversationId && dm.conversationId === selectedId}
+      onClick={() => selectDm(dm)}
+      onHide={dm.conversationId ? () => onHideDm(dm.conversationId) : undefined}
+      starred={!!dm.conversationId && starredSet.has(dm.conversationId)}
+      onToggleStar={dm.conversationId ? () => onToggleStar(dm.conversationId) : undefined}
+    />
+  ), [presence, selectedId, selectDm, onHideDm, starredSet, onToggleStar])
+
+  const renderTaskRow = useCallback((t) => (
+    <SidebarRow
+      key={t.id}
+      kind="task"
+      label={t.title || 'Task'}
+      unread={(t.unread || 0) > 0}
+      active={t.id === selectedId}
+      onClick={() => selectById(t.id)}
+      starred={starredSet.has(t.id)}
+      onToggleStar={() => onToggleStar(t.id)}
+    />
+  ), [selectedId, selectById, starredSet, onToggleStar])
+
+  // Split each list into starred vs. unstarred. Starred items are lifted into the
+  // Starred section and removed from their normal section (Slack). When searching
+  // we skip the Starred section entirely and show the normal filtered results, so
+  // search stays predictable. (DMs use the hidden-filtered `visibleDms`.)
+  const starredChannels = useMemo(
+    () => channels.filter(c => starredSet.has(c.id)),
+    [channels, starredSet],
+  )
+  const unstarredChannels = useMemo(
+    () => channels.filter(c => !starredSet.has(c.id)),
+    [channels, starredSet],
+  )
+  const starredDms = useMemo(
+    () => visibleDms.filter(dm => dm.conversationId && starredSet.has(dm.conversationId)),
+    [visibleDms, starredSet],
+  )
+  const unstarredDms = useMemo(
+    () => visibleDms.filter(dm => !(dm.conversationId && starredSet.has(dm.conversationId))),
+    [visibleDms, starredSet],
+  )
+  const starredTasks = useMemo(
+    () => taskChats.filter(t => starredSet.has(t.id)),
+    [taskChats, starredSet],
+  )
+  const unstarredTasks = useMemo(
+    () => taskChats.filter(t => !starredSet.has(t.id)),
+    [taskChats, starredSet],
+  )
+  const hasStarred =
+    !searching &&
+    (starredChannels.length > 0 || starredDms.length > 0 || starredTasks.length > 0)
 
   // Resizable width (desktop only). The inline width is applied via md:[width]
   // so mobile keeps its full-width single-pane layout (ChatPage wraps the aside
@@ -255,62 +357,46 @@ export default function ChannelSidebar({
           <div className="h-full flex items-center justify-center"><Spinner /></div>
         ) : (
           <>
+            {/* Starred / favorites — only rendered when something is starred and
+                not searching. Channels, DMs, and task chats are all eligible and
+                render with their normal row (icon, presence, hide ×). */}
+            {hasStarred && (
+              <SidebarSection title="Starred">
+                {dmsOnly
+                  ? starredDms.map(renderDmRow)
+                  : [
+                      ...starredChannels.map(renderChannelRow),
+                      ...starredDms.map(renderDmRow),
+                      ...starredTasks.map(renderTaskRow),
+                    ]}
+              </SidebarSection>
+            )}
+
             {!dmsOnly && (
               <SidebarSection
                 title="Channels"
                 onAdd={onCreateChannel}
                 onFilter={focusSearch}
               >
-                {channels.length === 0 ? (
+                {(hasStarred ? unstarredChannels : channels).length === 0 ? (
                   <p className="px-4 py-1 text-[13px] text-white/30">No channels</p>
                 ) : (
-                  channels.map((c) => (
-                    <SidebarRow
-                      key={c.id}
-                      kind="channel"
-                      label={groupDisplayName(c)}
-                      unread={(c.unread || 0) > 0}
-                      active={c.id === selectedId}
-                      onClick={() => selectById(c.id)}
-                    />
-                  ))
+                  (hasStarred ? unstarredChannels : channels).map(renderChannelRow)
                 )}
               </SidebarSection>
             )}
 
             <SidebarSection title="Direct messages" onAdd={focusSearch}>
-              {visibleDms.length === 0 ? (
+              {(hasStarred ? unstarredDms : visibleDms).length === 0 ? (
                 <p className="px-4 py-1 text-[13px] text-white/30">No direct messages</p>
               ) : (
-                visibleDms.map((dm) => (
-                  <SidebarRow
-                    key={dm.conversationId || dm.profileId}
-                    kind="dm"
-                    label={dm.name || 'Unknown'}
-                    profile={dm.profile}
-                    online={!!presence.get(dm.profileId)?.online}
-                    status={presence.get(dm.profileId)?.status}
-                    unread={(dm.conversation?.unread || 0) > 0}
-                    active={!!dm.conversationId && dm.conversationId === selectedId}
-                    onClick={() => selectDm(dm)}
-                    onHide={dm.conversationId ? () => onHideDm(dm.conversationId) : undefined}
-                  />
-                ))
+                (hasStarred ? unstarredDms : visibleDms).map(renderDmRow)
               )}
             </SidebarSection>
 
-            {!dmsOnly && taskChats.length > 0 && (
+            {!dmsOnly && (hasStarred ? unstarredTasks : taskChats).length > 0 && (
               <SidebarSection title="Task chats">
-                {taskChats.map((t) => (
-                  <SidebarRow
-                    key={t.id}
-                    kind="task"
-                    label={t.title || 'Task'}
-                    unread={(t.unread || 0) > 0}
-                    active={t.id === selectedId}
-                    onClick={() => selectById(t.id)}
-                  />
-                ))}
+                {(hasStarred ? unstarredTasks : taskChats).map(renderTaskRow)}
               </SidebarSection>
             )}
           </>

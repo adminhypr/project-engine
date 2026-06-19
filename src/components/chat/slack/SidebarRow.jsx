@@ -1,4 +1,4 @@
-import { X } from 'lucide-react'
+import { X, Star } from 'lucide-react'
 import PresenceDot from '../PresenceDot'
 
 // A single Slack-style sidebar row. Pure presentation.
@@ -19,6 +19,13 @@ import PresenceDot from '../PresenceDot'
 //   onHide       — optional; when provided, a hover-only "×" appears on the
 //                  right edge that calls onHide() (used to close a DM from the
 //                  sidebar). Click is stopPropagation'd so it doesn't open the row.
+//   starred      — boolean; whether this row is favorited (filled star icon).
+//   onToggleStar — optional; when provided, a hover-only star button appears on
+//                  the right edge (left of the × if both are present) that calls
+//                  onToggleStar(). Filled when `starred`, outline otherwise.
+//                  Click is stopPropagation'd so it doesn't open the row. When
+//                  starred, the star stays visible (not hover-only) so the user
+//                  can tell which rows are favorited at a glance.
 
 // Small DM avatar (~20px) with a presence dot overlaid on the bottom-right.
 // Mirrors the message-avatar look (rounded-lg, object-cover, brand initials
@@ -61,6 +68,8 @@ export default function SidebarRow({
   active = false,
   onClick,
   onHide,
+  starred = false,
+  onToggleStar,
 }) {
   const isDm = kind === 'dm'
   const showAvatar = isDm && (profile?.avatar_url || profile?.full_name || profile?.email)
@@ -99,23 +108,50 @@ export default function SidebarRow({
         {label}
       </span>
 
-      {mentionCount > 0 && (
-        <span className="ml-auto min-w-[18px] h-[18px] px-1.5 rounded-full bg-slack-mention text-white text-[12px] font-bold grid place-items-center">
-          {mentionCount > 99 ? '99+' : mentionCount}
-        </span>
-      )}
+      {/* Trailing slot: mention badge + hover action buttons (star, then ×).
+          All share the right side via ml-auto on the wrapper so they sit side
+          by side without overlap. The mention badge hides on hover when there
+          are actions, so the buttons take the space (Slack parity). */}
+      <span className="ml-auto shrink-0 flex items-center gap-0.5">
+        {mentionCount > 0 && (
+          <span
+            className={`min-w-[18px] h-[18px] px-1.5 rounded-full bg-slack-mention text-white text-[12px] font-bold grid place-items-center ${
+              (onToggleStar || onHide) ? 'group-hover/row:hidden' : ''
+            }`}
+          >
+            {mentionCount > 99 ? '99+' : mentionCount}
+          </span>
+        )}
 
-      {onHide && (
-        <button
-          type="button"
-          aria-label={`Close ${label || 'conversation'}`}
-          title="Close"
-          onClick={(e) => { e.stopPropagation(); onHide() }}
-          className="ml-auto mr-1 shrink-0 grid place-items-center w-5 h-5 rounded text-white/50 hover:text-white hover:bg-white/10 opacity-0 group-hover/row:opacity-100 focus:opacity-100 focus:outline-none"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
-      )}
+        {onToggleStar && (
+          <button
+            type="button"
+            aria-label={starred ? `Unstar ${label || 'conversation'}` : `Star ${label || 'conversation'}`}
+            aria-pressed={starred}
+            title={starred ? 'Unstar' : 'Star'}
+            onClick={(e) => { e.stopPropagation(); onToggleStar() }}
+            className={`shrink-0 grid place-items-center w-5 h-5 rounded hover:text-white hover:bg-white/10 focus:opacity-100 focus:outline-none ${
+              starred
+                ? 'text-yellow-400 opacity-100'
+                : 'text-white/50 opacity-0 group-hover/row:opacity-100'
+            }`}
+          >
+            <Star className={`w-3.5 h-3.5 ${starred ? 'fill-current' : ''}`} />
+          </button>
+        )}
+
+        {onHide && (
+          <button
+            type="button"
+            aria-label={`Close ${label || 'conversation'}`}
+            title="Close"
+            onClick={(e) => { e.stopPropagation(); onHide() }}
+            className="mr-1 shrink-0 grid place-items-center w-5 h-5 rounded text-white/50 hover:text-white hover:bg-white/10 opacity-0 group-hover/row:opacity-100 focus:opacity-100 focus:outline-none"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </span>
     </div>
   )
 }
