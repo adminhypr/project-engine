@@ -1,6 +1,5 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 import { Search } from 'lucide-react'
-import { useContactList } from '../../../hooks/useContactList'
 import { buildSidebarSections } from '../../../lib/slackSidebar'
 import { groupDisplayName } from '../../../lib/groupConversations'
 import { Spinner } from '../../ui/index'
@@ -9,13 +8,20 @@ import SidebarSection from './SidebarSection'
 import SidebarRow from './SidebarRow'
 
 // 260px dark channel sidebar for the Slack /chat takeover (design Task 1.5).
-// Consumes useContactList + buildSidebarSections and renders search +
-// Channels / Direct messages / Task chats sections. Selecting a row calls
-// onSelectConversation(conversationId). For DM rows that have no existing
-// conversation yet, it resolves one via createOrOpen(profileId) first — exactly
-// mirroring ChatPage.jsx's openContact → openConversation flow.
+// PRESENTATION-ONLY: the single useContactList lives in ChatPage (so the hook —
+// and its underlying useConversations subscription / Supabase channel — runs
+// exactly once on /chat). This component receives the contact-list result as
+// props and renders search + Channels / Direct messages / Task chats sections.
+// Selecting a row calls onSelectConversation(conversationId). For DM rows that
+// have no existing conversation yet, it resolves one via createOrOpen(profileId)
+// first — exactly mirroring ChatPage's openContact → openConversation flow.
 //
-// Props:
+// Props (data lifted from ChatPage's single useContactList):
+//   query                    — controlled search value (lives in ChatPage, fed to useContactList)
+//   onQueryChange(value)     — search input change handler
+//   sections, groups, campfires, tasks, presence, conversations, loading
+//                            — the useContactList result (already query-filtered)
+//   createOrOpen(profileId)  — resolve/create a DM conversation, returns its id
 //   selectedId               — conversation id of the open conversation (active highlight)
 //   onSelectConversation(id) — called with a conversation id to open
 //   onCompose                — compose pencil (WorkspaceHeader)
@@ -23,6 +29,16 @@ import SidebarRow from './SidebarRow'
 //   onInvite, onPreferences  — optional WorkspaceHeader menu actions
 
 export default function ChannelSidebar({
+  query,
+  onQueryChange,
+  sections = { recent: [], teammates: [], company: [] },
+  groups = [],
+  campfires = [],
+  tasks = [],
+  presence = new Map(),
+  conversations = [],
+  loading = false,
+  createOrOpen,
   selectedId,
   onSelectConversation,
   onCompose,
@@ -30,11 +46,6 @@ export default function ChannelSidebar({
   onInvite,
   onPreferences,
 }) {
-  const [query, setQuery] = useState('')
-  const {
-    sections, groups, campfires, tasks, presence, createOrOpen, loading, conversations,
-  } = useContactList(query)
-
   const { channels, directMessages, taskChats } = useMemo(
     () => buildSidebarSections({ sections, groups, campfires, tasks }),
     [sections, groups, campfires, tasks],
@@ -73,7 +84,7 @@ export default function ChannelSidebar({
           <input
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => onQueryChange?.(e.target.value)}
             placeholder="Search conversations & people"
             className="w-full h-8 pl-8 pr-3 rounded-md bg-white/10 text-white text-[14px] placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-white/30"
           />

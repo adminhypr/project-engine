@@ -4,6 +4,7 @@ import { MessageCircle, ArrowLeft } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useContactList } from '../hooks/useContactList'
 import ConversationPane from '../components/chat/ConversationPane'
+import CreateGroupModal from '../components/chat/CreateGroupModal'
 import WorkspaceRail from '../components/chat/slack/WorkspaceRail'
 import ChannelSidebar from '../components/chat/slack/ChannelSidebar'
 import { usePageTitle } from '../hooks/usePageTitle'
@@ -19,16 +20,21 @@ import { readLastOpened, writeLastOpened, resolveActiveConversation } from '../l
 // docs/plans/2026-06-19-slack-chat-redesign.md (Task 1.6).
 export default function ChatPage() {
   usePageTitle('Chat')
-  const { profile } = useAuth()
+  const { profile, isExternal } = useAuth()
   const navigate = useNavigate()
   const { conversationId } = useParams()
 
-  // ChannelSidebar consumes useContactList internally (with its own search
-  // box). We still need a thin instance here for active-conversation
-  // resolution, last-opened restore, the refetch guard, and presence/markRead.
+  // SINGLE useContactList instance for the whole /chat takeover. The search
+  // query lives here (lifted from ChannelSidebar) and is fed to the hook so its
+  // existing internal filtering semantics are preserved exactly. ChannelSidebar
+  // is now presentation-only and receives this data + callbacks as props — so
+  // useContactList (and its useConversations subscription / Supabase channel)
+  // runs exactly once on /chat, instead of being double-subscribed.
+  const [query, setQuery] = useState('')
   const {
-    conversations, markRead, refetch, loading, presence,
-  } = useContactList('')
+    sections, groups, campfires, tasks, conversations, presence,
+    createOrOpen, createGroup, markRead, refetch, loading,
+  } = useContactList(query)
 
   const activeConv = useMemo(
     () => resolveActiveConversation(conversations, conversationId),
@@ -53,6 +59,22 @@ export default function ChatPage() {
   // Workspace rail tabs aren't fully wired yet (Home is the default view).
   // Track selection locally so the rail highlights without breaking anything.
   const [railActive, setRailActive] = useState('home')
+
+  // Create-group modal (restored from the pre-redesign ChatPage). Externals
+  // can't create groups, so the affordance is gated for them.
+  const [createGroupOpen, setCreateGroupOpen] = useState(false)
+  const openCreateGroup = useCallback(() => {
+    if (isExternal) return
+    setCreateGroupOpen(true)
+  }, [isExternal])
+
+  // The rail '+' create button and the WorkspaceHeader compose pencil both
+  // open the create-group flow. railActive 'create' is transient — don't
+  // persist it as a selected tab.
+  const onRailSelect = useCallback((id) => {
+    if (id === 'create') { openCreateGroup(); return }
+    setRailActive(id)
+  }, [openCreateGroup])
 
   // Persist the last-open conversation so a bare /chat reopens it next time.
   useEffect(() => {
@@ -100,24 +122,39 @@ export default function ChatPage() {
   const selfOnline = profile?.id ? !!presence?.get(profile.id)?.online : false
 
   // Mobile single-pane: when a conversation is open, show the message area and
-  // hide the sidebar; otherwise show the sidebar. Desktop shows both.
+  // hide the rail + sidebar; otherwise show rail + sidebar. Desktop shows all
+  // three. The rail mirrors the sidebar so they appear/disappear together.
+  const railVisibility = conversationId ? 'hidden md:flex' : 'flex'
   const sidebarVisibility = conversationId ? 'hidden md:flex' : 'flex'
   const mainVisibility = conversationId ? 'flex' : 'hidden md:flex'
 
   return (
     <div className="slack-chat h-screen w-screen flex overflow-hidden bg-slack-sidebar">
-      <WorkspaceRail
-        active={railActive}
-        onSelect={setRailActive}
-        profile={profile}
-        presenceOnline={selfOnline}
-        onBackToApp={onBackToApp}
-      />
+      <div className={`${railVisibility} shrink-0`}>
+        <WorkspaceRail
+          active={railActive}
+          onSelect={onRailSelect}
+          profile={profile}
+          presenceOnline={selfOnline}
+          onBackToApp={onBackToApp}
+        />
+      </div>
 
       <div className={`${sidebarVisibility} w-full md:w-auto shrink-0`}>
         <ChannelSidebar
+          query={query}
+          onQueryChange={setQuery}
+          sections={sections}
+          groups={groups}
+          campfires={campfires}
+          tasks={tasks}
+          presence={presence}
+          conversations={conversations}
+          loading={loading}
+          createOrOpen={createOrOpen}
           selectedId={conversationId}
           onSelectConversation={onSelectConversation}
+          onCompose={isExternal ? undefined : openCreateGroup}
           onBackToApp={onBackToApp}
         />
       </div>
@@ -159,6 +196,16 @@ export default function ChatPage() {
           />
         )}
       </div>
+
+      <CreateGroupModal
+        isOpen={createGroupOpen}
+        onClose={() => setCreateGroupOpen(false)}
+        createGroup={createGroup}
+        onCreated={(convId) => {
+          setCreateGroupOpen(false)
+          openConversation(convId)
+        }}
+      />
     </div>
   )
 }
