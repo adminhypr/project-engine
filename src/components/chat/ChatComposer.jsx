@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Send, X, CornerUpLeft, Loader2, Paperclip, FileText } from 'lucide-react'
+import {
+  Send, X, CornerUpLeft, Loader2, Paperclip, FileText,
+  Bold, Italic, Strikethrough, Link as LinkIcon, ListOrdered, List,
+  Quote, Code, SquareCode, Type,
+} from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { showToast } from '../ui'
 import ImageAttachments from './ImageAttachments'
 import { useReplyContext } from './ReplyContext'
+import { wrapSelection, prefixLines } from '../../lib/composerFormat'
 import {
   isInlineImage,
   attachmentStoragePath,
@@ -62,6 +67,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
   const [pickedMentions, setPickedMentions] = useState([])
   const [mentionQuery, setMentionQuery] = useState(null) // { query, startIndex } | null
   const [mentionIdx, setMentionIdx] = useState(0)
+  const [showToolbar, setShowToolbar] = useState(false)
   const { target: replyTarget, clearReply, requestReply } = useReplyContext()
   const textareaRef = useRef(null)
   // Draft restore guard — we only hydrate once per conversation so in-flight
@@ -152,6 +158,57 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
       if (!textareaRef.current) return
       textareaRef.current.focus()
       textareaRef.current.setSelectionRange(newCursorPosition, newCursorPosition)
+    })
+  }
+
+  // Apply a formatting transform to the current textarea selection. `fn`
+  // receives (value, selStart, selEnd) and returns { text, selStart, selEnd }.
+  // We write the new value back through the existing setValue and restore the
+  // caret/selection after React flushes the controlled update.
+  function applyFormat(fn) {
+    const el = textareaRef.current
+    if (!el) return
+    const start = el.selectionStart ?? value.length
+    const end = el.selectionEnd ?? value.length
+    const r = fn(value, start, end)
+    if (!r) return
+    const next = r.text.slice(0, MAX_LEN)
+    setValue(next)
+    requestAnimationFrame(() => {
+      const node = textareaRef.current
+      if (!node) return
+      node.focus()
+      node.setSelectionRange(r.selStart, r.selEnd)
+    })
+  }
+
+  // Inline marker wrappers (bold/italic/strike/code).
+  const wrapWith = marker => () => applyFormat((v, s, e) => wrapSelection(v, s, e, marker))
+  // Per-line prefixers (lists/blockquote).
+  const prefixWith = prefix => () => applyFormat((v, s, e) => prefixLines(v, s, e, prefix))
+
+  // Link: insert [selection](<placeholder>) and drop the caret inside the
+  // empty parens so the user can paste/type the URL immediately.
+  function applyLink() {
+    applyFormat((v, s, e) => {
+      const sel = v.slice(s, e)
+      const inserted = `[${sel}]()`
+      const out = v.slice(0, s) + inserted + v.slice(e)
+      const caret = s + inserted.length - 1 // inside the ()
+      return { text: out, selStart: caret, selEnd: caret }
+    })
+  }
+
+  // Code block: wrap the selection in triple-backtick fences on their own
+  // lines. Place the selection back over the original content between fences.
+  function applyCodeBlock() {
+    applyFormat((v, s, e) => {
+      const sel = v.slice(s, e)
+      const opening = '```\n'
+      const closing = '\n```'
+      const out = v.slice(0, s) + opening + sel + closing + v.slice(e)
+      const selStart = s + opening.length
+      return { text: out, selStart, selEnd: selStart + sel.length }
     })
   }
 
@@ -390,6 +447,22 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
           ))}
         </div>
       )}
+      {showToolbar && (
+        <div className="flex items-center gap-0.5 px-2 pt-2" role="toolbar" aria-label="Text formatting">
+          <FmtBtn icon={Bold} label="Bold" onClick={wrapWith('**')} />
+          <FmtBtn icon={Italic} label="Italic" onClick={wrapWith('_')} />
+          <FmtBtn icon={Strikethrough} label="Strikethrough" onClick={wrapWith('~~')} />
+          <FmtDivider />
+          <FmtBtn icon={LinkIcon} label="Link" onClick={applyLink} />
+          <FmtDivider />
+          <FmtBtn icon={ListOrdered} label="Ordered list" onClick={prefixWith(i => `${i + 1}. `)} />
+          <FmtBtn icon={List} label="Bulleted list" onClick={prefixWith('- ')} />
+          <FmtBtn icon={Quote} label="Blockquote" onClick={prefixWith('> ')} />
+          <FmtDivider />
+          <FmtBtn icon={Code} label="Code" onClick={wrapWith('`')} />
+          <FmtBtn icon={SquareCode} label="Code block" onClick={applyCodeBlock} />
+        </div>
+      )}
       <div
         onPointerDown={startResize}
         onDoubleClick={() => setTextareaHeight(DEFAULT_H)}
@@ -420,6 +493,16 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
         >
           <Paperclip className="w-4 h-4" />
         </button>
+        <button
+          type="button"
+          onClick={() => setShowToolbar(v => !v)}
+          aria-label="Formatting"
+          aria-pressed={showToolbar}
+          title="Show formatting toolbar"
+          className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center hover:bg-slate-100 dark:hover:bg-dark-hover ${showToolbar ? 'text-brand-600 dark:text-brand-400 bg-slate-100 dark:bg-dark-hover' : 'text-slate-400 hover:text-brand-600 dark:hover:text-brand-400'}`}
+        >
+          <Type className="w-4 h-4" />
+        </button>
         <textarea
           ref={textareaRef}
           value={value}
@@ -446,4 +529,25 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
       </div>
     </div>
   )
+}
+
+function FmtBtn({ icon: Icon, label, onClick }) {
+  return (
+    <button
+      type="button"
+      // Keep the textarea selection alive: prevent the button from stealing
+      // focus before the click handler reads selectionStart/selectionEnd.
+      onMouseDown={e => e.preventDefault()}
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="w-7 h-7 rounded flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-hover"
+    >
+      <Icon className="w-4 h-4" />
+    </button>
+  )
+}
+
+function FmtDivider() {
+  return <span className="mx-1 w-px h-4 bg-slate-200 dark:bg-dark-border" aria-hidden="true" />
 }
