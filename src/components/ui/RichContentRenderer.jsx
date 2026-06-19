@@ -7,13 +7,7 @@ import parse from 'html-react-parser'
 import DOMPurify from 'dompurify'
 import { isHtmlContent } from '../../lib/contentFormat'
 import { INLINE_MD_RE_SOURCE, INLINE_MD_FLAGS, normalizeUrlMatch, parseBlocks } from '../../lib/linkify'
-import { formatFileSize } from '../../lib/chatAttachments'
-
-// Attachment descriptors come in two historical shapes: card/chat use
-// `{ storage_path, file_name, size }`; older callers used `{ path, name }`.
-// Normalize so the renderer handles both.
-const attPath = a => a?.storage_path || a?.path || ''
-const attName = a => a?.file_name || a?.name || 'file'
+import { FilePreviewList } from '../chat/FilePreview'
 
 function renderInlineMarkdown(text, keyBase) {
   const nodes = []
@@ -178,40 +172,6 @@ function ImageModal({ src, alt, onClose }) {
   )
 }
 
-// Forced-download chips for non-image attachments. The signed URLs are
-// already minted with Content-Disposition: attachment by the caller, so
-// these are plain anchors. `download` attribute is a belt-and-suspenders
-// hint for same-origin cases.
-function AttachmentChips({ attachments, signedUrls }) {
-  if (!attachments || attachments.length === 0) return null
-  return (
-    <div className="flex flex-wrap gap-2 mt-2">
-      {attachments.map((a, i) => {
-        const path = attPath(a)
-        const name = attName(a)
-        const url = signedUrls[path]
-        return (
-          <a
-            key={path + i}
-            href={url || '#'}
-            target="_blank"
-            rel="noreferrer"
-            download={name}
-            className="flex items-center gap-2 text-xs px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-dark-bg/50 border border-slate-200 dark:border-dark-border hover:bg-slate-100 dark:hover:bg-dark-hover transition-colors"
-            title={`Download ${name}`}
-          >
-            <span className="text-slate-500 dark:text-slate-400">📎</span>
-            <span className="text-slate-700 dark:text-slate-300 truncate max-w-[160px]">{name}</span>
-            {a.size != null && (
-              <span className="text-slate-400 shrink-0">({formatFileSize(a.size)})</span>
-            )}
-          </a>
-        )
-      })}
-    </div>
-  )
-}
-
 const PURIFY_CONFIG = {
   ALLOWED_TAGS: ['p','strong','em','u','s','a','ul','ol','li','blockquote','h1','h2','h3','h4','h5','h6','br','span','img'],
   ALLOWED_ATTR: ['href','target','rel','class','data-type','data-id','data-label','src','alt','data-file-id','data-file-name','data-mime','data-storage-path'],
@@ -219,7 +179,6 @@ const PURIFY_CONFIG = {
 
 export default function RichContentRenderer({ content, mentions = [], inlineImages = [], attachments = [], attachmentBucket = 'hub-files', imagesBucket = 'hub-files' }) {
   const [signedUrls, setSignedUrls] = useState({})
-  const [attSignedUrls, setAttSignedUrls] = useState({})
   const [modalImage, setModalImage] = useState(null)
 
   const handleCloseModal = useCallback(() => setModalImage(null), [])
@@ -253,30 +212,6 @@ export default function RichContentRenderer({ content, mentions = [], inlineImag
     signAll()
     return () => { cancelled = true }
   }, [inlineImages, imagesBucket])
-
-  useEffect(() => {
-    if (attachments.length === 0) return
-    let cancelled = false
-    async function signAll() {
-      const urls = {}
-      for (const a of attachments) {
-        const path = attPath(a)
-        if (!path) continue
-        // Forced download (Content-Disposition: attachment) so a hostile
-        // .html/.svg/.js attachment downloads instead of executing — the
-        // chat bucket accepts any MIME type, so this render-time guard is
-        // the XSS control. Inline images use a plain signed URL (raster
-        // only, safe to render); see chatAttachments.isInlineImage.
-        const { data } = await supabase.storage
-          .from(attachmentBucket)
-          .createSignedUrl(path, 3600, { download: attName(a) || true })
-        if (data?.signedUrl) urls[path] = data.signedUrl
-      }
-      if (!cancelled) setAttSignedUrls(urls)
-    }
-    signAll()
-    return () => { cancelled = true }
-  }, [attachments, attachmentBucket])
 
   const blockNodes = useMemo(
     () => renderBlocks(content || '', mentions),
@@ -354,7 +289,11 @@ export default function RichContentRenderer({ content, mentions = [], inlineImag
     return (
       <div className="rich-html prose prose-sm dark:prose-invert max-w-none">
         {tree}
-        <AttachmentChips attachments={attachments} signedUrls={attSignedUrls} />
+        <FilePreviewList
+          attachments={attachments}
+          bucket={attachmentBucket}
+          onZoom={setModalImage}
+        />
         {modalImage !== null && (
           <ImageModal src={modalImage.src} alt={modalImage.alt} onClose={handleCloseModal} />
         )}
@@ -410,7 +349,11 @@ export default function RichContentRenderer({ content, mentions = [], inlineImag
         </div>
       ) : null}
 
-      <AttachmentChips attachments={attachments} signedUrls={attSignedUrls} />
+      <FilePreviewList
+        attachments={attachments}
+        bucket={attachmentBucket}
+        onZoom={setModalImage}
+      />
 
       {modalImage !== null && (
         <ImageModal src={modalImage.src} alt={modalImage.alt} onClose={handleCloseModal} />
