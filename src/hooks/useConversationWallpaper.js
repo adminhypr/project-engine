@@ -27,15 +27,22 @@ import { parseWallpaper, resolveWallpaperBackground } from '../lib/chatWallpaper
 
 const MAX_BYTES = 5 * 1024 * 1024 // 5 MB cap for wallpaper uploads
 
-// Postgres "undefined column" (42703) surfaces through PostgREST as a 400 with
-// code '42703'. When migration 107 hasn't been applied, selecting/updating the
-// wallpaper columns errors with this code; we treat it as "feature not enabled"
-// and degrade to no-wallpaper rather than surfacing an error to the user.
+// When migration 107 hasn't been applied, the wallpaper columns don't exist.
+// PostgREST surfaces this differently for reads vs writes:
+//   - SELECT  → 400 with Postgres code '42703' ("column ... does not exist")
+//   - UPDATE  → 'PGRST204' ("Could not find the 'wallpaper' column of
+//               'conversations' in the schema cache")
+// We treat all of these as "feature not enabled yet" and degrade gracefully
+// instead of surfacing a generic failure.
 function isUndefinedColumnError(error) {
   if (!error) return false
+  const msg = error.message || ''
   return (
     error.code === '42703' ||
-    /column .*wallpaper.* does not exist/i.test(error.message || '')
+    error.code === 'PGRST204' ||
+    /column .*wallpaper.* does not exist/i.test(msg) ||
+    /could not find the .*wallpaper.* column/i.test(msg) ||
+    (/wallpaper/i.test(msg) && /schema cache/i.test(msg))
   )
 }
 
