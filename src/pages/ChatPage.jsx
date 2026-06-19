@@ -3,30 +3,32 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { MessageCircle, ArrowLeft } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useContactList } from '../hooks/useContactList'
-import ChatSidebar from '../components/chat/ChatSidebar'
 import ConversationPane from '../components/chat/ConversationPane'
-import CreateGroupModal from '../components/chat/CreateGroupModal'
-import { Spinner } from '../components/ui/index'
+import WorkspaceRail from '../components/chat/slack/WorkspaceRail'
+import ChannelSidebar from '../components/chat/slack/ChannelSidebar'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { readLastOpened, writeLastOpened, resolveActiveConversation } from '../lib/chatPage'
 
-// Dedicated full-page chat (/chat and /chat/:conversationId). Two-pane on
-// desktop (sidebar + conversation), single-pane on mobile (URL decides which
-// shows). Reuses the same hooks/components as the floating widget, so they
-// stay in sync. Zero DB changes — see
-// docs/plans/2026-06-16-dedicated-chat-page-design.md.
+// Dedicated full-viewport Slack-style chat takeover (/chat and
+// /chat/:conversationId). Composes the dark WorkspaceRail (68px) + dark
+// ChannelSidebar (260px) + the existing ConversationPane for the message area
+// (restyled in Phase 2). Renders OUTSIDE the normal app Layout chrome (see
+// App.jsx) so it owns the full viewport. Two-pane on desktop, single-pane on
+// mobile (URL decides which shows). Reuses the same hooks/components as the
+// floating widget so they stay in sync. Zero DB changes — see
+// docs/plans/2026-06-19-slack-chat-redesign.md (Task 1.6).
 export default function ChatPage() {
   usePageTitle('Chat')
-  const { profile, isExternal } = useAuth()
+  const { profile } = useAuth()
   const navigate = useNavigate()
   const { conversationId } = useParams()
-  const [query, setQuery] = useState('')
-  const [createGroupOpen, setCreateGroupOpen] = useState(false)
 
+  // ChannelSidebar consumes useContactList internally (with its own search
+  // box). We still need a thin instance here for active-conversation
+  // resolution, last-opened restore, the refetch guard, and presence/markRead.
   const {
-    sections, groups, campfires, conversations, presence,
-    createOrOpen, createGroup, markRead, refetch, loading,
-  } = useContactList(query)
+    conversations, markRead, refetch, loading, presence,
+  } = useContactList('')
 
   const activeConv = useMemo(
     () => resolveActiveConversation(conversations, conversationId),
@@ -40,11 +42,17 @@ export default function ChatPage() {
     markRead?.(convId)
   }, [navigate, markRead])
 
-  // Clicking a person resolves (or creates) the DM, then opens it.
-  const openContact = useCallback(async (otherUserId) => {
-    const convId = await createOrOpen?.(otherUserId)
-    if (convId) openConversation(convId)
-  }, [createOrOpen, openConversation])
+  // ChannelSidebar already resolves DM rows (createOrOpen) to a conversation id
+  // before calling this — so onSelectConversation always receives a real id.
+  const onSelectConversation = useCallback((convId) => {
+    openConversation(convId)
+  }, [openConversation])
+
+  const onBackToApp = useCallback(() => navigate('/my-tasks'), [navigate])
+
+  // Workspace rail tabs aren't fully wired yet (Home is the default view).
+  // Track selection locally so the rail highlights without breaking anything.
+  const [railActive, setRailActive] = useState('home')
 
   // Persist the last-open conversation so a bare /chat reopens it next time.
   useEffect(() => {
@@ -86,35 +94,36 @@ export default function ChatPage() {
   const closeThread = useCallback(() => setThreadRoot(null), [])
 
   const isGroup = activeConv && (activeConv.kind === 'group' || activeConv.kind === 'hub')
-  const online = activeConv && !isGroup ? !!presence.get(activeConv.other_user_id)?.online : false
+  const online = activeConv && !isGroup ? !!presence?.get(activeConv.other_user_id)?.online : false
 
-  const sidebarVisibility = conversationId ? 'hidden md:block' : 'block'
+  // Presence dot on the rail avatar reflects the current user's own presence.
+  const selfOnline = profile?.id ? !!presence?.get(profile.id)?.online : false
+
+  // Mobile single-pane: when a conversation is open, show the message area and
+  // hide the sidebar; otherwise show the sidebar. Desktop shows both.
+  const sidebarVisibility = conversationId ? 'hidden md:flex' : 'flex'
   const mainVisibility = conversationId ? 'flex' : 'hidden md:flex'
 
   return (
-    <div className="h-full flex overflow-hidden">
-      {/* Left: conversation list */}
-      <div className={`${sidebarVisibility} w-full md:w-[320px] shrink-0 md:border-r border-slate-200 dark:border-dark-border h-full`}>
-        {loading && conversations.length === 0 ? (
-          <div className="h-full flex items-center justify-center"><Spinner /></div>
-        ) : (
-          <ChatSidebar
-            query={query}
-            onQueryChange={setQuery}
-            sections={sections}
-            groups={groups}
-            campfires={campfires}
-            presence={presence}
-            selectedId={conversationId}
-            onOpenContact={openContact}
-            onOpenConversation={openConversation}
-            onCreateGroup={isExternal ? undefined : () => setCreateGroupOpen(true)}
-          />
-        )}
+    <div className="slack-chat h-screen w-screen flex overflow-hidden bg-slack-sidebar">
+      <WorkspaceRail
+        active={railActive}
+        onSelect={setRailActive}
+        profile={profile}
+        presenceOnline={selfOnline}
+        onBackToApp={onBackToApp}
+      />
+
+      <div className={`${sidebarVisibility} w-full md:w-auto shrink-0`}>
+        <ChannelSidebar
+          selectedId={conversationId}
+          onSelectConversation={onSelectConversation}
+          onBackToApp={onBackToApp}
+        />
       </div>
 
-      {/* Right: open conversation, or empty/not-found state */}
-      <div className={`${mainVisibility} flex-1 min-w-0 flex-col bg-slate-50/40 dark:bg-dark-bg/30 h-full`}>
+      {/* Message area: open conversation, or empty/not-found state */}
+      <div className={`${mainVisibility} flex-1 min-w-0 flex-col bg-white dark:bg-dark-bg h-full`}>
         {activeConv ? (
           <>
             <button
@@ -150,16 +159,6 @@ export default function ChatPage() {
           />
         )}
       </div>
-
-      <CreateGroupModal
-        isOpen={createGroupOpen}
-        onClose={() => setCreateGroupOpen(false)}
-        createGroup={createGroup}
-        onCreated={(convId) => {
-          setCreateGroupOpen(false)
-          openConversation(convId)
-        }}
-      />
     </div>
   )
 }

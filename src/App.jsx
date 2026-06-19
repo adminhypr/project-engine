@@ -82,6 +82,25 @@ function AppRoutes() {
     return children
   }
 
+  // The dedicated chat page is a full-viewport Slack-style takeover — it must
+  // render WITHOUT the normal app Layout chrome (top/side nav). Branch it out
+  // here so it owns the whole screen. The floating ChatWidget is still hidden
+  // via the same onChatPage check below.
+  if (onChatPage) {
+    return (
+      <Profiler id="AppRoutes" onRender={logRender}>
+        <ErrorBoundary>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/chat"                  element={<ChatPage />} />
+              <Route path="/chat/:conversationId"  element={<ChatPage />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
+      </Profiler>
+    )
+  }
+
   return (
     <Profiler id="AppRoutes" onRender={logRender}>
       <Profiler id="Layout" onRender={logRender}>
@@ -94,8 +113,6 @@ function AppRoutes() {
                   <Route path="/my-tasks" element={<InternalOnly><Profiler id="MyTasksPage" onRender={logRender}><MyTasksPage /></Profiler></InternalOnly>} />
                   <Route path="/assign"   element={<InternalOnly><AssignTaskPage /></InternalOnly>} />
                   <Route path="/to-do"    element={<ToDoPage />} />
-                  <Route path="/chat"                  element={<ChatPage />} />
-                  <Route path="/chat/:conversationId"  element={<ChatPage />} />
                   {/* /team-chat retired → dedicated chat page (the team group shows in the sidebar). */}
                   <Route path="/team-chat" element={<Navigate to="/chat" replace />} />
                   <Route path="/hub"        element={<HubPage />} />
