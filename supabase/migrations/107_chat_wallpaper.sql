@@ -20,12 +20,20 @@
 --   • 027 created `conversations_update_participant` USING is_conversation_participant(id)
 --   • 042 re-created it WITH CHECK (is_conversation_participant(id)
 --          AND (not external OR (kind='group' AND team_id not null)))
--- So no NEW policy and no widening is required — a participant updating the
--- wallpaper columns passes the existing USING + WITH CHECK unchanged. Externals
--- in a group/hub/task conversation still pass the WITH CHECK because they are
--- only setting wallpaper, NOT flipping kind/team_id (the external clause only
--- exists to stop them mutating kind/team_id on a team group; setting wallpaper
--- leaves those columns untouched and the row still satisfies the predicate).
+-- So no NEW policy and no widening is required — an INTERNAL participant
+-- (Staff/Manager/Admin) updating the wallpaper columns passes the existing
+-- USING + WITH CHECK unchanged (the `not external` branch is TRUE, so the
+-- check short-circuits regardless of columns written).
+--
+-- KNOWN LIMITATION (intentional, not a regression): WITH CHECK re-evaluates the
+-- WHOLE resulting row, not just changed columns. For an EXTERNAL user (Agent/
+-- Client) the predicate reduces to `(kind='group' AND team_id IS NOT NULL)`, so
+-- an external can only set a wallpaper in a team default group — NOT in dm /
+-- hub / task / custom-group conversations (the write is rejected by RLS; the UI
+-- shows a toast). Widening external wallpaper writes would require column-scoped
+-- UPDATE enforcement (a BEFORE UPDATE trigger like guard_task_assignee_self_update,
+-- migration 044) rather than loosening the policy — deferred as a product call.
+-- Internal users — the primary audience for this internal tool — are unaffected.
 --
 -- The participant check is the SECURITY DEFINER, search_path-locked helper
 -- `is_conversation_participant(cid)` from migration 027 (language sql, stable).
