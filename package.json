@@ -14,6 +14,7 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@fontsource/lato": "^5.2.7",
     "@sentry/react": "^8.45.0",
     "@supabase/supabase-js": "^2.39.0",
     "@tiptap/extension-image": "^3.22.3",
@@ -35,11 +36,11 @@
     "recharts": "^2.12.0"
   },
   "devDependencies": {
+    "@sentry/vite-plugin": "^2.22.0",
     "@tailwindcss/typography": "^0.5.19",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
-    "@sentry/vite-plugin": "^2.22.0",
     "@vitejs/plugin-react": "^4.2.1",
     "@vitest/coverage-v8": "^4.1.0",
     "autoprefixer": "^10.4.17",
