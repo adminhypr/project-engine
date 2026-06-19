@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import { useAuth } from '../../../hooks/useAuth'
 import { buildSidebarSections } from '../../../lib/slackSidebar'
@@ -44,10 +44,20 @@ export default function ChannelSidebar({
   selectedId,
   onSelectConversation,
   onCompose,
+  onCreateChannel,
   onBackToApp,
   onInvite,
   onPreferences,
 }) {
+  const searchRef = useRef(null)
+
+  // Focus the search input — the "search + compose" entry point for starting a
+  // new DM (typing a name surfaces everyone via includeAllPeople) and for
+  // filtering channels by name.
+  const focusSearch = useCallback(() => {
+    searchRef.current?.focus()
+    searchRef.current?.select?.()
+  }, [])
   const { profile } = useAuth()
   const profileId = profile?.id || null
 
@@ -133,6 +143,7 @@ export default function ChannelSidebar({
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
           <input
+            ref={searchRef}
             type="text"
             value={query}
             onChange={(e) => onQueryChange?.(e.target.value)}
@@ -147,7 +158,11 @@ export default function ChannelSidebar({
           <div className="h-full flex items-center justify-center"><Spinner /></div>
         ) : (
           <>
-            <SidebarSection title="Channels">
+            <SidebarSection
+              title="Channels"
+              onAdd={onCreateChannel}
+              onFilter={focusSearch}
+            >
               {channels.length === 0 ? (
                 <p className="px-3 py-1 text-[13px] text-white/30">No channels</p>
               ) : (
@@ -164,7 +179,7 @@ export default function ChannelSidebar({
               )}
             </SidebarSection>
 
-            <SidebarSection title="Direct messages">
+            <SidebarSection title="Direct messages" onAdd={focusSearch}>
               {visibleDms.length === 0 ? (
                 <p className="px-3 py-1 text-[13px] text-white/30">No direct messages</p>
               ) : (

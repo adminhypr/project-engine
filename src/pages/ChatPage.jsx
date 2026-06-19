@@ -229,6 +229,7 @@ export default function ChatPage() {
           selectedId={conversationId}
           onSelectConversation={onSelectConversation}
           onCompose={isExternal ? undefined : openCreateGroup}
+          onCreateChannel={isExternal ? undefined : openCreateGroup}
           onBackToApp={onBackToApp}
         />
       </div>
