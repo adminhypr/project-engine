@@ -10,6 +10,8 @@ import {
   ListChecks, MessageCircle
 } from 'lucide-react'
 import { useTheme } from '../../hooks/useTheme'
+import { useTotalUnread } from '../../hooks/useTotalUnread'
+import { formatUnreadBadge } from '../../lib/dmUnread'
 import NotificationBell from '../notifications/NotificationBell'
 import WorkspaceSwitcher from './WorkspaceSwitcher'
 
@@ -18,6 +20,7 @@ export default function Layout({ children }) {
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { dark, toggle } = useTheme()
+  const totalUnread = useTotalUnread()
 
   async function handleSignOut() {
     await signOut()
@@ -28,13 +31,13 @@ export default function Layout({ children }) {
     ? [
         { to: '/to-do',     icon: ListChecks,    label: 'To-Do',     show: true },
         { to: '/hub',       icon: Boxes,         label: 'Hubs',      show: true },
-        { to: '/chat',      icon: MessageCircle, label: 'Chat',      show: true },
+        { to: '/chat',      icon: MessageCircle, label: 'Chat',      show: true, count: totalUnread },
         { to: '/settings',  icon: Settings,      label: 'Settings',  show: true },
       ]
     : [
         { to: '/my-tasks', icon: CheckSquare,     label: 'My Tasks',        show: true },
         { to: '/assign',   icon: Plus,            label: 'Assign a Task',   show: true },
-        { to: '/chat',     icon: MessageCircle,   label: 'Chat',            show: true },
+        { to: '/chat',     icon: MessageCircle,   label: 'Chat',            show: true, count: totalUnread },
         { to: '/hub',      icon: Boxes,           label: 'Project Hub',     show: true, badge: 'BETA' },
         { to: '/team',     icon: Users,           label: 'Team View',       show: isManager },
         { to: '/admin',    icon: LayoutDashboard, label: 'Admin Overview',  show: isAdmin },
@@ -92,7 +95,7 @@ export default function Layout({ children }) {
 
       {/* Nav */}
       <nav className="flex-1 py-3 px-3 overflow-y-auto space-y-0.5">
-        {navItems.filter(n => n.show).map(({ to, icon: Icon, label, badge }) => (
+        {navItems.filter(n => n.show).map(({ to, icon: Icon, label, badge, count }) => (
           <NavLink
             key={to}
             to={to}
@@ -107,8 +110,13 @@ export default function Layout({ children }) {
           >
             <Icon size={18} strokeWidth={isManager ? 1.8 : 2} />
             <span>{label}</span>
+            {count > 0 && (
+              <span className="ml-auto min-w-[18px] h-[18px] px-1.5 rounded-full bg-red-500 text-white text-[11px] font-semibold flex items-center justify-center">
+                {formatUnreadBadge(count)}
+              </span>
+            )}
             {badge && (
-              <span className="ml-auto px-1.5 py-0.5 text-[10px] font-bold tracking-wider rounded-md bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300 ring-1 ring-amber-200/60 dark:ring-amber-500/20">
+              <span className={`${count > 0 ? 'ml-1.5' : 'ml-auto'} px-1.5 py-0.5 text-[10px] font-bold tracking-wider rounded-md bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300 ring-1 ring-amber-200/60 dark:ring-amber-500/20`}>
                 {badge}
               </span>
             )}

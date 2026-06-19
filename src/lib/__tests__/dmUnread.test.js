@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { unreadCount, totalUnread } from '../dmUnread'
+import { unreadCount, totalUnread, formatUnreadBadge } from '../dmUnread'
 
 const me = 'me'
 const other = 'other'
@@ -49,5 +49,23 @@ describe('totalUnread', () => {
   })
   it('handles missing unread field as 0', () => {
     expect(totalUnread([{}, { unread: 2 }])).toBe(2)
+  })
+})
+
+describe('formatUnreadBadge', () => {
+  it('returns empty string for zero / negative / non-numeric', () => {
+    expect(formatUnreadBadge(0)).toBe('')
+    expect(formatUnreadBadge(-3)).toBe('')
+    expect(formatUnreadBadge(undefined)).toBe('')
+    expect(formatUnreadBadge(null)).toBe('')
+    expect(formatUnreadBadge('x')).toBe('')
+  })
+  it('returns the number as a string up to 99', () => {
+    expect(formatUnreadBadge(1)).toBe('1')
+    expect(formatUnreadBadge(99)).toBe('99')
+  })
+  it('caps at 99+ past 99', () => {
+    expect(formatUnreadBadge(100)).toBe('99+')
+    expect(formatUnreadBadge(5000)).toBe('99+')
   })
 })

@@ -13,3 +13,11 @@ export function totalUnread(conversations) {
   if (!conversations) return 0
   return conversations.reduce((sum, c) => sum + (c.unread || 0), 0)
 }
+
+// Formats an unread count for a notification pill / tab badge. Caps at "99+".
+// Returns '' for 0 or non-positive so callers can hide the badge entirely.
+export function formatUnreadBadge(n) {
+  const num = Number(n) || 0
+  if (num <= 0) return ''
+  return num > 99 ? '99+' : String(num)
+}
