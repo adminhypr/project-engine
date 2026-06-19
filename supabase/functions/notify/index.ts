@@ -245,15 +245,15 @@ async function onTaskReassigned(record: any, oldRecord: any) {
   if (await isProfileOnline(task.assigned_to)) return
 
   const html = emailWrap('Task Reassigned to You', '#6366f1',
-    `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${task.assignee.full_name}</strong>,</p>
+    `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${escapeHtml(task.assignee.full_name)}</strong>,</p>
      <p style="margin: 0 0 16px; color: #374151;">A task has been reassigned to you:</p>
      <div style="background: #f8f9fc; border-radius: 10px; padding: 16px; margin: 12px 0;">
-       <p style="margin: 0 0 4px; font-size: 16px; font-weight: 700; color: #111827;">${task.title}</p>
-       <p style="margin: 0; font-size: 13px; color: #6b7280;">${task.task_id}</p>
+       <p style="margin: 0 0 4px; font-size: 16px; font-weight: 700; color: #111827;">${escapeHtml(task.title)}</p>
+       <p style="margin: 0; font-size: 13px; color: #6b7280;">${escapeHtml(task.task_id)}</p>
      </div>
      <table style="width: 100%; border-collapse: collapse;">
-       <tr><td style="padding: 6px 0; color: #6b7280; font-size: 13px; width: 120px;">Assigned By</td><td style="padding: 6px 0; font-size: 14px;">${task.assigner?.full_name}</td></tr>
-       <tr><td style="padding: 6px 0; color: #6b7280; font-size: 13px;">Urgency</td><td style="padding: 6px 0; font-size: 14px;">${task.urgency}</td></tr>
+       <tr><td style="padding: 6px 0; color: #6b7280; font-size: 13px; width: 120px;">Assigned By</td><td style="padding: 6px 0; font-size: 14px;">${escapeHtml(task.assigner?.full_name)}</td></tr>
+       <tr><td style="padding: 6px 0; color: #6b7280; font-size: 13px;">Urgency</td><td style="padding: 6px 0; font-size: 14px;">${escapeHtml(task.urgency)}</td></tr>
        ${task.due_date ? `<tr><td style="padding: 6px 0; color: #6b7280; font-size: 13px;">Due</td><td style="padding: 6px 0; font-size: 14px;">${new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td></tr>` : ''}
      </table>
      ${task.acceptance_status === 'Pending' ? `
@@ -290,7 +290,8 @@ async function onRecurringSpawnFailed(payload: any) {
   }
   if (recipients.length === 0) return
 
-  const safeTitle = String(template_title || 'Untitled').replace(/</g, '&lt;')
+  const rawTitle = String(template_title || 'Untitled')
+  const safeTitle = escapeHtml(rawTitle)
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 20px; max-width: 560px;">
       <h2 style="color:#dc2626; margin: 0 0 12px;">Recurring task couldn't spawn</h2>
@@ -299,7 +300,7 @@ async function onRecurringSpawnFailed(payload: any) {
       <p style="color:#9ca3af; font-size:12px; margin-top:24px;">Recurrence ID: ${recurrence_id}</p>
     </div>
   `
-  await sendEmail(recipients.map((r) => r.email), `Recurring task paused: "${safeTitle}"`, html, { event: 'recurring_spawn_failed', recurrence_id: payload?.recurrence_id })
+  await sendEmail(recipients.map((r) => r.email), `Recurring task paused: "${rawTitle}"`, html, { event: 'recurring_spawn_failed', recurrence_id: payload?.recurrence_id })
 }
 
 // ── Webhook handler ───────────────────────────
