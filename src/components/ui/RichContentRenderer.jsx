@@ -6,7 +6,7 @@ import { replaceEmoticons } from '../../lib/emoticons'
 import parse from 'html-react-parser'
 import DOMPurify from 'dompurify'
 import { isHtmlContent } from '../../lib/contentFormat'
-import { INLINE_MD_RE_SOURCE, INLINE_MD_FLAGS, normalizeUrlMatch } from '../../lib/linkify'
+import { INLINE_MD_RE_SOURCE, INLINE_MD_FLAGS, normalizeUrlMatch, parseBlocks } from '../../lib/linkify'
 import { formatFileSize } from '../../lib/chatAttachments'
 
 // Attachment descriptors come in two historical shapes: card/chat use
@@ -56,11 +56,104 @@ function renderInlineMarkdown(text, keyBase) {
         </a>
       )
       if (trailing) nodes.push(trailing)
+    } else if (match[6] !== undefined) {
+      // ~~strikethrough~~
+      nodes.push(<s key={`${keyBase}-${k++}`}>{match[6]}</s>)
+    } else if (match[7] !== undefined) {
+      // `inline code` — content is literal (no nested markdown).
+      nodes.push(
+        <code
+          key={`${keyBase}-${k++}`}
+          className="px-1 py-0.5 rounded bg-slate-100 dark:bg-dark-bg/60 text-[0.85em] font-mono"
+        >
+          {match[7]}
+        </code>
+      )
     }
     lastIndex = re.lastIndex
   }
   if (lastIndex < text.length) nodes.push(text.slice(lastIndex))
   return nodes
+}
+
+// Render a single line of plaintext: split out @mentions first, then run
+// emoticon replacement + inline markdown on the non-mention spans. Mentions
+// render as highlighted chips and are never reinterpreted as markdown.
+function renderTextLine(line, mentions, keyBase) {
+  const segs = buildMentionSegments(line, mentions)
+  return segs.map((seg, i) =>
+    seg.type === 'mention' ? (
+      <span
+        key={`${keyBase}-m${i}`}
+        className="inline-block bg-brand-100 dark:bg-brand-500/20 text-brand-700 dark:text-brand-300 font-medium rounded px-1 -mx-0.5"
+      >
+        {seg.value}
+      </span>
+    ) : (
+      <span key={`${keyBase}-t${i}`}>
+        {renderInlineMarkdown(replaceEmoticons(seg.value), `${keyBase}-t${i}`)}
+      </span>
+    )
+  )
+}
+
+// Render parsed blocks (paragraphs, fenced code, blockquotes, lists) for the
+// plaintext path. Code blocks are verbatim; every other block runs each line
+// through renderTextLine so inline markdown + mentions still apply.
+function renderBlocks(content, mentions) {
+  const blocks = parseBlocks(content)
+  return blocks.map((block, bi) => {
+    if (block.type === 'code') {
+      return (
+        <pre
+          key={`b${bi}`}
+          className="my-1 p-2 rounded-lg bg-slate-100 dark:bg-dark-bg/60 overflow-x-auto text-[0.85em]"
+        >
+          <code className="font-mono whitespace-pre-wrap break-words">{block.code}</code>
+        </pre>
+      )
+    }
+    if (block.type === 'quote') {
+      return (
+        <blockquote
+          key={`b${bi}`}
+          className="my-1 pl-3 border-l-2 border-slate-300 dark:border-dark-border text-slate-600 dark:text-slate-400"
+        >
+          {block.lines.map((ln, li) => (
+            <div key={li} className="whitespace-pre-wrap break-words">
+              {renderTextLine(ln, mentions, `b${bi}-${li}`)}
+            </div>
+          ))}
+        </blockquote>
+      )
+    }
+    if (block.type === 'ul' || block.type === 'ol') {
+      const ListTag = block.type === 'ul' ? 'ul' : 'ol'
+      return (
+        <ListTag
+          key={`b${bi}`}
+          className={`my-1 pl-5 ${block.type === 'ul' ? 'list-disc' : 'list-decimal'}`}
+        >
+          {block.items.map((item, li) => (
+            <li key={li} className="whitespace-pre-wrap break-words">
+              {renderTextLine(item, mentions, `b${bi}-${li}`)}
+            </li>
+          ))}
+        </ListTag>
+      )
+    }
+    // Paragraph block: join lines with <br/>, preserving wrapping.
+    return (
+      <p key={`b${bi}`} className="whitespace-pre-wrap break-words">
+        {block.lines.map((ln, li) => (
+          <span key={li}>
+            {li > 0 && <br />}
+            {renderTextLine(ln, mentions, `b${bi}-${li}`)}
+          </span>
+        ))}
+      </p>
+    )
+  })
 }
 
 function ImageModal({ src, alt, onClose }) {
@@ -181,8 +274,8 @@ export default function RichContentRenderer({ content, mentions = [], inlineImag
     return () => { cancelled = true }
   }, [attachments, attachmentBucket])
 
-  const segments = useMemo(
-    () => buildMentionSegments(content || '', mentions),
+  const blockNodes = useMemo(
+    () => renderBlocks(content || '', mentions),
     [content, mentions]
   )
 
@@ -267,20 +360,7 @@ export default function RichContentRenderer({ content, mentions = [], inlineImag
 
   return (
     <div>
-      <p className="whitespace-pre-wrap break-words">
-        {segments.map((seg, i) =>
-          seg.type === 'mention' ? (
-            <span
-              key={i}
-              className="inline-block bg-brand-100 dark:bg-brand-500/20 text-brand-700 dark:text-brand-300 font-medium rounded px-1 -mx-0.5"
-            >
-              {seg.value}
-            </span>
-          ) : (
-            <span key={i}>{renderInlineMarkdown(replaceEmoticons(seg.value), `s${i}`)}</span>
-          )
-        )}
-      </p>
+      {blockNodes}
 
       {inlineImages.length > 0 ? (
         <div className="flex flex-wrap gap-2 mt-2">

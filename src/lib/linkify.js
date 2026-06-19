@@ -28,13 +28,24 @@ const URL_ALT = [
   `(?:[a-z0-9][a-z0-9-]*\\.)+(?:${TLD_GROUP})\\b(?:\\/[^\\s<>]*)?`,
 ].join('|')
 
-// Inline markdown (bold, italic, [text](url)) + URL auto-link.
-// The 5th capture group is the URL (any of the three forms).
+// Inline markdown + URL auto-link. Capture groups (1-indexed):
+//   1: **bold**         2: _italic_
+//   3/4: [text](url)    5: bare/auto URL (any of the three forms)
+//   6: ~~strikethrough~~
+//   7: `inline code`    (content is LITERAL — no nested formatting)
+//
+// Matching is leftmost-wins (regex scans by position), so alternative order
+// does not change precedence between non-overlapping markers. The code-span
+// branch wins for any text it encloses simply because its opening backtick is
+// the leftmost marker — once matched, the whole `...` span is consumed and the
+// engine never re-examines markers inside it, keeping code content literal.
 export const INLINE_MD_RE_SOURCE =
   '\\*\\*([^*\\n]+?)\\*\\*' +
   '|_([^_\\n]+?)_' +
   '|\\[([^\\]\\n]+?)\\]\\(([^)\\n]+?)\\)' +
-  `|(${URL_ALT})`
+  `|(${URL_ALT})` +
+  '|~~([^~\\n]+?)~~' +
+  '|`([^`\\n]+?)`'
 
 export const INLINE_MD_FLAGS = 'gi'
 
@@ -53,4 +64,73 @@ export function normalizeUrlMatch(raw) {
   const displayUrl = trailing ? raw.slice(0, raw.length - trailing.length) : raw
   const href = /^https?:\/\//i.test(displayUrl) ? displayUrl : `https://${displayUrl}`
   return { displayUrl, href, trailing }
+}
+
+// Line-level block markers. Conservative on purpose: only a "> ", "- ", "* "
+// or "N. " at the START of a line counts; mid-line ">"/"-" stay literal text.
+const QUOTE_RE = /^>\s(.*)$/
+const BULLET_RE = /^[-*]\s+(.+)$/
+const ORDERED_RE = /^\d+\.\s+(.+)$/
+const FENCE_RE = /^```/
+
+/**
+ * Parse a plaintext message into an ordered list of block descriptors so the
+ * renderer can emit <pre>/<blockquote>/<ul>/<ol>/<p> instead of one flat <p>.
+ *
+ * Block types:
+ *   { type: 'p',     lines:  string[] }   // consecutive non-special lines
+ *   { type: 'code',  code:   string   }   // ```-fenced; content is LITERAL
+ *   { type: 'quote', lines:  string[] }   // consecutive "> " lines
+ *   { type: 'ul',    items:  string[] }   // consecutive "- "/"* " lines
+ *   { type: 'ol',    items:  string[] }   // consecutive "N. " lines
+ *
+ * Consecutive lines of the same kind group into one block. Inline markdown
+ * (bold/italic/strike/code/links/mentions) is rendered later, per-line, by the
+ * consumer — EXCEPT inside `code` blocks, which stay verbatim.
+ */
+export function parseBlocks(content) {
+  const text = typeof content === 'string' ? content : ''
+  const lines = text.split('\n')
+  const blocks = []
+  let i = 0
+
+  const flushPushable = (type, key, value) => {
+    const last = blocks[blocks.length - 1]
+    if (last && last.type === type) {
+      last[key].push(value)
+    } else {
+      blocks.push({ type, [key]: [value] })
+    }
+  }
+
+  while (i < lines.length) {
+    const line = lines[i]
+
+    // Fenced code block: collect everything until the closing ``` (or EOF).
+    if (FENCE_RE.test(line)) {
+      const codeLines = []
+      i++
+      while (i < lines.length && !FENCE_RE.test(lines[i])) {
+        codeLines.push(lines[i])
+        i++
+      }
+      if (i < lines.length) i++ // consume the closing fence
+      blocks.push({ type: 'code', code: codeLines.join('\n') })
+      continue
+    }
+
+    let m
+    if ((m = line.match(QUOTE_RE))) {
+      flushPushable('quote', 'lines', m[1])
+    } else if ((m = line.match(BULLET_RE))) {
+      flushPushable('ul', 'items', m[1])
+    } else if ((m = line.match(ORDERED_RE))) {
+      flushPushable('ol', 'items', m[1])
+    } else {
+      flushPushable('p', 'lines', line)
+    }
+    i++
+  }
+
+  return blocks
 }
