@@ -78,7 +78,7 @@ function MemberStack({ participants, onClick }) {
  * optional props are noted inline.
  */
 export default function ChannelHeader({
-  conversation, otherProfile, online,
+  conversation, otherProfile, online, status,
   onAssignTask, canAssignTask,
   onAddTodo, canAddTodo,
   onStartCall, callStarting,
@@ -108,11 +108,15 @@ export default function ChannelHeader({
   // Topic slot: the data model has no topic column yet (Future/DB work), so we
   // surface member count (groups/channels) / presence (DMs) instead of
   // inventing a topic. Tasks show their status.
+  // DM presence label reflects the peer's effective status. Fall back to the
+  // legacy online boolean when status isn't supplied.
+  const dmStatus = status || (online ? 'active' : 'offline')
+  const dmStatusLabel = dmStatus === 'active' ? 'Active' : dmStatus === 'away' ? 'Away' : 'Offline'
   const topic = isTask
     ? (conversation.task_status || 'Task chat')
     : isGroup
       ? memberCountLabel(conversation?.participants)
-      : (online ? 'Active' : 'Away')
+      : dmStatusLabel
 
   const handleOpenTask = () => {
     if (!isTask || !conversation?.task_id) return
@@ -140,10 +144,10 @@ export default function ChannelHeader({
               otherProfile?.avatar_url ? (
                 <span className="relative">
                   <img src={otherProfile.avatar_url} alt="" className="w-6 h-6 rounded object-cover" />
-                  <PresenceDot online={online} className="absolute -bottom-0.5 -right-0.5 !w-2.5 !h-2.5" />
+                  <PresenceDot online={online} status={status} className="absolute -bottom-0.5 -right-0.5 !w-2.5 !h-2.5" />
                 </span>
               ) : (
-                <PresenceDot online={online} />
+                <PresenceDot online={online} status={status} />
               )
             ) : (
               <Hash className="w-[18px] h-[18px]" strokeWidth={2.5} />

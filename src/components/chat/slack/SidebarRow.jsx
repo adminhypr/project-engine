@@ -7,6 +7,7 @@ import PresenceDot from '../PresenceDot'
 //   label        — row text
 //   kind         — 'channel' | 'dm' | 'task' (drives the leading icon slot)
 //   online       — boolean (DM presence dot); ignored for non-DM rows
+//   status       — optional 'active'|'away'|'offline' (preferred over online)
 //   unread       — boolean; bold + bright white when true
 //   mentionCount — number; renders a red pill badge when > 0
 //   active       — boolean; brand highlight
@@ -19,6 +20,7 @@ export default function SidebarRow({
   label,
   kind = 'channel',
   online = false,
+  status,
   unread = false,
   mentionCount = 0,
   active = false,
@@ -45,7 +47,7 @@ export default function SidebarRow({
       {/* Leading icon slot: # for channels, presence dot for DMs */}
       <span className="w-4 shrink-0 grid place-items-center text-[15px] leading-none">
         {kind === 'dm' ? (
-          <PresenceDot online={online} className="ring-0" />
+          <PresenceDot online={online} status={status} className="ring-0" />
         ) : (
           <span className={active ? 'text-white/80' : 'text-white/40'}>#</span>
         )}

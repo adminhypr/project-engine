@@ -63,6 +63,7 @@ export default function QuickSwitcher({
         label: dm.name || 'Unknown',
         kind: 'dm',
         online: !!presence.get(dm.profileId)?.online,
+        status: presence.get(dm.profileId)?.status,
       })
     }
     for (const t of taskChats) {
@@ -170,7 +171,7 @@ export default function QuickSwitcher({
                   ) : cand.kind === 'task' ? (
                     <CheckSquare className="w-4 h-4" />
                   ) : cand.profileId ? (
-                    <PresenceDot online={cand.online} className="ring-0" />
+                    <PresenceDot online={cand.online} status={cand.status} className="ring-0" />
                   ) : (
                     <MessageSquare className="w-4 h-4" />
                   )}

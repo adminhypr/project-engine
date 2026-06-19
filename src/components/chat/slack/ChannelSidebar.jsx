@@ -209,6 +209,7 @@ export default function ChannelSidebar({
                     kind="dm"
                     label={dm.name || 'Unknown'}
                     online={!!presence.get(dm.profileId)?.online}
+                    status={presence.get(dm.profileId)?.status}
                     unread={(dm.conversation?.unread || 0) > 0}
                     active={!!dm.conversationId && dm.conversationId === selectedId}
                     onClick={() => selectDm(dm)}

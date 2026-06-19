@@ -84,6 +84,7 @@ export default function ExpandedChatModal({
   // dot value for ConversationPane's header.
   const isGroup = activeConv && (activeConv.kind === 'group' || activeConv.kind === 'hub')
   const online = activeConv && !isGroup ? !!presence.get(activeConv.other_user_id)?.online : false
+  const peerStatus = activeConv && !isGroup ? presence.get(activeConv.other_user_id)?.status : undefined
 
   // ConversationPane expects an onClose that removes from open list; in the
   // modal we just clear the local active state — the user is still IN the
@@ -168,6 +169,7 @@ export default function ExpandedChatModal({
                 <ConversationPane
                   conversation={activeConv}
                   online={online}
+                  status={peerStatus}
                   onClose={clearActive}
                   onMinimize={clearActive}
                   onMarkRead={onMarkRead}

@@ -18,6 +18,7 @@ import SlackMessageList from './slack/SlackMessageList'
 export default function ConversationPane({
   conversation,
   online,
+  status,
   onClose,
   onMinimize,
   onMarkRead,
@@ -211,6 +212,7 @@ export default function ConversationPane({
             conversation={conversation}
             otherProfile={conversation.other_profile}
             online={online}
+            status={status}
             canAssignTask={!isExternal && (conversation.kind === 'dm' || conversation.kind === 'group' || conversation.kind === 'hub')}
             onAssignTask={() => onAssignTask?.(conversation)}
             canAddTodo={isExternal && (conversation.kind === 'dm' || conversation.kind === 'group' || conversation.kind === 'hub')}

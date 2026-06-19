@@ -94,6 +94,7 @@ export default function ConversationStack({
     const isGroup = conv.kind === 'group' || conv.kind === 'hub'
     const other = conv.other_profile
     const online = !isGroup && (presence.get(conv.other_user_id)?.online || false)
+    const status = !isGroup ? presence.get(conv.other_user_id)?.status : undefined
     const initial = (other?.full_name || '?').charAt(0).toUpperCase()
     const ariaLabel = isGroup
       ? `Restore group ${groupDisplayName(conv)}`
@@ -115,7 +116,7 @@ export default function ConversationStack({
               ? <img src={other.avatar_url} alt="" className="w-10 h-10 rounded-full object-cover" />
               : <span>{initial}</span>)}
         {!isGroup && (
-          <span className="absolute bottom-0 right-0"><PresenceDot online={online} /></span>
+          <span className="absolute bottom-0 right-0"><PresenceDot online={online} status={status} /></span>
         )}
         {conv.unread > 0 && (
           <span className="absolute -top-1 -right-1 min-w-[18px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center">
@@ -146,6 +147,7 @@ export default function ConversationStack({
             <ConversationPane
               conversation={conv}
               online={presence.get(conv.other_user_id)?.online || false}
+              status={presence.get(conv.other_user_id)?.status}
               onClose={onClose}
               onMinimize={onMinimize}
               onMarkRead={onMarkRead}
@@ -171,6 +173,7 @@ export default function ConversationStack({
                     <ConversationPane
                       conversation={conv}
                       online={presence.get(conv.other_user_id)?.online || false}
+                      status={presence.get(conv.other_user_id)?.status}
                       onClose={onClose}
                       onMinimize={onMinimize}
                       onMarkRead={onMarkRead}

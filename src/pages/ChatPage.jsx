@@ -14,6 +14,11 @@ import { readLastOpened, writeLastOpened, resolveActiveConversation } from '../l
 import { matchShortcut } from '../lib/chatShortcuts'
 import { useChatPrefs } from '../hooks/useChatPrefs'
 import { sidebarThemeVars } from '../lib/chatPrefs'
+import {
+  getStatus as getPresenceStatus,
+  setStatus as setPresenceStatus,
+  subscribe as subscribePresenceStatus,
+} from '../lib/presenceStatus'
 
 // Dedicated full-viewport Slack-style chat takeover (/chat and
 // /chat/:conversationId). Composes the dark WorkspaceRail (68px) + dark
@@ -211,9 +216,25 @@ export default function ChatPage() {
 
   const isGroup = activeConv && (activeConv.kind === 'group' || activeConv.kind === 'hub')
   const online = activeConv && !isGroup ? !!presence?.get(activeConv.other_user_id)?.online : false
+  const peerStatus = activeConv && !isGroup ? presence?.get(activeConv.other_user_id)?.status : undefined
 
-  // Presence dot on the rail avatar reflects the current user's own presence.
-  const selfOnline = profile?.id ? !!presence?.get(profile.id)?.online : false
+  // Rail avatar reflects the CURRENT USER's own status. Self is excluded from
+  // the presence Map (you're always online to yourself), so we read the manual
+  // override store directly and resolve it to a display status: an explicit
+  // override wins; 'auto' shows active (the user is here, on /chat).
+  const [myStatus, setMyStatus] = useState(() => getPresenceStatus(profile?.id))
+  useEffect(() => {
+    setMyStatus(getPresenceStatus(profile?.id))
+    const unsub = subscribePresenceStatus(({ profileId: changed }) => {
+      if (!changed || changed === profile?.id) setMyStatus(getPresenceStatus(profile?.id))
+    })
+    return unsub
+  }, [profile?.id])
+  const onSetMyStatus = useCallback((value) => {
+    if (profile?.id) setPresenceStatus(profile.id, value)
+  }, [profile?.id])
+  // 'auto' displays as active on the rail (you're using the app right now).
+  const selfDisplayStatus = myStatus === 'auto' ? 'active' : myStatus
 
   // Mobile single-pane: when a conversation is open, show the message area and
   // hide the rail + sidebar; otherwise show rail + sidebar. Desktop shows all
@@ -232,7 +253,9 @@ export default function ChatPage() {
           active={railActive}
           onSelect={onRailSelect}
           profile={profile}
-          presenceOnline={selfOnline}
+          selfStatus={selfDisplayStatus}
+          manualStatus={myStatus}
+          onSetStatus={onSetMyStatus}
           onBackToApp={onBackToApp}
           onNewMessage={onNewMessage}
           onNewChannel={isExternal ? undefined : openCreateGroup}
@@ -277,6 +300,7 @@ export default function ChatPage() {
               <SlackMessagePane
                 conversation={activeConv}
                 online={online}
+                status={peerStatus}
                 onMarkRead={markRead}
                 onGroupChanged={refetch}
                 lastReadAt={preReadLastReadAt}
