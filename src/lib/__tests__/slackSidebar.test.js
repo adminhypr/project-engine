@@ -7,7 +7,7 @@ import { buildSidebarSections } from '@/lib/slackSidebar';
 //  - campfires/groups are full conversation rows { id, kind, title, ... }
 //  - tasks are conversation rows { id, kind:'task', task_title, title, ... }
 
-it('maps campfires + groups into Channels and 1:1s into Direct messages', () => {
+it('maps campfires + groups into Channels; default DMs are real conversations only', () => {
   const input = {
     sections: {
       recent: [
@@ -24,9 +24,46 @@ it('maps campfires + groups into Channels and 1:1s into Direct messages', () => 
   };
   const out = buildSidebarSections(input);
   expect(out.channels.map(c => c.id)).toEqual(['c1', 'g1']);       // campfires first, then groups
+  // Default (includeAllPeople omitted/false): only real DMs (recent), no
+  // conversation-less teammates/company candidates.
   expect(out.directMessages.map(d => d.name)).toContain('Marie Anne');
-  expect(out.directMessages.map(d => d.name)).toContain('Mark Rivera');
+  expect(out.directMessages.map(d => d.name)).not.toContain('Mark Rivera');
   expect(out.taskChats.map(t => t.id)).toEqual(['t1']);
+});
+
+it('includeAllPeople:true surfaces conversation-less teammates/company', () => {
+  const input = {
+    sections: {
+      recent: [
+        { profile: { id: 'u1', full_name: 'Marie Anne' }, conversation: { id: 'd1', kind: 'dm' } },
+      ],
+      teammates: [
+        { profile: { id: 'u2', full_name: 'Mark Rivera' } }, // no conversation yet
+      ],
+      company: [
+        { profile: { id: 'u3', full_name: 'Cleo Vega' } },   // no conversation yet
+      ],
+    },
+    groups: [], campfires: [], tasks: [],
+  };
+  const out = buildSidebarSections(input, { includeAllPeople: true });
+  const names = out.directMessages.map(d => d.name);
+  expect(names).toContain('Marie Anne');
+  expect(names).toContain('Mark Rivera');
+  expect(names).toContain('Cleo Vega');
+});
+
+it('default excludes conversation-less people even when recent is empty', () => {
+  const input = {
+    sections: {
+      recent: [],
+      teammates: [{ profile: { id: 'u2', full_name: 'Mark Rivera' } }],
+      company: [{ profile: { id: 'u3', full_name: 'Cleo Vega' } }],
+    },
+    groups: [], campfires: [], tasks: [],
+  };
+  const out = buildSidebarSections(input);
+  expect(out.directMessages).toHaveLength(0);
 });
 
 it('dedups direct messages that appear in multiple sections', () => {
@@ -46,7 +83,8 @@ it('dedups conversation-less profile rows by profile id', () => {
     sections: { recent: [], teammates: [profRow], company: [profRow] },
     groups: [], campfires: [], tasks: [],
   };
-  const out = buildSidebarSections(input);
+  // Conversation-less rows only appear with includeAllPeople; verify dedup there.
+  const out = buildSidebarSections(input, { includeAllPeople: true });
   expect(out.directMessages).toHaveLength(1);
   expect(out.directMessages[0].profileId).toBe('u2');
 });

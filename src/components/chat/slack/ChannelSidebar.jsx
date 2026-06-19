@@ -46,9 +46,13 @@ export default function ChannelSidebar({
   onInvite,
   onPreferences,
 }) {
+  // When the user is searching, surface ALL people (teammates + company) so they
+  // can start a brand-new DM. With an empty query only real conversations show —
+  // Slack's "search + compose" model.
+  const includeAllPeople = (query || '').trim().length > 0
   const { channels, directMessages, taskChats } = useMemo(
-    () => buildSidebarSections({ sections, groups, campfires, tasks }),
-    [sections, groups, campfires, tasks],
+    () => buildSidebarSections({ sections, groups, campfires, tasks }, { includeAllPeople }),
+    [sections, groups, campfires, tasks, includeAllPeople],
   )
 
   // Open a channel/group/campfire/task row — always by conversation id.

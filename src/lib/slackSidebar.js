@@ -28,17 +28,28 @@ function normalizeDm(row) {
   };
 }
 
-export function buildSidebarSections(input = {}) {
+// opts.includeAllPeople (default false):
+//   false → directMessages contains only rows with a real conversation (the
+//           `recent` bucket) — Slack's default "only DMs you've actually had".
+//   true  → also include conversation-less teammate/company candidates so the
+//           user can start a NEW DM (the sidebar passes this when searching).
+export function buildSidebarSections(input = {}, opts = {}) {
   const { sections = {}, groups = [], campfires = [], tasks = [] } = input || {};
-  const dmRaw = [
-    ...(sections.recent || []),
-    ...(sections.teammates || []),
-    ...(sections.company || []),
-  ];
+  const { includeAllPeople = false } = opts || {};
+  const dmRaw = includeAllPeople
+    ? [
+        ...(sections.recent || []),
+        ...(sections.teammates || []),
+        ...(sections.company || []),
+      ]
+    : [...(sections.recent || [])];
   const seen = new Set();
   const directMessages = [];
   for (const row of dmRaw) {
     const dm = normalizeDm(row);
+    // Default mode: skip any row without a real conversation (belt-and-braces —
+    // `recent` rows always carry one, but a teammate could in theory).
+    if (!includeAllPeople && !dm.conversationId) continue;
     // Prefer the conversation id as the dedup key; fall back to profile id for
     // conversation-less teammate/company rows.
     const key = dm.conversationId || dm.profileId;
