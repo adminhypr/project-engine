@@ -31,6 +31,28 @@ import SidebarRow from './SidebarRow'
 //   onBackToApp              — "← App" / "Back to Project Engine"
 //   onInvite, onPreferences  — optional WorkspaceHeader menu actions
 
+// Resizable-width bounds (desktop only). Default matches the original 260px.
+const SIDEBAR_MIN_WIDTH = 180
+const SIDEBAR_MAX_WIDTH = 480
+const SIDEBAR_DEFAULT_WIDTH = 260
+const SIDEBAR_WIDTH_KEY = 'pe-slack-sidebar-width'
+
+function clampWidth(w) {
+  if (!Number.isFinite(w)) return SIDEBAR_DEFAULT_WIDTH
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Math.round(w)))
+}
+
+function readSidebarWidth() {
+  try {
+    const raw = localStorage.getItem(SIDEBAR_WIDTH_KEY)
+    if (raw === null) return SIDEBAR_DEFAULT_WIDTH
+    const n = parseInt(raw, 10)
+    return clampWidth(n)
+  } catch {
+    return SIDEBAR_DEFAULT_WIDTH
+  }
+}
+
 export default function ChannelSidebar({
   query,
   onQueryChange,
@@ -147,8 +169,47 @@ export default function ChannelSidebar({
     if (convId) onSelectConversation?.(convId)
   }, [createOrOpen, onSelectConversation])
 
+  // Resizable width (desktop only). The inline width is applied via md:[width]
+  // so mobile keeps its full-width single-pane layout (ChatPage wraps the aside
+  // in `w-full md:w-auto`). Width persists per browser in localStorage and is
+  // dragged via a thin grab handle on the sidebar's right edge.
+  const asideRef = useRef(null)
+  const [width, setWidth] = useState(() => readSidebarWidth())
+  const [dragging, setDragging] = useState(false)
+
+  const onResizeStart = useCallback((e) => {
+    e.preventDefault()
+    setDragging(true)
+    const startX = e.clientX
+    const startW = asideRef.current?.getBoundingClientRect().width ?? width
+
+    const prevUserSelect = document.body.style.userSelect
+    const prevCursor = document.body.style.cursor
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+
+    const onMove = (ev) => {
+      const next = clampWidth(startW + (ev.clientX - startX))
+      setWidth(next)
+    }
+    const onUp = (ev) => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.style.userSelect = prevUserSelect
+      document.body.style.cursor = prevCursor
+      setDragging(false)
+      const final = clampWidth(startW + (ev.clientX - startX))
+      try { localStorage.setItem(SIDEBAR_WIDTH_KEY, String(final)) } catch { /* noop */ }
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [width])
+
   return (
-    <aside className="w-[260px] shrink-0 h-full flex flex-col bg-[var(--chat-sidebar,#1a1d24)] slack-chat">
+    <aside
+      ref={asideRef}
+      style={{ '--pe-sidebar-w': `${width}px` }}
+      className="w-full md:w-[var(--pe-sidebar-w)] relative shrink-0 h-full flex flex-col bg-[var(--chat-sidebar,#1a1d24)] slack-chat">
       <WorkspaceHeader
         onCompose={onCompose}
         onBackToApp={onBackToApp}
@@ -183,7 +244,7 @@ export default function ChannelSidebar({
                 onFilter={focusSearch}
               >
                 {channels.length === 0 ? (
-                  <p className="px-3 py-1 text-[13px] text-white/30">No channels</p>
+                  <p className="px-4 py-1 text-[13px] text-white/30">No channels</p>
                 ) : (
                   channels.map((c) => (
                     <SidebarRow
@@ -201,13 +262,14 @@ export default function ChannelSidebar({
 
             <SidebarSection title="Direct messages" onAdd={focusSearch}>
               {visibleDms.length === 0 ? (
-                <p className="px-3 py-1 text-[13px] text-white/30">No direct messages</p>
+                <p className="px-4 py-1 text-[13px] text-white/30">No direct messages</p>
               ) : (
                 visibleDms.map((dm) => (
                   <SidebarRow
                     key={dm.conversationId || dm.profileId}
                     kind="dm"
                     label={dm.name || 'Unknown'}
+                    profile={dm.profile}
                     online={!!presence.get(dm.profileId)?.online}
                     status={presence.get(dm.profileId)?.status}
                     unread={(dm.conversation?.unread || 0) > 0}
@@ -235,6 +297,23 @@ export default function ChannelSidebar({
             )}
           </>
         )}
+      </div>
+
+      {/* Resize handle (desktop only). Thin grab strip on the right edge; drag
+          to widen/narrow between 180–480px. Mobile (single-pane, full-width)
+          hides it via `hidden md:block`. */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+        onMouseDown={onResizeStart}
+        className="hidden md:block absolute top-0 right-0 h-full w-1.5 translate-x-1/2 cursor-col-resize group/resize z-10"
+      >
+        <div
+          className={`mx-auto h-full w-px transition-colors ${
+            dragging ? 'bg-[var(--chat-accent,#4f46e5)]' : 'bg-transparent group-hover/resize:bg-white/20'
+          }`}
+        />
       </div>
     </aside>
   )

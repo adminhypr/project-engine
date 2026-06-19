@@ -18,6 +18,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeadersFor, verifyWebhookSecret } from '../_shared/security.ts'
 import { sendEmail } from '../_shared/email.ts'
+import { escapeHtml } from '../_shared/html.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -207,12 +208,13 @@ function renderDigestHtml(rows: OutboxRow[], userName: string): { subject: strin
   return { subject, html }
 }
 
+// Local alias kept for the many call sites below. Delegates to the shared
+// helper so user content is escaped once, consistently, and in attribute-safe
+// form (quotes escaped too). Also used for the UUID ids interpolated into the
+// deep-link query strings — those are never user-controlled HTML, so escaping
+// them is a harmless no-op (UUIDs contain no HTML-significant chars).
 function escape(s: any): string {
-  if (s === null || s === undefined) return ''
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+  return escapeHtml(s)
 }
 
 Deno.serve(async (req) => {

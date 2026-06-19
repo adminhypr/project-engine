@@ -8,6 +8,10 @@ import PresenceDot from '../PresenceDot'
 //   kind         — 'channel' | 'dm' | 'task' (drives the leading icon slot)
 //   online       — boolean (DM presence dot); ignored for non-DM rows
 //   status       — optional 'active'|'away'|'offline' (preferred over online)
+//   profile      — optional DM peer profile ({ avatar_url, full_name, email }).
+//                  When provided on a DM row, the leading slot renders a small
+//                  avatar (Slack style) with the presence dot overlaid on its
+//                  bottom-right corner instead of a bare presence dot.
 //   unread       — boolean; bold + bright white when true
 //   mentionCount — number; renders a red pill badge when > 0
 //   active       — boolean; brand highlight
@@ -16,17 +20,51 @@ import PresenceDot from '../PresenceDot'
 //                  right edge that calls onHide() (used to close a DM from the
 //                  sidebar). Click is stopPropagation'd so it doesn't open the row.
 
+// Small DM avatar (~20px) with a presence dot overlaid on the bottom-right.
+// Mirrors the message-avatar look (rounded-lg, object-cover, brand initials
+// fallback) at a smaller size for sidebar density.
+function DmAvatar({ profile, online, status }) {
+  const name = profile?.full_name || profile?.email || '?'
+  const initial = name.charAt(0).toUpperCase()
+  return (
+    <span className="relative inline-flex shrink-0 w-5 h-5">
+      {profile?.avatar_url ? (
+        <img
+          src={profile.avatar_url}
+          alt=""
+          className="w-5 h-5 rounded-md object-cover"
+        />
+      ) : (
+        <span className="w-5 h-5 rounded-md bg-brand-500/80 text-white text-[10px] font-semibold grid place-items-center">
+          {initial}
+        </span>
+      )}
+      {/* Presence dot anchored to the avatar's bottom-right corner. The ring
+          matches the sidebar background so the dot reads as a cutout (Slack). */}
+      <PresenceDot
+        online={online}
+        status={status}
+        className="absolute -bottom-0.5 -right-0.5 !w-2 !h-2 !ring-1 !ring-[var(--chat-sidebar,#1a1d24)]"
+      />
+    </span>
+  )
+}
+
 export default function SidebarRow({
   label,
   kind = 'channel',
   online = false,
   status,
+  profile,
   unread = false,
   mentionCount = 0,
   active = false,
   onClick,
   onHide,
 }) {
+  const isDm = kind === 'dm'
+  const showAvatar = isDm && (profile?.avatar_url || profile?.full_name || profile?.email)
+
   return (
     <div
       role="button"
@@ -36,18 +74,22 @@ export default function SidebarRow({
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.() }
       }}
       aria-current={active ? 'true' : undefined}
-      className={`group/row relative h-7 w-full px-2 mx-1 rounded-md flex items-center gap-2 cursor-pointer text-left ${
+      className={`group/row relative h-7 w-full px-2 mx-2 rounded-md flex items-center gap-2 cursor-pointer text-left ${
         active
           ? 'bg-[var(--chat-accent,#4f46e5)] text-white'
           : unread
             ? 'text-white hover:bg-white/[0.06]'
-            : 'text-white/60 hover:bg-white/[0.06]'
+            : 'text-white/70 hover:bg-white/[0.06]'
       }`}
     >
-      {/* Leading icon slot: # for channels, presence dot for DMs */}
-      <span className="w-4 shrink-0 grid place-items-center text-[15px] leading-none">
-        {kind === 'dm' ? (
-          <PresenceDot online={online} status={status} className="ring-0" />
+      {/* Leading icon slot: # for channels, avatar+dot (or bare dot) for DMs. */}
+      <span className="w-5 shrink-0 grid place-items-center text-[15px] leading-none">
+        {isDm ? (
+          showAvatar ? (
+            <DmAvatar profile={profile} online={online} status={status} />
+          ) : (
+            <PresenceDot online={online} status={status} className="ring-0" />
+          )
         ) : (
           <span className={active ? 'text-white/80' : 'text-white/40'}>#</span>
         )}

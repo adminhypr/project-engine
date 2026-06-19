@@ -11,6 +11,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { isProfileOnline } from '../_shared/presence.ts'
 import { corsHeadersFor, verifyWebhookSecret } from '../_shared/security.ts'
 import { sendEmail as sharedSendEmail, type SendResult } from '../_shared/email.ts'
+import { escapeHtml } from '../_shared/html.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -78,17 +79,17 @@ async function onTaskCreated(record: any) {
     : ''
 
   const html = emailWrap('New Task Assigned to You', '#6366f1',
-    `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${task.assignee.full_name}</strong>,</p>
-     <p style="margin: 0 0 16px; color: #374151;"><strong>${task.assigner?.full_name}</strong> has assigned you a new task:</p>
+    `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${escapeHtml(task.assignee.full_name)}</strong>,</p>
+     <p style="margin: 0 0 16px; color: #374151;"><strong>${escapeHtml(task.assigner?.full_name)}</strong> has assigned you a new task:</p>
      <div style="background: #f8f9fc; border-radius: 10px; padding: 16px; margin: 12px 0;">
-       <p style="margin: 0 0 4px; font-size: 16px; font-weight: 700; color: #111827;">${task.title}</p>
-       <p style="margin: 0; font-size: 13px; color: #6b7280;">${task.task_id}${task.who_due_to ? ` · For: ${task.who_due_to}` : ''}</p>
+       <p style="margin: 0 0 4px; font-size: 16px; font-weight: 700; color: #111827;">${escapeHtml(task.title)}</p>
+       <p style="margin: 0; font-size: 13px; color: #6b7280;">${escapeHtml(task.task_id)}${task.who_due_to ? ` · For: ${escapeHtml(task.who_due_to)}` : ''}</p>
      </div>
      <table style="width: 100%; border-collapse: collapse;">
-       <tr><td style="padding: 6px 0; color: #6b7280; font-size: 13px; width: 120px;">Urgency</td><td style="padding: 6px 0; font-size: 14px;">${task.urgency}</td></tr>
-       <tr><td style="padding: 6px 0; color: #6b7280; font-size: 13px;">Team</td><td style="padding: 6px 0; font-size: 14px;">${task.team?.name || '—'}</td></tr>
+       <tr><td style="padding: 6px 0; color: #6b7280; font-size: 13px; width: 120px;">Urgency</td><td style="padding: 6px 0; font-size: 14px;">${escapeHtml(task.urgency)}</td></tr>
+       <tr><td style="padding: 6px 0; color: #6b7280; font-size: 13px;">Team</td><td style="padding: 6px 0; font-size: 14px;">${task.team?.name ? escapeHtml(task.team.name) : '—'}</td></tr>
        ${dueInfo}
-       ${task.notes ? `<tr><td style="padding: 6px 0; color: #6b7280; font-size: 13px; vertical-align: top;">Notes</td><td style="padding: 6px 0; font-size: 14px; color: #374151;">${task.notes}</td></tr>` : ''}
+       ${task.notes ? `<tr><td style="padding: 6px 0; color: #6b7280; font-size: 13px; vertical-align: top;">Notes</td><td style="padding: 6px 0; font-size: 14px; color: #374151;">${escapeHtml(task.notes)}</td></tr>` : ''}
      </table>
      ${task.acceptance_status === 'Pending' ? `
        <div style="padding: 12px; background: #fefce8; border-radius: 8px; text-align: center; margin-top: 16px;">
@@ -112,16 +113,16 @@ async function onTaskDeclined(record: any, oldRecord: any) {
   if (await isProfileOnline(task.assigned_by)) return
 
   const html = emailWrap('Task Declined', '#ef4444',
-    `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${task.assigner.full_name}</strong>,</p>
-     <p style="margin: 0 0 16px; color: #374151;"><strong>${task.assignee?.full_name}</strong> has declined the following task:</p>
+    `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${escapeHtml(task.assigner.full_name)}</strong>,</p>
+     <p style="margin: 0 0 16px; color: #374151;"><strong>${escapeHtml(task.assignee?.full_name)}</strong> has declined the following task:</p>
      <div style="background: #f8f9fc; border-radius: 10px; padding: 16px; margin: 12px 0;">
-       <p style="margin: 0 0 4px; font-size: 16px; font-weight: 700; color: #111827;">${task.title}</p>
-       <p style="margin: 0; font-size: 13px; color: #6b7280;">${task.task_id}</p>
+       <p style="margin: 0 0 4px; font-size: 16px; font-weight: 700; color: #111827;">${escapeHtml(task.title)}</p>
+       <p style="margin: 0; font-size: 13px; color: #6b7280;">${escapeHtml(task.task_id)}</p>
      </div>
      ${record.decline_reason ? `
        <div style="padding: 12px; background: #fef2f2; border-radius: 8px; margin: 12px 0;">
          <p style="margin: 0; font-size: 13px; color: #6b7280;">Reason:</p>
-         <p style="margin: 4px 0 0; font-size: 14px; color: #374151; font-style: italic;">"${record.decline_reason}"</p>
+         <p style="margin: 4px 0 0; font-size: 14px; color: #374151; font-style: italic;">"${escapeHtml(record.decline_reason)}"</p>
        </div>` : ''}
      <p style="margin: 16px 0 0; font-size: 14px; color: #374151;">You can reassign this task from the task detail panel.</p>
      <div style="margin-top: 20px; text-align: center;">
@@ -162,11 +163,11 @@ async function onTaskCompleted(record: any, oldRecord: any) {
   if (await isProfileOnline(task.assigned_by)) return
 
   const html = emailWrap('Task Completed', '#22c55e',
-    `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${task.assigner.full_name}</strong>,</p>
-     <p style="margin: 0 0 16px; color: #374151;"><strong>${task.assignee?.full_name}</strong> has completed a task:</p>
+    `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${escapeHtml(task.assigner.full_name)}</strong>,</p>
+     <p style="margin: 0 0 16px; color: #374151;"><strong>${escapeHtml(task.assignee?.full_name)}</strong> has completed a task:</p>
      <div style="background: #f0fdf4; border-radius: 10px; padding: 16px; margin: 12px 0;">
-       <p style="margin: 0 0 4px; font-size: 16px; font-weight: 700; color: #111827;">✓ ${task.title}</p>
-       <p style="margin: 0; font-size: 13px; color: #6b7280;">${task.task_id}${task.who_due_to ? ` · For: ${task.who_due_to}` : ''}</p>
+       <p style="margin: 0 0 4px; font-size: 16px; font-weight: 700; color: #111827;">✓ ${escapeHtml(task.title)}</p>
+       <p style="margin: 0; font-size: 13px; color: #6b7280;">${escapeHtml(task.task_id)}${task.who_due_to ? ` · For: ${escapeHtml(task.who_due_to)}` : ''}</p>
      </div>
      <div style="margin-top: 20px; text-align: center;">
        <a href="${APP_URL}/my-tasks?task=${task.id}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">View Details</a>
@@ -219,11 +220,11 @@ async function onTaskForceClosed(task: any, forceCloseRow: any) {
   for (const r of recipients.values()) {
     if (await isProfileOnline(r.id)) continue
     const html = emailWrap('Task Closed', '#22c55e',
-      `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${r.full_name}</strong>,</p>
-       <p style="margin: 0 0 16px; color: #374151;"><strong>${closerName}</strong> has closed the following task for everyone:</p>
+      `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${escapeHtml(r.full_name)}</strong>,</p>
+       <p style="margin: 0 0 16px; color: #374151;"><strong>${escapeHtml(closerName)}</strong> has closed the following task for everyone:</p>
        <div style="background: #f0fdf4; border-radius: 10px; padding: 16px; margin: 12px 0;">
-         <p style="margin: 0 0 4px; font-size: 16px; font-weight: 700; color: #111827;">✓ ${task.title}</p>
-         <p style="margin: 0; font-size: 13px; color: #6b7280;">${task.task_id}${task.who_due_to ? ` · For: ${task.who_due_to}` : ''}</p>
+         <p style="margin: 0 0 4px; font-size: 16px; font-weight: 700; color: #111827;">✓ ${escapeHtml(task.title)}</p>
+         <p style="margin: 0; font-size: 13px; color: #6b7280;">${escapeHtml(task.task_id)}${task.who_due_to ? ` · For: ${escapeHtml(task.who_due_to)}` : ''}</p>
        </div>
        <p style="margin: 0 0 16px; color: #374151; font-size: 14px;">No further action is required on this task.</p>
        <div style="margin-top: 20px; text-align: center;">

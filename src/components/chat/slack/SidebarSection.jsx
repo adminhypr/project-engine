@@ -71,13 +71,13 @@ export default function SidebarSection({
     'grid place-items-center w-5 h-5 rounded text-white/50 hover:text-white hover:bg-white/10 opacity-0 group-hover/sec:opacity-100 focus:opacity-100 focus:outline-none'
 
   return (
-    <div className="mb-2">
+    <div className="mt-4 first:mt-2 mb-1">
       <div className="group/sec relative flex items-center pr-2">
         <button
           type="button"
           onClick={toggle}
           aria-expanded={open}
-          className="flex-1 min-w-0 flex items-center gap-1 px-3 py-1 text-sidebar-hdr font-bold text-white/50 hover:text-white/80 select-none"
+          className="flex-1 min-w-0 flex items-center gap-1 px-3 py-0.5 text-sidebar-hdr font-bold text-white/55 hover:text-white/80 select-none"
         >
           {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
           <span className="truncate">{title}</span>
@@ -141,7 +141,7 @@ export default function SidebarSection({
           )}
         </div>
       </div>
-      {open && <div className="flex flex-col">{children}</div>}
+      {open && <div className="flex flex-col gap-px mt-0.5">{children}</div>}
     </div>
   )
 }
