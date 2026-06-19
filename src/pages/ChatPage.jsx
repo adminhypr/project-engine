@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useContactList } from '../hooks/useContactList'
 import SlackMessagePane from '../components/chat/slack/SlackMessagePane'
 import CreateGroupModal from '../components/chat/CreateGroupModal'
+import PreferencesModal from '../components/chat/slack/PreferencesModal'
 import WorkspaceRail from '../components/chat/slack/WorkspaceRail'
 import ChannelSidebar from '../components/chat/slack/ChannelSidebar'
 import QuickSwitcher from '../components/chat/slack/QuickSwitcher'
@@ -107,6 +108,10 @@ export default function ChatPage() {
     if (isExternal) return
     setCreateGroupOpen(true)
   }, [isExternal])
+
+  // Chat preferences modal (opened from the WorkspaceHeader "Preferences" item
+  // via ChannelSidebar → onPreferences).
+  const [prefsOpen, setPrefsOpen] = useState(false)
 
   // Rail nav selection is only 'home' | 'dms' now (the "+" create button owns
   // its own popover and calls onNewMessage / onNewChannel directly).
@@ -239,6 +244,7 @@ export default function ChatPage() {
           onCompose={isExternal ? undefined : openCreateGroup}
           onCreateChannel={isExternal ? undefined : openCreateGroup}
           onBackToApp={onBackToApp}
+          onPreferences={() => setPrefsOpen(true)}
           view={railActive}
           composeFocusSignal={composeFocusSignal}
         />
@@ -302,6 +308,12 @@ export default function ChatPage() {
           setCreateGroupOpen(false)
           openConversation(convId)
         }}
+      />
+
+      <PreferencesModal
+        open={prefsOpen}
+        onClose={() => setPrefsOpen(false)}
+        profileId={profile?.id}
       />
     </div>
   )
