@@ -448,7 +448,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
         </div>
       )}
       {showToolbar && (
-        <div className="flex items-center gap-0.5 px-2 pt-2" role="toolbar" aria-label="Text formatting">
+        <div className="flex flex-wrap items-center gap-0.5 px-2 pt-2" role="toolbar" aria-label="Text formatting">
           <FmtBtn icon={Bold} label="Bold" onClick={wrapWith('**')} />
           <FmtBtn icon={Italic} label="Italic" onClick={wrapWith('_')} />
           <FmtBtn icon={Strikethrough} label="Strikethrough" onClick={wrapWith('~~')} />
