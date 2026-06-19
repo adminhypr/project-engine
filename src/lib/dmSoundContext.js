@@ -19,6 +19,14 @@ export function setMaximizedConvId(id) {
   _maximizedId = id || null
 }
 
+// Current maximised/focused conversation id (or null when several widget panes
+// are shown side-by-side with none focused). Read by ConversationPane to gate
+// auto-mark-read: a pane is "actively viewed" when it's the focused one, or when
+// nothing is focused (side-by-side mode — every open pane is visible).
+export function getMaximizedConvId() {
+  return _maximizedId
+}
+
 // Is a conversation currently muted? Used by the desktop-notification path in
 // useDmRealtime (which shouldn't notify for muted threads).
 export function isConvMuted(convId) {

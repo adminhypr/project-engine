@@ -14,6 +14,12 @@ import AssignTodoFromChatModal from './AssignTodoFromChatModal'
 import ThreadPanel from './ThreadPanel'
 import { ReplyProvider, useReplyContext } from './ReplyContext'
 import SlackMessageList from './slack/SlackMessageList'
+import { getMaximizedConvId } from '../../lib/dmSoundContext'
+import {
+  shouldMarkReadOnOpen,
+  shouldMarkReadOnNewMessage,
+  isNewTail,
+} from '../../lib/markReadDecision'
 
 export default function ConversationPane({
   conversation,
@@ -90,9 +96,44 @@ export default function ConversationPane({
   }, [onOpenThread])
   const closeThread = onCloseThread || (() => {})
 
+  // Auto-mark-read is split into two effects so a conversation is only cleared
+  // when the user is actually viewing it (fixes bugs 2/3/4). The widget can show
+  // several panes at once, so beyond tab visibility/focus we also gate on this
+  // pane being the "actively viewed" one (Effect 2 only): it's the maximised
+  // pane, OR nothing is maximised (side-by-side mode — every open pane is
+  // visible). Minimised panes are not rendered, so they can't slip through.
+  const atBottomRef = useRef(true)
+  const onAtBottomChange = useCallback((b) => { atBottomRef.current = b }, [])
+  const prevLastIdRef = useRef(null)
+
+  // Effect 1 (OPEN/SWITCH): clear unread when this conversation opens/switches,
+  // but only if the tab is in front. (Opening a pane in front is an intentional
+  // read — the widget mounts a pane only when the user opened it.)
   useEffect(() => {
-    onMarkRead?.(conversation.id)
-  }, [conversation.id, messages.length, onMarkRead])
+    const visible = typeof document !== 'undefined' && document.visibilityState === 'visible'
+    if (shouldMarkReadOnOpen({ visible })) onMarkRead?.(conversation.id)
+    prevLastIdRef.current = null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversation.id])
+
+  // Effect 2 (NEW MESSAGE): mark read on a genuinely-new latest message only if
+  // visible + focused + at the bottom + this pane is the actively-viewed one. A
+  // "Load earlier" prepend grows messages.length but keeps the tail id, so
+  // isNewTail() excludes it.
+  const lastMessageId = messages.length > 0 ? messages[messages.length - 1]?.id ?? null : null
+  useEffect(() => {
+    const prevLastId = prevLastIdRef.current
+    prevLastIdRef.current = lastMessageId
+    if (!isNewTail(prevLastId, lastMessageId)) return
+    const visible = typeof document !== 'undefined' && document.visibilityState === 'visible'
+    const focused = typeof document !== 'undefined' && document.hasFocus()
+    const maxId = getMaximizedConvId()
+    const activelyViewed = maxId == null || maxId === conversation.id
+    if (shouldMarkReadOnNewMessage({ visible, focused, atBottom: atBottomRef.current, activelyViewed })) {
+      onMarkRead?.(conversation.id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastMessageId])
 
   // Jump-to-message: used by quoted replies. Try DOM first (fast path).
   // If the target isn't in the currently rendered window, keep paging back
@@ -241,6 +282,7 @@ export default function ConversationPane({
             profileLookup={profileLookup}
             openThread={openThread}
             scrollToMessage={scrollToMessage}
+            onAtBottomChange={onAtBottomChange}
           />
           {otherTyping && <TypingIndicator names={typingNames} />}
           <ChatComposer
@@ -293,6 +335,7 @@ function WidgetPaneBody({
   messages, myId, loading, hasMore, loadMore, deleteMessage,
   otherLastReadAt, lastReadAt, groupReaders, scrollRootRef,
   conversationId, profileLookup, openThread, scrollToMessage,
+  onAtBottomChange,
 }) {
   const { requestReply } = useReplyContext()
   return (
@@ -312,6 +355,7 @@ function WidgetPaneBody({
       onOpenThread={openThread}
       onReply={(message, targetName) => requestReply(message, targetName)}
       onJumpToReply={scrollToMessage}
+      onAtBottomChange={onAtBottomChange}
     />
   )
 }

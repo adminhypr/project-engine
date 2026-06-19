@@ -16,6 +16,11 @@ import ChatComposer from '../ChatComposer'
 import { ReplyProvider, useReplyContext } from '../ReplyContext'
 import ChannelHeader from './ChannelHeader'
 import SlackMessageList from './SlackMessageList'
+import {
+  shouldMarkReadOnOpen,
+  shouldMarkReadOnNewMessage,
+  isNewTail,
+} from '../../../lib/markReadDecision'
 import WallpaperPicker from './WallpaperPicker'
 import FilesPanel from './FilesPanel'
 import LinksPanel from './LinksPanel'
@@ -125,9 +130,42 @@ export default function SlackMessagePane({
   }, [onOpenThread])
   const closeThread = onCloseThread || (() => {})
 
+  // Auto-mark-read is split into two effects so a conversation is only cleared
+  // when the user is actually looking at it (fixes bugs 2/3/4). The full-page
+  // /chat pane renders exactly one conversation at a time, so there is no
+  // separate "actively viewed" signal to gate on beyond tab visibility/focus.
+  const atBottomRef = useRef(true)
+  const onAtBottomChange = useCallback((b) => { atBottomRef.current = b }, [])
+  const prevLastIdRef = useRef(null)
+
+  // Effect 1 (OPEN/SWITCH): clear unread when this conversation becomes active,
+  // but only if the tab is in front. Opening a conversation while looking at it
+  // is an intentional read.
   useEffect(() => {
-    onMarkRead?.(conversation.id)
-  }, [conversation.id, messages.length, onMarkRead])
+    const visible = typeof document !== 'undefined' && document.visibilityState === 'visible'
+    if (shouldMarkReadOnOpen({ visible })) onMarkRead?.(conversation.id)
+    // Reset the tail tracker for the new conversation so the first message it
+    // loads is not mistaken for a brand-new incoming message.
+    prevLastIdRef.current = null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversation.id])
+
+  // Effect 2 (NEW MESSAGE): when a genuinely-new latest message arrives, mark
+  // read ONLY if the user is visible + focused + scrolled to the bottom. A
+  // "Load earlier" prepend grows messages.length but keeps the same tail id, so
+  // isNewTail() excludes it.
+  const lastMessageId = messages.length > 0 ? messages[messages.length - 1]?.id ?? null : null
+  useEffect(() => {
+    const prevLastId = prevLastIdRef.current
+    prevLastIdRef.current = lastMessageId
+    if (!isNewTail(prevLastId, lastMessageId)) return
+    const visible = typeof document !== 'undefined' && document.visibilityState === 'visible'
+    const focused = typeof document !== 'undefined' && document.hasFocus()
+    if (shouldMarkReadOnNewMessage({ visible, focused, atBottom: atBottomRef.current })) {
+      onMarkRead?.(conversation.id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastMessageId])
 
   // Jump-to-message: same machinery as ConversationPane. DOM first, page back
   // through history until the target shows up or we exhaust it. scrollRootRef
@@ -254,6 +292,7 @@ export default function SlackMessagePane({
                 profileLookup={profileLookup}
                 openThread={openThread}
                 scrollToMessage={scrollToMessage}
+                onAtBottomChange={onAtBottomChange}
                 wallpaperBackground={resolvedBackground}
               />
               {otherTyping && <TypingIndicator names={typingNames} />}
@@ -320,7 +359,7 @@ function SlackPaneBody({
   messages, myId, loading, hasMore, loadMore, deleteMessage,
   otherLastReadAt, lastReadAt, groupReaders, scrollRootRef,
   conversationId, profileLookup, openThread, scrollToMessage,
-  wallpaperBackground,
+  onAtBottomChange, wallpaperBackground,
 }) {
   const { requestReply } = useReplyContext()
   return (
@@ -340,6 +379,7 @@ function SlackPaneBody({
       onOpenThread={openThread}
       onReply={(message, targetName) => requestReply(message, targetName)}
       onJumpToReply={scrollToMessage}
+      onAtBottomChange={onAtBottomChange}
       wallpaperBackground={wallpaperBackground}
     />
   )
