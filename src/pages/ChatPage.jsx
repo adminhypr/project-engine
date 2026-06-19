@@ -10,6 +10,7 @@ import ChannelSidebar from '../components/chat/slack/ChannelSidebar'
 import QuickSwitcher from '../components/chat/slack/QuickSwitcher'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { readLastOpened, writeLastOpened, resolveActiveConversation } from '../lib/chatPage'
+import { matchShortcut } from '../lib/chatShortcuts'
 
 // Dedicated full-viewport Slack-style chat takeover (/chat and
 // /chat/:conversationId). Composes the dark WorkspaceRail (68px) + dark
@@ -148,6 +149,45 @@ export default function ChatPage() {
   useEffect(() => { setThreadRoot(null) }, [conversationId])
   const openThread = useCallback((msg) => { if (msg) setThreadRoot(msg) }, [])
   const closeThread = useCallback(() => setThreadRoot(null), [])
+
+  // Global keyboard shortcuts for the chat takeover (design Task 4.3).
+  // matchShortcut() maps Cmd/Ctrl+K → 'quickSwitcher' and Escape → 'closePanel'.
+  //
+  // Cmd+K must work everywhere (including from inside the composer) and must
+  // preempt the browser default, so we always preventDefault + open the switcher.
+  //
+  // Escape is intentionally NOT hijacked while the user is typing in an
+  // input/textarea/contenteditable — Escape there should keep its native
+  // behaviour (blur/clear). The QuickSwitcher owns its own Escape via
+  // ModalWrapper's useEscapeToClose, so when it's open we let that handle the
+  // close and don't double-act here. Otherwise Escape closes an open thread.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      const action = matchShortcut(e)
+      if (action === 'quickSwitcher') {
+        e.preventDefault()
+        setSwitcherOpen(true)
+        return
+      }
+      if (action === 'closePanel') {
+        // Let the switcher's own Escape handler deal with closing it.
+        if (switcherOpen) return
+        const el = e.target
+        const typing = el && (
+          el.tagName === 'INPUT' ||
+          el.tagName === 'TEXTAREA' ||
+          el.isContentEditable
+        )
+        if (typing) return
+        if (threadRoot) {
+          e.preventDefault()
+          closeThread()
+        }
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [switcherOpen, threadRoot, closeThread])
 
   const isGroup = activeConv && (activeConv.kind === 'group' || activeConv.kind === 'hub')
   const online = activeConv && !isGroup ? !!presence?.get(activeConv.other_user_id)?.online : false
