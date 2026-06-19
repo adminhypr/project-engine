@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   shouldMarkReadOnOpen,
   shouldMarkReadOnNewMessage,
+  shouldMarkReadOnFocusReturn,
   isNewTail,
 } from '@/lib/markReadDecision'
 
@@ -37,6 +38,47 @@ describe('shouldMarkReadOnNewMessage', () => {
 
   it('defaults activelyViewed to true when the caller omits it (full-page pane)', () => {
     expect(shouldMarkReadOnNewMessage({ visible: true, focused: true, atBottom: true })).toBe(true)
+  })
+})
+
+describe('shouldMarkReadOnFocusReturn', () => {
+  const base = { visible: true, focused: true, atBottom: true, activelyViewed: true }
+
+  it('marks read only when visible AND focused AND at bottom AND actively viewed', () => {
+    expect(shouldMarkReadOnFocusReturn(base)).toBe(true)
+  })
+
+  it('does not mark read when the tab is still hidden (no spurious fire)', () => {
+    expect(shouldMarkReadOnFocusReturn({ ...base, visible: false })).toBe(false)
+  })
+
+  it('does not mark read when the window is unfocused', () => {
+    expect(shouldMarkReadOnFocusReturn({ ...base, focused: false })).toBe(false)
+  })
+
+  it('does not mark read when scrolled up (not at bottom)', () => {
+    expect(shouldMarkReadOnFocusReturn({ ...base, atBottom: false })).toBe(false)
+  })
+
+  it('does not mark read when the pane is not the actively-viewed one', () => {
+    expect(shouldMarkReadOnFocusReturn({ ...base, activelyViewed: false })).toBe(false)
+  })
+
+  it('defaults activelyViewed to true when the caller omits it (full-page pane)', () => {
+    expect(shouldMarkReadOnFocusReturn({ visible: true, focused: true, atBottom: true })).toBe(true)
+  })
+
+  it('uses the same predicate as shouldMarkReadOnNewMessage (cannot disagree)', () => {
+    const cases = [
+      { visible: true, focused: true, atBottom: true, activelyViewed: true },
+      { visible: false, focused: true, atBottom: true, activelyViewed: true },
+      { visible: true, focused: false, atBottom: true, activelyViewed: true },
+      { visible: true, focused: true, atBottom: false, activelyViewed: true },
+      { visible: true, focused: true, atBottom: true, activelyViewed: false },
+    ]
+    for (const c of cases) {
+      expect(shouldMarkReadOnFocusReturn(c)).toBe(shouldMarkReadOnNewMessage(c))
+    }
   })
 })
 

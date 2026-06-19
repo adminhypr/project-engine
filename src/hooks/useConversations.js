@@ -144,14 +144,20 @@ export function useConversations() {
   // Scoped to MY OWN reads (userId === profile.id): another user reading must
   // never affect my badge. Only the in-memory `unread` integer is reset — we do
   // NOT touch last_read_at, so the amber "New messages" snapshot logic is left
-  // intact. The `c.unread !== 0` guard makes this idempotent (no needless
-  // re-render) and the handler never emits, so there is no feedback loop.
+  // intact. When the target conversation is absent or already at 0 unread we
+  // return the SAME array reference so React skips re-rendering every consumer;
+  // the handler never emits, so there is no feedback loop.
   useEffect(() => {
     if (!profile?.id) return
     return onRead(({ conversationId, userId }) => {
       if (userId !== profile.id) return
-      setConversations(prev => prev.map(c =>
-        c.id === conversationId && c.unread !== 0 ? { ...c, unread: 0 } : c))
+      setConversations(prev => {
+        const idx = prev.findIndex(c => c.id === conversationId)
+        if (idx === -1 || prev[idx].unread === 0) return prev // no-op → same ref, no re-render
+        const next = prev.slice()
+        next[idx] = { ...next[idx], unread: 0 }
+        return next
+      })
     })
   }, [profile?.id])
 

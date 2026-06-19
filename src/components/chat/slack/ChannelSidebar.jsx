@@ -276,10 +276,13 @@ export default function ChannelSidebar({
   // `visibleDms` (which only carries the recent top-N bucket). A starred DM that
   // lives outside the recent bucket would otherwise never appear in the Starred
   // section at all (bug 5). We re-normalize each conversation row into the
-  // sidebar's DM shape and preserve the hidden-filter parity used elsewhere.
+  // sidebar's DM shape and preserve the hidden-filter parity used elsewhere:
+  // mirror visibleDms exactly — a hidden DM still REAPPEARS when it has unread,
+  // so a hidden+starred DM with unread isn't silently dropped.
   const starredDms = useMemo(
     () => (conversations || [])
-      .filter(c => c.kind === 'dm' && starredSet.has(c.id) && !hiddenSet.has(c.id))
+      .filter(c => c.kind === 'dm' && starredSet.has(c.id)
+        && (!hiddenSet.has(c.id) || (c.unread || 0) > 0))
       .map(c => normalizeDm({ profile: c.other_profile, conversation: c })),
     [conversations, starredSet, hiddenSet],
   )

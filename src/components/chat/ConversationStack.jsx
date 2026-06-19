@@ -153,6 +153,7 @@ export default function ConversationStack({
               onMarkRead={onMarkRead}
               onAssignTask={onAssignTask}
               isMaximized={isFocusedMaximized}
+              isActivePane={conv.id === focusedId}
               onToggleMaximize={onToggleMaximize}
               threadRoot={threadRoot}
               onOpenThread={(message) => onOpenThread?.(conv.id, message)}
@@ -179,6 +180,10 @@ export default function ConversationStack({
                       onMarkRead={onMarkRead}
                       onAssignTask={onAssignTask}
                       dragHandleProps={{ ...attributes, ...listeners }}
+                      // Side-by-side mode has no single focused pane (focusedId is
+                      // null here). Every visible pane is on screen, so treat each
+                      // as actively viewed — preserves the prior maxId==null gate.
+                      isActivePane
                       onToggleMaximize={onToggleMaximize}
                       threadRoot={threadRoot}
                       onOpenThread={(message) => onOpenThread?.(conv.id, message)}

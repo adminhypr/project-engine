@@ -19,6 +19,7 @@ import SlackMessageList from './SlackMessageList'
 import {
   shouldMarkReadOnOpen,
   shouldMarkReadOnNewMessage,
+  shouldMarkReadOnFocusReturn,
   isNewTail,
 } from '../../../lib/markReadDecision'
 import WallpaperPicker from './WallpaperPicker'
@@ -166,6 +167,29 @@ export default function SlackMessagePane({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastMessageId])
+
+  // Effect 3 (TAB REFOCUS): close the gap where a message arrived while the tab
+  // was hidden/blurred (Effect 2 correctly skipped it) and then the user returns
+  // to the tab WITHOUT a new message arriving. On the visible+focused transition,
+  // if scrolled to the bottom, clear unread — matching Slack. The full-page pane
+  // renders exactly one conversation, so it is always actively viewed. Gated
+  // identically to Effect 2 minus the new-message requirement, so it can't fire
+  // while the tab is still hidden/blurred.
+  useEffect(() => {
+    function maybeMarkRead() {
+      const visible = typeof document !== 'undefined' && document.visibilityState === 'visible'
+      const focused = typeof document !== 'undefined' && document.hasFocus()
+      if (shouldMarkReadOnFocusReturn({ visible, focused, atBottom: atBottomRef.current })) {
+        onMarkRead?.(conversation.id)
+      }
+    }
+    document.addEventListener('visibilitychange', maybeMarkRead)
+    window.addEventListener('focus', maybeMarkRead)
+    return () => {
+      document.removeEventListener('visibilitychange', maybeMarkRead)
+      window.removeEventListener('focus', maybeMarkRead)
+    }
+  }, [conversation.id, onMarkRead])
 
   // Jump-to-message: same machinery as ConversationPane. DOM first, page back
   // through history until the target shows up or we exhaust it. scrollRootRef

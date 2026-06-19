@@ -29,6 +29,17 @@ export function shouldMarkReadOnNewMessage({ visible, focused, atBottom, activel
   return !!visible && !!focused && !!atBottom && !!activelyViewed
 }
 
+// Should returning to a hidden/blurred tab mark the OPEN conversation read?
+// Closes a gap: a message arrived while the tab was hidden/blurred (so Effect 2
+// correctly did NOT mark read), then the user comes back to the tab WITHOUT a
+// new message arriving. This re-evaluates the same gate as Effect 2 minus the
+// new-message requirement — visible + focused + at the bottom + actively viewed.
+// Identical predicate to shouldMarkReadOnNewMessage so the two paths can never
+// disagree.
+export function shouldMarkReadOnFocusReturn({ visible, focused, atBottom, activelyViewed = true }) {
+  return !!visible && !!focused && !!atBottom && !!activelyViewed
+}
+
 // Distinguish a genuinely-new latest message (a new TAIL) from a "Load earlier"
 // prepend (older history added to the HEAD). Both grow messages.length, but only
 // a new tail should be eligible to mark read.

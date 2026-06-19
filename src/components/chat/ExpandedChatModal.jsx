@@ -174,6 +174,10 @@ export default function ExpandedChatModal({
                   onMinimize={clearActive}
                   onMarkRead={onMarkRead}
                   onAssignTask={onAssignTask}
+                  // The modal manages its OWN active conversation (activeConvId),
+                  // independent of the stack's maximized id. Gate auto-mark-read
+                  // on the conversation actually showing in the modal's right pane.
+                  isActivePane={activeConv.id === activeConvId}
                   threadRoot={threadState?.convId === activeConv.id ? threadState.rootMessage : null}
                   onOpenThread={(msg) => onOpenThread?.(activeConv.id, msg)}
                   onCloseThread={onCloseThread}
