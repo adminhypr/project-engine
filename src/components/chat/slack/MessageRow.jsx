@@ -11,6 +11,8 @@ import ChatTaskCard from '../ChatTaskCard'
 import ReactionPicker from '../ReactionPicker'
 import MessageReactions from '../MessageReactions'
 import SeenByAvatars from '../SeenByAvatars'
+import { useChatPrefs } from '../../../hooks/useChatPrefs'
+import { formatChatTime } from '../../../lib/formatTime'
 
 // One-click quick reaction shown directly in the hover toolbar (Slack puts
 // a small palette of common emoji here before the full picker).
@@ -20,33 +22,25 @@ const QUICK_EMOJI = '👍'
 // than the classic widget's light tint. Passed through to MessageReactions via
 // its optional `mineClassName` override (the component is not forked).
 const MINE_REACTION_CLASS =
-  'bg-brand-600 border-brand-600 text-white dark:bg-brand-500 dark:border-brand-500'
+  'bg-[var(--chat-accent,#4f46e5)] border-[var(--chat-accent,#4f46e5)] text-white'
 
-function formatTime(iso) {
-  try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
-  catch { return '' }
-}
-
-function formatLeadTime(iso) {
-  try { return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) }
-  catch { return '' }
-}
-
-// 36×36 rounded-square avatar (Slack convention — squares, not circles).
-function Avatar({ author }) {
+// Rounded-square avatar (Slack convention — squares, not circles). Comfortable
+// = 36px; compact = 28px (Slack Compact still shows a small avatar).
+function Avatar({ author, compact }) {
   const name = author?.full_name || author?.email || '?'
   const initial = name.charAt(0).toUpperCase()
+  const sizeCls = compact ? 'w-7 h-7' : 'w-9 h-9'
   return author?.avatar_url ? (
     <img
       src={author.avatar_url}
       alt={name}
       title={name}
-      className="w-9 h-9 rounded-lg object-cover shrink-0"
+      className={`${sizeCls} rounded-lg object-cover shrink-0`}
     />
   ) : (
     <div
       title={name}
-      className="w-9 h-9 rounded-lg bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-200 text-sm font-semibold flex items-center justify-center shrink-0"
+      className={`${sizeCls} rounded-lg bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-200 text-sm font-semibold flex items-center justify-center shrink-0`}
     >
       {initial}
     </div>
@@ -114,6 +108,14 @@ export default function MessageRow({
   const reactBtnRef = useRef(null)
   const PICKER_W = 248
 
+  // Presentational prefs (density + 12h/24h time). Read from the per-profile
+  // chat-prefs store keyed by the current user (myId). Defaults reproduce the
+  // current look (comfortable / 12h).
+  const [prefs] = useChatPrefs(myId)
+  const compact = prefs.density === 'compact'
+  const timeFormat = prefs.timeFormat
+  const fmtTime = (iso) => formatChatTime(iso, timeFormat)
+
   const togglePicker = useCallback(() => {
     setPickerOpen(open => {
       if (open) return false
@@ -155,7 +157,7 @@ export default function MessageRow({
           </div>
           <div className="min-w-0">
             <div className="text-sm font-medium text-slate-800 dark:text-slate-200">{who} started a call</div>
-            <div className="text-[11px] text-slate-400">{formatTime(message.created_at)}</div>
+            <div className="text-[11px] text-slate-400">{fmtTime(message.created_at)}</div>
           </div>
           {url && (
             <a
@@ -186,9 +188,9 @@ export default function MessageRow({
 
   return (
     <div
-      className={`group/message relative flex py-1 pl-5 pr-10 hover:bg-slate-50 dark:hover:bg-white/5 ${
-        mentionsMe ? 'border-l-2 border-amber-400 bg-amber-400/10' : ''
-      }`}
+      className={`group/message relative flex pl-5 pr-10 hover:bg-slate-50 dark:hover:bg-white/5 ${
+        compact ? 'py-0.5' : 'py-1'
+      } ${mentionsMe ? 'border-l-2 border-amber-400 bg-amber-400/10' : ''}`}
       data-message-id={message.id}
     >
       {/* Reaction picker (portal — pane is overflow-hidden, would clip) */}
@@ -203,12 +205,12 @@ export default function MessageRow({
       )}
 
       {/* Avatar gutter — avatar on lead rows, hover-only timestamp otherwise */}
-      <div className="w-9 shrink-0 mr-2 flex flex-col items-center">
+      <div className={`${compact ? 'w-7 mr-2' : 'w-9 mr-2'} shrink-0 flex flex-col items-center`}>
         {isLead ? (
-          <Avatar author={message.author} />
+          <Avatar author={message.author} compact={compact} />
         ) : (
           <span className="hidden group-hover/message:block absolute left-5 text-timestamp text-slate-400 leading-[22px] pt-px">
-            {formatTime(message.created_at)}
+            {fmtTime(message.created_at)}
           </span>
         )}
       </div>
@@ -220,7 +222,7 @@ export default function MessageRow({
             <span className="text-[15px] font-bold text-slate-900 dark:text-white leading-tight">
               {message.author?.full_name || 'Unknown'}
             </span>
-            <span className="text-timestamp text-slate-400">{formatLeadTime(message.created_at)}</span>
+            <span className="text-timestamp text-slate-400">{fmtTime(message.created_at)}</span>
           </div>
         )}
 
@@ -265,7 +267,7 @@ export default function MessageRow({
             </span>
             {threadInfo.lastReplyAt && (
               <span className="text-timestamp text-slate-400">
-                Last reply {formatTime(threadInfo.lastReplyAt)}
+                Last reply {fmtTime(threadInfo.lastReplyAt)}
               </span>
             )}
           </button>

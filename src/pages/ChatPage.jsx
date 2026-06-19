@@ -12,6 +12,8 @@ import QuickSwitcher from '../components/chat/slack/QuickSwitcher'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { readLastOpened, writeLastOpened, resolveActiveConversation } from '../lib/chatPage'
 import { matchShortcut } from '../lib/chatShortcuts'
+import { useChatPrefs } from '../hooks/useChatPrefs'
+import { sidebarThemeVars } from '../lib/chatPrefs'
 
 // Dedicated full-viewport Slack-style chat takeover (/chat and
 // /chat/:conversationId). Composes the dark WorkspaceRail (68px) + dark
@@ -26,6 +28,13 @@ export default function ChatPage() {
   const { profile, isExternal } = useAuth()
   const navigate = useNavigate()
   const { conversationId } = useParams()
+
+  // Chat preferences (per profile, localStorage). The sidebar-theme preset is
+  // applied as CSS vars on the .slack-chat root so the sidebar/rail/accent
+  // chrome (which reads var(--chat-*) with the static slack/brand tokens as
+  // fallbacks) recolors live. The default preset's hexes equal the current
+  // tokens, so the default look is unchanged.
+  const [chatPrefs] = useChatPrefs(profile?.id)
 
   // SINGLE useContactList instance for the whole /chat takeover. The search
   // query lives here (lifted from ChannelSidebar) and is fed to the hook so its
@@ -214,7 +223,10 @@ export default function ChatPage() {
   const mainVisibility = conversationId ? 'flex' : 'hidden md:flex'
 
   return (
-    <div className="slack-chat h-screen w-screen flex overflow-hidden bg-slack-sidebar">
+    <div
+      className="slack-chat h-screen w-screen flex overflow-hidden bg-[var(--chat-sidebar,#1a1d24)]"
+      style={sidebarThemeVars(chatPrefs.sidebarTheme)}
+    >
       <div className={`${railVisibility} shrink-0`}>
         <WorkspaceRail
           active={railActive}

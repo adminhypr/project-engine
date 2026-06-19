@@ -36,7 +36,7 @@ export default function SidebarRow({
       aria-current={active ? 'true' : undefined}
       className={`group/row relative h-7 w-full px-2 mx-1 rounded-md flex items-center gap-2 cursor-pointer text-left ${
         active
-          ? 'bg-slack-item-active text-white'
+          ? 'bg-[var(--chat-accent,#4f46e5)] text-white'
           : unread
             ? 'text-white hover:bg-white/[0.06]'
             : 'text-white/60 hover:bg-white/[0.06]'

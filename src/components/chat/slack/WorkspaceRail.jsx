@@ -72,11 +72,13 @@ export default function WorkspaceRail({
 
   return (
     <nav
-      className="bg-slack-sidebar-2 w-[68px] h-full flex flex-col items-center py-3 gap-1 shrink-0"
+      className="bg-[var(--chat-sidebar-2,#15171d)] w-[68px] h-full flex flex-col items-center py-3 gap-1 shrink-0"
       aria-label="Workspace"
     >
       {/* Workspace icon */}
-      <div className="w-9 h-9 rounded-lg bg-brand-600 text-white font-black grid place-items-center mb-2 shadow-card">
+      <div
+        className="w-9 h-9 rounded-lg text-white font-black grid place-items-center mb-2 shadow-card bg-[var(--chat-accent,#4f46e5)]"
+      >
         PE
       </div>
 

@@ -40,6 +40,9 @@ export default function ExpandedChatModal({
   threadState,
   onOpenThread,
   onCloseThread,
+  // Sidebar-theme CSS vars (--chat-accent etc.) so the composer send button and
+  // your-reaction pill in this modal match the active preset.
+  themeVars,
 }) {
   // Close on Esc.
   useEffect(() => {
@@ -105,7 +108,7 @@ export default function ExpandedChatModal({
           exit={{ opacity: 0, y: 8,    scale: 0.98 }}
           transition={{ duration: 0.18, ease: 'easeOut' }}
           className="bg-white dark:bg-dark-card rounded-2xl shadow-elevated w-full max-w-6xl flex flex-col overflow-hidden"
-          style={{ height: 'min(86vh, 860px)' }}
+          style={{ height: 'min(86vh, 860px)', ...(themeVars || {}) }}
           onClick={e => e.stopPropagation()}
         >
           {/* Header */}

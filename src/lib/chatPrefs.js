@@ -30,6 +30,19 @@ export const SIDEBAR_THEMES = Object.freeze({
   sunset: { label: 'Sunset', sidebar: '#3a1a12', sidebar2: '#2e140d', accent: '#c2410c' },
 })
 
+// Build the inline `style` object that sets the 3 sidebar-theme CSS vars for a
+// given sidebarTheme key. Falls back to the `default` preset for unknown keys.
+// The chat chrome reads these vars (with the static slack/brand tokens as
+// fallbacks) so the `default` preset reproduces the current look exactly.
+export function sidebarThemeVars(sidebarTheme) {
+  const t = SIDEBAR_THEMES[sidebarTheme] || SIDEBAR_THEMES.default
+  return {
+    '--chat-sidebar': t.sidebar,
+    '--chat-sidebar-2': t.sidebar2,
+    '--chat-accent': t.accent,
+  }
+}
+
 function keyFor(profileId) {
   return `${PREFIX}${profileId}`
 }

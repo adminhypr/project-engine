@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { isExternal } from '../../lib/roleHelpers'
+import { useChatPrefs } from '../../hooks/useChatPrefs'
+import { sidebarThemeVars } from '../../lib/chatPrefs'
 import { useContactList } from '../../hooks/useContactList'
 import { totalUnread as sumUnread } from '../../lib/dmUnread'
 import { readWidgetState, writeWidgetState } from '../../lib/dmWidgetStorage'
@@ -18,6 +20,11 @@ import ExpandedChatModal from './ExpandedChatModal'
 
 export default function ChatWidget() {
   const { profile } = useAuth()
+  // Sidebar-theme accent var so the shared MessageRow ("your reaction" pill) and
+  // ChatComposer (send button) recolor in the floating widget too, matching the
+  // /chat takeover. The default preset keeps the current indigo.
+  const [chatPrefs] = useChatPrefs(profile?.id)
+  const themeVars = sidebarThemeVars(chatPrefs.sidebarTheme)
   const [state, setState] = useState(() => readWidgetState(profile?.id))
   const [query, setQuery] = useState('')
   const [assignForConversation, setAssignForConversation] = useState(null)
@@ -245,7 +252,7 @@ export default function ChatWidget() {
       {/* Bottom-right widget — hidden while in full-expanded focus mode so we
           don't render the same conversation in two places. */}
       {!fullExpanded && (
-        <div className="fixed bottom-4 right-4 z-40 flex items-end gap-3">
+        <div className="fixed bottom-4 right-4 z-40 flex items-end gap-3" style={themeVars}>
           <ConversationStack
             openConversationIds={state.openConversationIds}
             minimizedIds={state.minimizedIds}
@@ -311,6 +318,7 @@ export default function ChatWidget() {
           onOpenThread={openThread}
           onCloseThread={closeThread}
           onClose={() => setFullExpanded(false)}
+          themeVars={themeVars}
         />
       )}
 

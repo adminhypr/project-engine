@@ -21,6 +21,8 @@ import MentionPopover from './MentionPopover'
 import { parseMentionQuery, insertMention } from '../../lib/mentions'
 import { useAuth } from '../../hooks/useAuth'
 import { readDraft, writeDraft, clearDraft } from '../../lib/draftStorage'
+import { useChatPrefs } from '../../hooks/useChatPrefs'
+import { getPrefs } from '../../lib/chatPrefs'
 
 const MAX_LEN = 4000
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -51,6 +53,9 @@ const MAX_MENTION_MATCHES = 6
 export default function ChatComposer({ conversationId, onSend, onTyping, disabled, mentionablePeople = [], threadRootId = null, placeholder = 'Type a message…' }) {
   const { profile } = useAuth()
   const profileId = profile?.id
+  // Chat prefs: toolbarDefault seeds the initial toolbar visibility (still
+  // togglable per session); sendOnEnter switches Enter↔Cmd/Ctrl+Enter send.
+  const [prefs] = useChatPrefs(profileId)
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [images, setImages] = useState([])
@@ -67,7 +72,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
   const [pickedMentions, setPickedMentions] = useState([])
   const [mentionQuery, setMentionQuery] = useState(null) // { query, startIndex } | null
   const [mentionIdx, setMentionIdx] = useState(0)
-  const [showToolbar, setShowToolbar] = useState(false)
+  const [showToolbar, setShowToolbar] = useState(() => getPrefs(profileId).toolbarDefault === true)
   const { target: replyTarget, clearReply, requestReply } = useReplyContext()
   const textareaRef = useRef(null)
   // Draft restore guard — we only hydrate once per conversation so in-flight
@@ -293,9 +298,22 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
         return
       }
     }
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      submit()
+    if (e.key === 'Enter') {
+      const withMod = e.metaKey || e.ctrlKey
+      const sendOnEnter = prefs.sendOnEnter !== false
+      if (sendOnEnter) {
+        // Enter sends; Shift+Enter (or modifier) inserts a newline.
+        if (!e.shiftKey && !withMod) {
+          e.preventDefault()
+          submit()
+        }
+      } else {
+        // Cmd/Ctrl+Enter sends; plain Enter inserts a newline.
+        if (withMod) {
+          e.preventDefault()
+          submit()
+        }
+      }
     } else if (e.key === 'Escape' && replyTarget) {
       e.preventDefault()
       clearReply()
@@ -377,6 +395,8 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
     e.preventDefault()
     for (const file of fileItems) handleIncomingFile(file, true)
   }
+
+  const sendDisabled = busy || disabled || (!value.trim() && images.length === 0 && attachments.length === 0)
 
   return (
     <div
@@ -520,8 +540,11 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
         <button
           type="button"
           onClick={submit}
-          disabled={busy || disabled || (!value.trim() && images.length === 0 && attachments.length === 0)}
-          className="w-9 h-9 rounded-full bg-brand-500 hover:bg-brand-600 text-white disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center justify-center"
+          disabled={sendDisabled}
+          style={sendDisabled ? undefined : { backgroundColor: 'var(--chat-accent, #6366f1)' }}
+          className={`w-9 h-9 rounded-full text-white flex items-center justify-center ${
+            sendDisabled ? 'bg-slate-300 cursor-not-allowed' : 'hover:brightness-110'
+          }`}
           aria-label={busy ? 'Sending…' : 'Send'}
         >
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}

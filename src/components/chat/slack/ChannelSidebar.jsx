@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import { useAuth } from '../../../hooks/useAuth'
+import { useChatPrefs } from '../../../hooks/useChatPrefs'
 import { buildSidebarSections } from '../../../lib/slackSidebar'
 import { readHiddenDms, hideDm, unhideDm } from '../../../lib/hiddenDms'
 import { groupDisplayName } from '../../../lib/groupConversations'
@@ -75,11 +76,13 @@ export default function ChannelSidebar({
   }, [])
   const { profile } = useAuth()
   const profileId = profile?.id || null
+  const [chatPrefs] = useChatPrefs(profileId)
 
   // When the user is searching, surface ALL people (teammates + company) so they
   // can start a brand-new DM. With an empty query only real conversations show —
-  // Slack's "search + compose" model.
-  const includeAllPeople = (query || '').trim().length > 0
+  // Slack's "search + compose" model — UNLESS the user set the DM list to
+  // "Everyone" (dmListShowAll), in which case all people show even when empty.
+  const includeAllPeople = (query || '').trim().length > 0 || chatPrefs.dmListShowAll === true
   const { channels, directMessages, taskChats } = useMemo(
     () => buildSidebarSections({ sections, groups, campfires, tasks }, { includeAllPeople }),
     [sections, groups, campfires, tasks, includeAllPeople],
@@ -145,7 +148,7 @@ export default function ChannelSidebar({
   }, [createOrOpen, onSelectConversation])
 
   return (
-    <aside className="w-[260px] shrink-0 h-full flex flex-col bg-slack-sidebar slack-chat">
+    <aside className="w-[260px] shrink-0 h-full flex flex-col bg-[var(--chat-sidebar,#1a1d24)] slack-chat">
       <WorkspaceHeader
         onCompose={onCompose}
         onBackToApp={onBackToApp}

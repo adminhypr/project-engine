@@ -19,6 +19,12 @@ export function setMaximizedConvId(id) {
   _maximizedId = id || null
 }
 
+// Is a conversation currently muted? Used by the desktop-notification path in
+// useDmRealtime (which shouldn't notify for muted threads).
+export function isConvMuted(convId) {
+  return !!convId && _muted.has(convId)
+}
+
 export function shouldPlaySoundFor(convId) {
   if (!convId) return true
   if (_muted.has(convId)) return false
