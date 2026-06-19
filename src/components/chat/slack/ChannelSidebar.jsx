@@ -220,6 +220,7 @@ export default function ChannelSidebar({
       kind="channel"
       label={groupDisplayName(c)}
       unread={(c.unread || 0) > 0}
+      unreadCount={c.unread || 0}
       active={c.id === selectedId}
       onClick={() => selectById(c.id)}
       starred={starredSet.has(c.id)}
@@ -236,6 +237,7 @@ export default function ChannelSidebar({
       online={!!presence.get(dm.profileId)?.online}
       status={presence.get(dm.profileId)?.status}
       unread={(dm.conversation?.unread || 0) > 0}
+      unreadCount={dm.conversation?.unread || 0}
       active={!!dm.conversationId && dm.conversationId === selectedId}
       onClick={() => selectDm(dm)}
       onHide={dm.conversationId ? () => onHideDm(dm.conversationId) : undefined}
@@ -250,6 +252,7 @@ export default function ChannelSidebar({
       kind="task"
       label={t.title || 'Task'}
       unread={(t.unread || 0) > 0}
+      unreadCount={t.unread || 0}
       active={t.id === selectedId}
       onClick={() => selectById(t.id)}
       starred={starredSet.has(t.id)}

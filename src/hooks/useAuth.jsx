@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useDmRealtime } from './useDmRealtime'
 import { isAgent, isClient, isExternal } from '../lib/roleHelpers'
 import { getStoredActiveTeamId, setStoredActiveTeamId, pickDefaultTeam } from '../lib/activeTeamStorage'
+import { useUnreadTabBadge } from './useUnreadTabBadge'
 
 const AuthContext = createContext(null)
 
@@ -369,7 +370,19 @@ export function AuthProvider({ children }) {
     isManagerForTeam, activeTeamId,
   ])
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider value={value}>
+      {profile?.id && <UnreadTabBadge />}
+      {children}
+    </AuthContext.Provider>
+  )
+}
+
+// Mounted once inside the provider (so it can read useAuth via useConversations).
+// Drives the browser-tab unread title prefix + favicon dot globally.
+function UnreadTabBadge() {
+  useUnreadTabBadge()
+  return null
 }
 
 export function useAuth() {

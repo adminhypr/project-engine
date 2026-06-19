@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Send, X, CornerUpLeft, Loader2, Paperclip, FileText,
   Bold, Italic, Strikethrough, Link as LinkIcon, ListOrdered, List,
-  Quote, Code, SquareCode, Type, Film,
+  Quote, Code, SquareCode, Type, Film, Smile, AtSign,
 } from 'lucide-react'
 import GifPicker from './GifPicker'
+import EmojiPicker from './EmojiPicker'
 import { giphyEnabled } from '../../lib/giphy'
 import { supabase } from '../../lib/supabase'
 import { showToast } from '../ui'
@@ -75,7 +76,11 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
   const [mentionQuery, setMentionQuery] = useState(null) // { query, startIndex } | null
   const [mentionIdx, setMentionIdx] = useState(0)
   const [showToolbar, setShowToolbar] = useState(() => getPrefs(profileId).toolbarDefault === true)
-  const [gifOpen, setGifOpen] = useState(false)
+  // Only one anchored popover open at a time ('gif' | 'emoji' | null) so the
+  // GIF and emoji pickers never overlap above the composer.
+  const [openPopover, setOpenPopover] = useState(null)
+  const gifOpen = openPopover === 'gif'
+  const emojiOpen = openPopover === 'emoji'
   const { target: replyTarget, clearReply, requestReply } = useReplyContext()
   const textareaRef = useRef(null)
   // Draft restore guard — we only hydrate once per conversation so in-flight
@@ -166,6 +171,47 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
       if (!textareaRef.current) return
       textareaRef.current.focus()
       textareaRef.current.setSelectionRange(newCursorPosition, newCursorPosition)
+    })
+  }
+
+  // Insert an emoji char at the current caret (replacing any selection),
+  // respecting MAX_LEN, and restore the caret AFTER the inserted glyph.
+  // Mirrors the rAF setSelectionRange pattern used by pickMention/applyFormat.
+  function insertEmoji(char) {
+    const el = textareaRef.current
+    const start = el?.selectionStart ?? value.length
+    const end = el?.selectionEnd ?? value.length
+    const next = (value.slice(0, start) + char + value.slice(end)).slice(0, MAX_LEN)
+    setValue(next)
+    const caret = Math.min(start + char.length, MAX_LEN)
+    requestAnimationFrame(() => {
+      const node = textareaRef.current
+      if (!node) return
+      node.focus()
+      node.setSelectionRange(caret, caret)
+    })
+  }
+
+  // Insert a bare "@" at the caret to kick off the existing mention flow. Add a
+  // leading space if the preceding char isn't whitespace/start so we don't glue
+  // onto a word. After inserting, point the caret right after the "@" and prime
+  // the mention query so MentionPopover opens immediately (no extra keystroke).
+  function insertMentionTrigger() {
+    const el = textareaRef.current
+    const start = el?.selectionStart ?? value.length
+    const end = el?.selectionEnd ?? value.length
+    const prev = start > 0 ? value[start - 1] : ''
+    const needsSpace = start > 0 && !/\s/.test(prev)
+    const insert = (needsSpace ? ' @' : '@')
+    const next = (value.slice(0, start) + insert + value.slice(end)).slice(0, MAX_LEN)
+    setValue(next)
+    const caret = Math.min(start + insert.length, MAX_LEN)
+    requestAnimationFrame(() => {
+      const node = textareaRef.current
+      if (!node) return
+      node.focus()
+      node.setSelectionRange(caret, caret)
+      refreshMentionQuery(next, caret)
     })
   }
 
@@ -552,12 +598,40 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
         >
           <Type className="w-4 h-4" />
         </button>
+        <EmojiPicker
+          open={emojiOpen}
+          onClose={() => setOpenPopover(null)}
+          onPick={insertEmoji}
+        />
+        <button
+          type="button"
+          onClick={() => setOpenPopover(p => (p === 'emoji' ? null : 'emoji'))}
+          disabled={busy || disabled}
+          aria-label="Insert emoji"
+          aria-pressed={emojiOpen}
+          title="Insert emoji"
+          className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40 ${emojiOpen ? 'text-brand-600 dark:text-brand-400 bg-slate-100 dark:bg-dark-hover' : 'text-slate-400 hover:text-brand-600 dark:hover:text-brand-400'}`}
+        >
+          <Smile className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          // Don't steal the textarea selection before insertMentionTrigger reads it.
+          onMouseDown={e => e.preventDefault()}
+          onClick={insertMentionTrigger}
+          disabled={busy || disabled}
+          aria-label="Mention someone"
+          title="Mention someone"
+          className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40"
+        >
+          <AtSign className="w-4 h-4" />
+        </button>
         {giphyEnabled && (
           <>
-            <GifPicker open={gifOpen} onClose={() => setGifOpen(false)} onSelect={handleGifSelect} />
+            <GifPicker open={gifOpen} onClose={() => setOpenPopover(null)} onSelect={handleGifSelect} />
             <button
               type="button"
-              onClick={() => setGifOpen(v => !v)}
+              onClick={() => setOpenPopover(p => (p === 'gif' ? null : 'gif'))}
               disabled={busy || disabled}
               aria-label="Send a GIF"
               aria-pressed={gifOpen}

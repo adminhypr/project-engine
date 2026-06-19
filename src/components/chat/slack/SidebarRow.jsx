@@ -13,7 +13,11 @@ import PresenceDot from '../PresenceDot'
 //                  avatar (Slack style) with the presence dot overlaid on its
 //                  bottom-right corner instead of a bare presence dot.
 //   unread       — boolean; bold + bright white when true
-//   mentionCount — number; renders a red pill badge when > 0
+//   unreadCount  — number; renders a red count pill when > 0 (Slack-style
+//                  per-conversation unread badge, driven by the real unread
+//                  count). Shows "99+" past 99.
+//   mentionCount — number; renders a red pill badge when > 0 (takes precedence
+//                  over unreadCount in the shared badge slot when both > 0)
 //   active       — boolean; brand highlight
 //   onClick      — row click
 //   onHide       — optional; when provided, a hover-only "×" appears on the
@@ -64,6 +68,7 @@ export default function SidebarRow({
   status,
   profile,
   unread = false,
+  unreadCount = 0,
   mentionCount = 0,
   active = false,
   onClick,
@@ -113,15 +118,23 @@ export default function SidebarRow({
           by side without overlap. The mention badge hides on hover when there
           are actions, so the buttons take the space (Slack parity). */}
       <span className="ml-auto shrink-0 flex items-center gap-0.5">
-        {mentionCount > 0 && (
-          <span
-            className={`min-w-[18px] h-[18px] px-1.5 rounded-full bg-slack-mention text-white text-[12px] font-bold grid place-items-center ${
-              (onToggleStar || onHide) ? 'group-hover/row:hidden' : ''
-            }`}
-          >
-            {mentionCount > 99 ? '99+' : mentionCount}
-          </span>
-        )}
+        {(() => {
+          // Mentions take visual precedence (slack-mention color); otherwise a
+          // plain red unread count pill. Same slot → hides on hover when row
+          // actions (star/×) are present, so the buttons take the space.
+          const badgeValue = mentionCount > 0 ? mentionCount : unreadCount
+          if (badgeValue <= 0) return null
+          const isMention = mentionCount > 0
+          return (
+            <span
+              className={`min-w-[18px] h-[18px] px-1.5 rounded-full text-white text-[12px] font-bold grid place-items-center ${
+                isMention ? 'bg-slack-mention' : 'bg-red-500'
+              } ${(onToggleStar || onHide) ? 'group-hover/row:hidden' : ''}`}
+            >
+              {badgeValue > 99 ? '99+' : badgeValue}
+            </span>
+          )
+        })()}
 
         {onToggleStar && (
           <button
