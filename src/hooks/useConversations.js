@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, useId } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { showToast } from '../components/ui'
@@ -88,6 +88,7 @@ async function fetchConversationsForUser(userId) {
 
 export function useConversations() {
   const { profile } = useAuth()
+  const instanceId = useId()
   const [conversations, setConversations] = useState([])
   const [loading, setLoading] = useState(true)
   const convsRef = useRef([])
@@ -153,8 +154,13 @@ export function useConversations() {
   useEffect(() => {
     if (!profile?.id) return
     if (taskConvCount === 0) return
+    // Per-INSTANCE channel name (instanceId). Multiple useConversations can be
+    // mounted at once (NotificationBell, ChatWidget, the /chat sidebar, the
+    // global unread-tab-badge). A shared channel topic meant one instance's
+    // unmount `removeChannel` tore down the others' subscription. A unique
+    // suffix per instance isolates them.
     const ch = supabase
-      .channel(`tasks-for-conversations-${profile.id}`)
+      .channel(`tasks-for-conversations-${profile.id}-${instanceId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'tasks' },
@@ -177,7 +183,7 @@ export function useConversations() {
       )
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [profile?.id, taskConvCount, refetch])
+  }, [profile?.id, taskConvCount, refetch, instanceId])
 
   const createOrOpen = useCallback(async (otherUserId) => {
     if (!profile?.id || !otherUserId) return null
