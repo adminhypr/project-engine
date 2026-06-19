@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { MessageCircle, ArrowLeft } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useContactList } from '../hooks/useContactList'
-import ConversationPane from '../components/chat/ConversationPane'
+import SlackMessagePane from '../components/chat/slack/SlackMessagePane'
 import CreateGroupModal from '../components/chat/CreateGroupModal'
 import WorkspaceRail from '../components/chat/slack/WorkspaceRail'
 import ChannelSidebar from '../components/chat/slack/ChannelSidebar'
@@ -171,15 +171,15 @@ export default function ChatPage() {
               <ArrowLeft className="w-4 h-4" /> All conversations
             </button>
             <div className="flex-1 min-h-0 flex">
-              <ConversationPane
+              <SlackMessagePane
                 conversation={activeConv}
                 online={online}
                 onMarkRead={markRead}
                 onGroupChanged={refetch}
+                lastReadAt={activeConv.last_read_at}
                 threadRoot={threadRoot}
                 onOpenThread={openThread}
                 onCloseThread={closeThread}
-                fullPage
               />
             </div>
           </>
