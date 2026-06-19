@@ -1,3 +1,4 @@
+import { X } from 'lucide-react'
 import PresenceDot from '../PresenceDot'
 
 // A single Slack-style sidebar row. Pure presentation.
@@ -10,6 +11,9 @@ import PresenceDot from '../PresenceDot'
 //   mentionCount — number; renders a red pill badge when > 0
 //   active       — boolean; brand highlight
 //   onClick      — row click
+//   onHide       — optional; when provided, a hover-only "×" appears on the
+//                  right edge that calls onHide() (used to close a DM from the
+//                  sidebar). Click is stopPropagation'd so it doesn't open the row.
 
 export default function SidebarRow({
   label,
@@ -19,13 +23,18 @@ export default function SidebarRow({
   mentionCount = 0,
   active = false,
   onClick,
+  onHide,
 }) {
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.() }
+      }}
       aria-current={active ? 'true' : undefined}
-      className={`h-7 w-full px-2 mx-1 rounded-md flex items-center gap-2 cursor-pointer text-left ${
+      className={`group/row relative h-7 w-full px-2 mx-1 rounded-md flex items-center gap-2 cursor-pointer text-left ${
         active
           ? 'bg-slack-item-active text-white'
           : unread
@@ -51,6 +60,18 @@ export default function SidebarRow({
           {mentionCount > 99 ? '99+' : mentionCount}
         </span>
       )}
-    </button>
+
+      {onHide && (
+        <button
+          type="button"
+          aria-label={`Close ${label || 'conversation'}`}
+          title="Close"
+          onClick={(e) => { e.stopPropagation(); onHide() }}
+          className="ml-auto shrink-0 grid place-items-center w-5 h-5 rounded text-white/50 hover:text-white hover:bg-white/10 opacity-0 group-hover/row:opacity-100 focus:opacity-100 focus:outline-none"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
   )
 }

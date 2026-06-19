@@ -1,6 +1,8 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
+import { useAuth } from '../../../hooks/useAuth'
 import { buildSidebarSections } from '../../../lib/slackSidebar'
+import { readHiddenDms, hideDm, unhideDm } from '../../../lib/hiddenDms'
 import { groupDisplayName } from '../../../lib/groupConversations'
 import { Spinner } from '../../ui/index'
 import WorkspaceHeader from './WorkspaceHeader'
@@ -46,6 +48,9 @@ export default function ChannelSidebar({
   onInvite,
   onPreferences,
 }) {
+  const { profile } = useAuth()
+  const profileId = profile?.id || null
+
   // When the user is searching, surface ALL people (teammates + company) so they
   // can start a brand-new DM. With an empty query only real conversations show —
   // Slack's "search + compose" model.
@@ -54,6 +59,48 @@ export default function ChannelSidebar({
     () => buildSidebarSections({ sections, groups, campfires, tasks }, { includeAllPeople }),
     [sections, groups, campfires, tasks, includeAllPeople],
   )
+
+  // Hidden / closed DMs (localStorage, per profile, no DB). A hidden DM is
+  // filtered out of the list UNLESS it has unread (a new message arrived) or
+  // it's the currently-open conversation (it was reopened) — in which case it
+  // reappears AND is un-hidden so it stays visible going forward.
+  const [hiddenVersion, setHiddenVersion] = useState(0)
+  const hiddenSet = useMemo(
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    () => new Set(readHiddenDms(profileId)),
+    [profileId, hiddenVersion],
+  )
+
+  const onHideDm = useCallback((convId) => {
+    if (!convId || !profileId) return
+    hideDm(profileId, convId)
+    setHiddenVersion(v => v + 1)
+  }, [profileId])
+
+  const visibleDms = useMemo(() => {
+    return directMessages.filter((dm) => {
+      const convId = dm.conversationId
+      if (!convId) return true // conversation-less search candidates are never hidden
+      if (!hiddenSet.has(convId)) return true
+      const reappear = (dm.conversation?.unread || 0) > 0 || convId === selectedId
+      return reappear
+    })
+  }, [directMessages, hiddenSet, selectedId])
+
+  // Un-hide any DM that has reappeared (unread/reopened) so it stays visible
+  // going forward — keeps the localStorage set in sync with what's shown.
+  const reappearedKey = useMemo(
+    () => visibleDms
+      .filter(dm => dm.conversationId && hiddenSet.has(dm.conversationId))
+      .map(dm => dm.conversationId)
+      .join(','),
+    [visibleDms, hiddenSet],
+  )
+  useEffect(() => {
+    if (!reappearedKey || !profileId) return
+    reappearedKey.split(',').forEach(convId => unhideDm(profileId, convId))
+    setHiddenVersion(v => v + 1)
+  }, [reappearedKey, profileId])
 
   // Open a channel/group/campfire/task row — always by conversation id.
   const selectById = useCallback((convId) => {
@@ -118,10 +165,10 @@ export default function ChannelSidebar({
             </SidebarSection>
 
             <SidebarSection title="Direct messages">
-              {directMessages.length === 0 ? (
+              {visibleDms.length === 0 ? (
                 <p className="px-3 py-1 text-[13px] text-white/30">No direct messages</p>
               ) : (
-                directMessages.map((dm) => (
+                visibleDms.map((dm) => (
                   <SidebarRow
                     key={dm.conversationId || dm.profileId}
                     kind="dm"
@@ -130,6 +177,7 @@ export default function ChannelSidebar({
                     unread={(dm.conversation?.unread || 0) > 0}
                     active={!!dm.conversationId && dm.conversationId === selectedId}
                     onClick={() => selectDm(dm)}
+                    onHide={dm.conversationId ? () => onHideDm(dm.conversationId) : undefined}
                   />
                 ))
               )}
