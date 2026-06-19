@@ -104,3 +104,31 @@ Each phase ships independently; all behind capability checks so unsupported brow
 - Reuse: `AudioPlayer`, `FilePreview`, `fileKind`, `GifPicker`, `EmojiPicker`, `WallpaperPicker`, `presenceStatus`, the composer caret-restore + single-popover patterns.
 - Always release `MediaStream` tracks; cap duration + size; feature-detect `MediaRecorder`/codecs and disable gracefully.
 - The widget shares `ChatComposer` + the renderer, so it inherits both features.
+
+---
+
+## Review corrections (multi-agent audit, 2026-06-19) — READ BEFORE IMPLEMENTING
+
+The audit verified the core thesis (clips ride existing `attachments` JSONB + `dm-attachments`; slash commands are client-only; NO-DB is genuinely achievable) and confirmed the `sendMessage`/`FilePreview`/`fileKind` reuse claims. Fix these before/while building:
+
+**Corrections (factual):**
+1. **`/wallpaper` and `/status` are NOT composer-reachable as written.** `ChatComposer` is also mounted in the floating widget, task chat, and thread panel — none of which have a `WallpaperPicker` or `useConversationWallpaper`. `WallpaperPicker` lives at `src/components/chat/slack/WallpaperPicker.jsx` with props `{isOpen, onClose, wallpaper, busy, onSetPreset, onUploadImage, onRemove}` (NOT `{open,onClose,onPick}`) and is owned only by `SlackMessagePane` (/chat). Presence is `presenceStatus.setStatus(profileId, value)` driven from the rail/page, not the composer. → Either thread new props to every ChatComposer mount, or **scope `/wallpaper` and `/status` to /chat only (hide/no-op elsewhere). Recommend dropping them from phase 1.**
+2. **GifPicker can't be pre-seeded.** `query` is internal state reset to `''` on open. `/giphy <query>` needs a new `initialQuery` prop on `GifPicker` — not pure reuse.
+3. **Exact picker prop names:** `EmojiPicker` uses `onPick`, `GifPicker` uses `onSelect`. The `ctx.openEmojiPicker()/openGifPicker(query)` wrappers must map to these.
+4. **`audio/aac` is not a valid MediaRecorder container** — Safari records audio as `audio/mp4` (AAC-in-MP4). Use `audio/mp4` as the Safari fallback candidate, not `audio/aac`.
+5. **Safari video claim too optimistic.** Soften "Safari 14.1+" to "recent Safari/iOS, best-effort, feature-detected via `isTypeSupported`" — codec/version support is inconsistent.
+
+**Gaps to add:**
+6. **Recorder accessibility:** `role="status"`/`aria-live` for recording-state, the running timer, and auto-stop (composer already uses `role="status"` for upload progress).
+7. **Clip optimistic-send / failure UX:** define what the message bubble shows while uploading and on failure (mirror the image "Uploading n of m" pattern).
+8. **Duration is unreliable from the blob:** webm `MediaRecorder` blobs frequently report `duration: Infinity` until a seek hack. **Track elapsed seconds during recording** (don't read it off the blob) and store that as `duration`.
+9. **`fileKind` SVG ordering:** keep `image/svg+xml` out of any inline `<video>`/`<img>` path when adding the `video` branch; fall back to a download card when the browser can't play the source (avoid a broken `<video>`).
+10. **Slash UX:** spec sending a literal `/`-leading message, and unknown-command behavior (send as text vs. error). Trigger only when `/` is at message start.
+11. **Test the high-risk paths:** `useMediaRecorder` track-cleanup + unsupported-browser disable (mock `MediaRecorder.isTypeSupported`).
+12. **Mobile/iOS:** getUserMedia needs a user gesture + secure context; iOS inline `<video>` needs `playsInline`; recording support is limited — capability-gate and degrade.
+13. **Video size vs duration:** 1280p+audio blows the 25 MB cap well before 5:00 — use a **60–90s default video cap, 720p + a `videoBitsPerSecond` constraint, and a running size estimate that auto-stops near ~22 MB.**
+
+**Re-scoped sequencing (recommended):**
+- **Phase 1 (slash) = composer-local only:** `/shrug`, `/me` (pure text transforms via `onSend`), `/emoji`, `/gif` (extend the existing `openPopover` union; defer the `/giphy <query>` seed or add the `initialQuery` prop). **Defer `/wallpaper` and `/status`** (need plumbing / are /chat-only).
+- **Phase 2 = audio clips** (broad support, reuses `AudioPlayer`).
+- **Phase 3 = video clips** (lower res/bitrate + shorter cap; graceful disable on unsupported browsers).
