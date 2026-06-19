@@ -7,3 +7,4 @@ dist
 supabase/.temp/
 .vercel
 .worktrees/
+.env*.local
