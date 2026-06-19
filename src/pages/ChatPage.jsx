@@ -7,6 +7,7 @@ import SlackMessagePane from '../components/chat/slack/SlackMessagePane'
 import CreateGroupModal from '../components/chat/CreateGroupModal'
 import WorkspaceRail from '../components/chat/slack/WorkspaceRail'
 import ChannelSidebar from '../components/chat/slack/ChannelSidebar'
+import QuickSwitcher from '../components/chat/slack/QuickSwitcher'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { readLastOpened, writeLastOpened, resolveActiveConversation } from '../lib/chatPage'
 
@@ -139,6 +140,9 @@ export default function ChatPage() {
     refetch?.()
   }, [conversationId, activeConv, loading, refetch])
 
+  // Cmd/Ctrl+K quick switcher (key binding wired in Task 4.3).
+  const [switcherOpen, setSwitcherOpen] = useState(false)
+
   // Thread panel — scoped to this page, reset when the conversation changes.
   const [threadRoot, setThreadRoot] = useState(null)
   useEffect(() => { setThreadRoot(null) }, [conversationId])
@@ -226,6 +230,18 @@ export default function ChatPage() {
           />
         )}
       </div>
+
+      <QuickSwitcher
+        open={switcherOpen}
+        onClose={() => setSwitcherOpen(false)}
+        sections={sections}
+        groups={groups}
+        campfires={campfires}
+        tasks={tasks}
+        presence={presence}
+        createOrOpen={createOrOpen}
+        onSelectConversation={onSelectConversation}
+      />
 
       <CreateGroupModal
         isOpen={createGroupOpen}
