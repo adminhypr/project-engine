@@ -231,6 +231,10 @@ export default function RichContentRenderer({ content, mentions = [], inlineImag
     async function signAll() {
       const urls = {}
       for (const img of inlineImages) {
+        // External entries (e.g. hotlinked GIPHY GIFs) carry a ready-to-use
+        // `url` and no storage_path — they live on a third-party CDN, not our
+        // bucket, so there's nothing to sign. Skip them.
+        if (img.url || !img.storage_path) continue
         // Sign each image against the bucket where it ACTUALLY lives, not a
         // per-surface default. A campfire image can be authored from the hub
         // module (RichInput → hub-files, carries a file_id) OR the /chat page
@@ -365,17 +369,36 @@ export default function RichContentRenderer({ content, mentions = [], inlineImag
       {inlineImages.length > 0 ? (
         <div className="flex flex-wrap gap-2 mt-2">
           {inlineImages.map((img, i) => {
-            const url = signedUrls[img.storage_path]
+            // External (hotlinked) images — e.g. GIPHY GIFs — carry a ready
+            // `url`; storage-backed images resolve through signedUrls.
+            const url = img.url || signedUrls[img.storage_path]
+            const isGiphy = img.source === 'giphy'
+            // GIFs show the lighter fixed-width preview in-stream but zoom to
+            // the full GIF on click; storage images use the same url for both.
+            const displaySrc = isGiphy ? (img.preview_url || img.url) : url
+            const zoomSrc = isGiphy ? img.url : url
+            const alt = isGiphy ? (img.name || 'GIF') : img.file_name
             return url ? (
               <img
-                key={img.file_id || i}
-                src={url}
-                alt={img.file_name}
+                key={img.giphy_id || img.file_id || i}
+                src={displaySrc}
+                alt={alt}
                 loading="lazy"
                 className="max-w-full max-h-48 h-auto rounded-lg border border-slate-200 dark:border-dark-border cursor-pointer hover:opacity-90 transition-opacity"
                 style={{ maxWidth: 'min(320px, 100%)' }}
-                onClick={() => setModalImage({ src: url, alt: img.file_name })}
-                onError={e => { e.target.style.display = 'none' }}
+                onClick={() => setModalImage({ src: zoomSrc, alt })}
+                onError={e => {
+                  // We hotlink GIPHY: a deleted/unavailable GIF won't load.
+                  // Swap in a small inline placeholder rather than vanishing.
+                  if (isGiphy) {
+                    const span = document.createElement('span')
+                    span.className = 'inline-block px-2 py-1 text-xs rounded-lg border border-slate-200 dark:border-dark-border text-slate-400'
+                    span.textContent = '[GIF unavailable]'
+                    e.target.replaceWith(span)
+                  } else {
+                    e.target.style.display = 'none'
+                  }
+                }}
               />
             ) : (
               <div

@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Send, X, CornerUpLeft, Loader2, Paperclip, FileText,
   Bold, Italic, Strikethrough, Link as LinkIcon, ListOrdered, List,
-  Quote, Code, SquareCode, Type,
+  Quote, Code, SquareCode, Type, Film,
 } from 'lucide-react'
+import GifPicker from './GifPicker'
+import { giphyEnabled } from '../../lib/giphy'
 import { supabase } from '../../lib/supabase'
 import { showToast } from '../ui'
 import ImageAttachments from './ImageAttachments'
@@ -73,6 +75,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
   const [mentionQuery, setMentionQuery] = useState(null) // { query, startIndex } | null
   const [mentionIdx, setMentionIdx] = useState(0)
   const [showToolbar, setShowToolbar] = useState(() => getPrefs(profileId).toolbarDefault === true)
+  const [gifOpen, setGifOpen] = useState(false)
   const { target: replyTarget, clearReply, requestReply } = useReplyContext()
   const textareaRef = useRef(null)
   // Draft restore guard — we only hydrate once per conversation so in-flight
@@ -271,6 +274,32 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
       // Send failed — keep the text, surface the reason so the user knows
       // nothing was lost and they can retry.
       showToast('Message not sent — saved as draft', 'error')
+    }
+  }
+
+  // Slack-style: a picked GIF sends immediately as its own message. The
+  // entry stores the EXTERNAL GIPHY CDN url (hotlinked, never rehosted) in
+  // `url`, so RichContentRenderer skips signing it. Shape mirrors what
+  // sendMessage persists into inline_images (no `preview` key to strip).
+  async function handleGifSelect(gif) {
+    if (busy || disabled) return
+    const entry = {
+      url: gif.sendUrl,
+      preview_url: gif.previewUrl,
+      type: 'image/gif',
+      source: 'giphy',
+      giphy_id: gif.id,
+      name: gif.title,
+      width: gif.width,
+      height: gif.height,
+    }
+    setBusy(true)
+    const ok = await onSend('', [entry], replyTarget, [], [])
+    setBusy(false)
+    if (ok) {
+      clearReply()
+    } else {
+      showToast('GIF not sent — try again', 'error')
     }
   }
 
@@ -523,6 +552,22 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
         >
           <Type className="w-4 h-4" />
         </button>
+        {giphyEnabled && (
+          <>
+            <GifPicker open={gifOpen} onClose={() => setGifOpen(false)} onSelect={handleGifSelect} />
+            <button
+              type="button"
+              onClick={() => setGifOpen(v => !v)}
+              disabled={busy || disabled}
+              aria-label="Send a GIF"
+              aria-pressed={gifOpen}
+              title="Send a GIF"
+              className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40 ${gifOpen ? 'text-brand-600 dark:text-brand-400 bg-slate-100 dark:bg-dark-hover' : 'text-slate-400 hover:text-brand-600 dark:hover:text-brand-400'}`}
+            >
+              <Film className="w-4 h-4" />
+            </button>
+          </>
+        )}
         <textarea
           ref={textareaRef}
           value={value}
