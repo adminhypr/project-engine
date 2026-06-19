@@ -9,7 +9,7 @@
 //   campfires / groups: full conversation rows { id, kind:'hub'|'group', title, ... }
 //   tasks:              conversation rows { id, kind:'task', task_title, title, ... }
 
-function normalizeDm(row) {
+export function normalizeDm(row) {
   const profile = row?.profile || {};
   const conversation = row?.conversation || null;
   // Conversation key when an open DM exists, else fall back to the profile id

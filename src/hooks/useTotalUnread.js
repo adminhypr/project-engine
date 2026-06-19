@@ -11,5 +11,11 @@ import { totalUnread } from '../lib/dmUnread'
 // add this hook there (would double-subscribe).
 export function useTotalUnread() {
   const { conversations } = useConversations()
-  return useMemo(() => totalUnread(conversations), [conversations])
+  // Exclude Done task chats: they're filtered out of the widget's Tasks section
+  // (useConversations: task_status !== 'Done') and have no other surface, so
+  // their unread would be phantom unread on the tab/nav badge with no way to
+  // clear it. Mirrors ChatWidget.jsx's badge filter.
+  return useMemo(() => totalUnread(
+    (conversations || []).filter(c => !(c.kind === 'task' && c.task_status === 'Done'))
+  ), [conversations])
 }

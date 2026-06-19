@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import { useAuth } from '../../../hooks/useAuth'
 import { useChatPrefs } from '../../../hooks/useChatPrefs'
-import { buildSidebarSections } from '../../../lib/slackSidebar'
+import { buildSidebarSections, normalizeDm } from '../../../lib/slackSidebar'
 import { readHiddenDms, hideDm, unhideDm } from '../../../lib/hiddenDms'
 import { readStarred, starConversation, unstarConversation } from '../../../lib/starredConversations'
 import { groupDisplayName } from '../../../lib/groupConversations'
@@ -272,9 +272,16 @@ export default function ChannelSidebar({
     () => channels.filter(c => !starredSet.has(c.id)),
     [channels, starredSet],
   )
+  // Starred DMs are sourced from the FULL `conversations` prop, not the capped
+  // `visibleDms` (which only carries the recent top-N bucket). A starred DM that
+  // lives outside the recent bucket would otherwise never appear in the Starred
+  // section at all (bug 5). We re-normalize each conversation row into the
+  // sidebar's DM shape and preserve the hidden-filter parity used elsewhere.
   const starredDms = useMemo(
-    () => visibleDms.filter(dm => dm.conversationId && starredSet.has(dm.conversationId)),
-    [visibleDms, starredSet],
+    () => (conversations || [])
+      .filter(c => c.kind === 'dm' && starredSet.has(c.id) && !hiddenSet.has(c.id))
+      .map(c => normalizeDm({ profile: c.other_profile, conversation: c })),
+    [conversations, starredSet, hiddenSet],
   )
   const unstarredDms = useMemo(
     () => visibleDms.filter(dm => !(dm.conversationId && starredSet.has(dm.conversationId))),
@@ -288,9 +295,12 @@ export default function ChannelSidebar({
     () => taskChats.filter(t => !starredSet.has(t.id)),
     [taskChats, starredSet],
   )
-  const hasStarred =
-    !searching &&
-    (starredChannels.length > 0 || starredDms.length > 0 || starredTasks.length > 0)
+  // View-aware so the DMs-only rail doesn't render an empty "Starred" header
+  // when the only starred items are channels/tasks (bug 9): in the 'dms' view
+  // only starred DMs count toward showing the section.
+  const hasStarred = !searching && (dmsOnly
+    ? starredDms.length > 0
+    : (starredChannels.length > 0 || starredDms.length > 0 || starredTasks.length > 0))
 
   // Resizable width (desktop only). The inline width is applied via md:[width]
   // so mobile keeps its full-width single-pane layout (ChatPage wraps the aside
