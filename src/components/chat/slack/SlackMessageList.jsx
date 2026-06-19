@@ -172,14 +172,27 @@ export default function SlackMessageList({
   )
 
   if (loading) {
-    return <div className="p-4 text-center text-sm text-slate-500">Loading…</div>
+    return (
+      <div className="flex-1 flex items-center justify-center p-4 text-center text-sm text-slate-500">
+        Loading…
+      </div>
+    )
   }
   if (messages.length === 0) {
-    return <div className="p-4 text-center text-sm text-slate-500 dark:text-slate-400">Say hi 👋</div>
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-1 p-8 text-center">
+        <span className="text-3xl" aria-hidden="true">👋</span>
+        <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+          This is the very beginning of this conversation.
+        </p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">Say hi to get things started.</p>
+      </div>
+    )
   }
 
   return (
-    <div ref={scrollRootRef} className="relative flex-1 overflow-y-auto py-2">
+    <div ref={scrollRootRef} className="relative flex-1 overflow-y-auto">
+      <div className="min-h-full flex flex-col justify-end py-2">
       {hasMore && (
         <div className="text-center mb-2">
           <button
@@ -240,7 +253,8 @@ export default function SlackMessageList({
         )
       })}
 
-      <div ref={bottomRef} />
+        <div ref={bottomRef} />
+      </div>
 
       {/* Jump-to-bottom pill — floats over the pane when scrolled up. */}
       {!atBottom && (
