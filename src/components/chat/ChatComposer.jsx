@@ -1,9 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Send, X, CornerUpLeft, Loader2, Paperclip, FileText } from 'lucide-react'
+import {
+  Send, X, CornerUpLeft, Loader2, Paperclip, FileText,
+  Bold, Italic, Strikethrough, Link as LinkIcon, ListOrdered, List,
+  Quote, Code, SquareCode, Type, Film,
+} from 'lucide-react'
+import GifPicker from './GifPicker'
+import { giphyEnabled } from '../../lib/giphy'
 import { supabase } from '../../lib/supabase'
 import { showToast } from '../ui'
 import ImageAttachments from './ImageAttachments'
 import { useReplyContext } from './ReplyContext'
+import { wrapSelection, prefixLines } from '../../lib/composerFormat'
 import {
   isInlineImage,
   attachmentStoragePath,
@@ -16,6 +23,8 @@ import MentionPopover from './MentionPopover'
 import { parseMentionQuery, insertMention } from '../../lib/mentions'
 import { useAuth } from '../../hooks/useAuth'
 import { readDraft, writeDraft, clearDraft } from '../../lib/draftStorage'
+import { useChatPrefs } from '../../hooks/useChatPrefs'
+import { getPrefs } from '../../lib/chatPrefs'
 
 const MAX_LEN = 4000
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -46,6 +55,9 @@ const MAX_MENTION_MATCHES = 6
 export default function ChatComposer({ conversationId, onSend, onTyping, disabled, mentionablePeople = [], threadRootId = null, placeholder = 'Type a message…' }) {
   const { profile } = useAuth()
   const profileId = profile?.id
+  // Chat prefs: toolbarDefault seeds the initial toolbar visibility (still
+  // togglable per session); sendOnEnter switches Enter↔Cmd/Ctrl+Enter send.
+  const [prefs] = useChatPrefs(profileId)
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [images, setImages] = useState([])
@@ -62,6 +74,8 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
   const [pickedMentions, setPickedMentions] = useState([])
   const [mentionQuery, setMentionQuery] = useState(null) // { query, startIndex } | null
   const [mentionIdx, setMentionIdx] = useState(0)
+  const [showToolbar, setShowToolbar] = useState(() => getPrefs(profileId).toolbarDefault === true)
+  const [gifOpen, setGifOpen] = useState(false)
   const { target: replyTarget, clearReply, requestReply } = useReplyContext()
   const textareaRef = useRef(null)
   // Draft restore guard — we only hydrate once per conversation so in-flight
@@ -155,6 +169,57 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
     })
   }
 
+  // Apply a formatting transform to the current textarea selection. `fn`
+  // receives (value, selStart, selEnd) and returns { text, selStart, selEnd }.
+  // We write the new value back through the existing setValue and restore the
+  // caret/selection after React flushes the controlled update.
+  function applyFormat(fn) {
+    const el = textareaRef.current
+    if (!el) return
+    const start = el.selectionStart ?? value.length
+    const end = el.selectionEnd ?? value.length
+    const r = fn(value, start, end)
+    if (!r) return
+    const next = r.text.slice(0, MAX_LEN)
+    setValue(next)
+    requestAnimationFrame(() => {
+      const node = textareaRef.current
+      if (!node) return
+      node.focus()
+      node.setSelectionRange(r.selStart, r.selEnd)
+    })
+  }
+
+  // Inline marker wrappers (bold/italic/strike/code).
+  const wrapWith = marker => () => applyFormat((v, s, e) => wrapSelection(v, s, e, marker))
+  // Per-line prefixers (lists/blockquote).
+  const prefixWith = prefix => () => applyFormat((v, s, e) => prefixLines(v, s, e, prefix))
+
+  // Link: insert [selection](<placeholder>) and drop the caret inside the
+  // empty parens so the user can paste/type the URL immediately.
+  function applyLink() {
+    applyFormat((v, s, e) => {
+      const sel = v.slice(s, e)
+      const inserted = `[${sel}]()`
+      const out = v.slice(0, s) + inserted + v.slice(e)
+      const caret = s + inserted.length - 1 // inside the ()
+      return { text: out, selStart: caret, selEnd: caret }
+    })
+  }
+
+  // Code block: wrap the selection in triple-backtick fences on their own
+  // lines. Place the selection back over the original content between fences.
+  function applyCodeBlock() {
+    applyFormat((v, s, e) => {
+      const sel = v.slice(s, e)
+      const opening = '```\n'
+      const closing = '\n```'
+      const out = v.slice(0, s) + opening + sel + closing + v.slice(e)
+      const selStart = s + opening.length
+      return { text: out, selStart, selEnd: selStart + sel.length }
+    })
+  }
+
   function startResize(e) {
     e.preventDefault()
     const startY = e.clientY
@@ -212,6 +277,32 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
     }
   }
 
+  // Slack-style: a picked GIF sends immediately as its own message. The
+  // entry stores the EXTERNAL GIPHY CDN url (hotlinked, never rehosted) in
+  // `url`, so RichContentRenderer skips signing it. Shape mirrors what
+  // sendMessage persists into inline_images (no `preview` key to strip).
+  async function handleGifSelect(gif) {
+    if (busy || disabled) return
+    const entry = {
+      url: gif.sendUrl,
+      preview_url: gif.previewUrl,
+      type: 'image/gif',
+      source: 'giphy',
+      giphy_id: gif.id,
+      name: gif.title,
+      width: gif.width,
+      height: gif.height,
+    }
+    setBusy(true)
+    const ok = await onSend('', [entry], replyTarget, [], [])
+    setBusy(false)
+    if (ok) {
+      clearReply()
+    } else {
+      showToast('GIF not sent — try again', 'error')
+    }
+  }
+
   function handleKey(e) {
     // Mention popover intercepts arrows + Enter/Tab.
     if (mentionQuery && mentionCandidates.length > 0) {
@@ -236,9 +327,22 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
         return
       }
     }
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      submit()
+    if (e.key === 'Enter') {
+      const withMod = e.metaKey || e.ctrlKey
+      const sendOnEnter = prefs.sendOnEnter !== false
+      if (sendOnEnter) {
+        // Enter sends; Shift+Enter (or modifier) inserts a newline.
+        if (!e.shiftKey && !withMod) {
+          e.preventDefault()
+          submit()
+        }
+      } else {
+        // Cmd/Ctrl+Enter sends; plain Enter inserts a newline.
+        if (withMod) {
+          e.preventDefault()
+          submit()
+        }
+      }
     } else if (e.key === 'Escape' && replyTarget) {
       e.preventDefault()
       clearReply()
@@ -321,6 +425,8 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
     for (const file of fileItems) handleIncomingFile(file, true)
   }
 
+  const sendDisabled = busy || disabled || (!value.trim() && images.length === 0 && attachments.length === 0)
+
   return (
     <div
       className={`border-t border-slate-200 dark:border-dark-border ${dragOver ? 'ring-2 ring-inset ring-brand-400' : ''}`}
@@ -390,6 +496,22 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
           ))}
         </div>
       )}
+      {showToolbar && (
+        <div className="flex flex-wrap items-center gap-0.5 px-2 pt-2" role="toolbar" aria-label="Text formatting">
+          <FmtBtn icon={Bold} label="Bold" onClick={wrapWith('**')} />
+          <FmtBtn icon={Italic} label="Italic" onClick={wrapWith('_')} />
+          <FmtBtn icon={Strikethrough} label="Strikethrough" onClick={wrapWith('~~')} />
+          <FmtDivider />
+          <FmtBtn icon={LinkIcon} label="Link" onClick={applyLink} />
+          <FmtDivider />
+          <FmtBtn icon={ListOrdered} label="Ordered list" onClick={prefixWith(i => `${i + 1}. `)} />
+          <FmtBtn icon={List} label="Bulleted list" onClick={prefixWith('- ')} />
+          <FmtBtn icon={Quote} label="Blockquote" onClick={prefixWith('> ')} />
+          <FmtDivider />
+          <FmtBtn icon={Code} label="Code" onClick={wrapWith('`')} />
+          <FmtBtn icon={SquareCode} label="Code block" onClick={applyCodeBlock} />
+        </div>
+      )}
       <div
         onPointerDown={startResize}
         onDoubleClick={() => setTextareaHeight(DEFAULT_H)}
@@ -420,6 +542,32 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
         >
           <Paperclip className="w-4 h-4" />
         </button>
+        <button
+          type="button"
+          onClick={() => setShowToolbar(v => !v)}
+          aria-label="Formatting"
+          aria-pressed={showToolbar}
+          title="Show formatting toolbar"
+          className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center hover:bg-slate-100 dark:hover:bg-dark-hover ${showToolbar ? 'text-brand-600 dark:text-brand-400 bg-slate-100 dark:bg-dark-hover' : 'text-slate-400 hover:text-brand-600 dark:hover:text-brand-400'}`}
+        >
+          <Type className="w-4 h-4" />
+        </button>
+        {giphyEnabled && (
+          <>
+            <GifPicker open={gifOpen} onClose={() => setGifOpen(false)} onSelect={handleGifSelect} />
+            <button
+              type="button"
+              onClick={() => setGifOpen(v => !v)}
+              disabled={busy || disabled}
+              aria-label="Send a GIF"
+              aria-pressed={gifOpen}
+              title="Send a GIF"
+              className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40 ${gifOpen ? 'text-brand-600 dark:text-brand-400 bg-slate-100 dark:bg-dark-hover' : 'text-slate-400 hover:text-brand-600 dark:hover:text-brand-400'}`}
+            >
+              <Film className="w-4 h-4" />
+            </button>
+          </>
+        )}
         <textarea
           ref={textareaRef}
           value={value}
@@ -437,8 +585,11 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
         <button
           type="button"
           onClick={submit}
-          disabled={busy || disabled || (!value.trim() && images.length === 0 && attachments.length === 0)}
-          className="w-9 h-9 rounded-full bg-brand-500 hover:bg-brand-600 text-white disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center justify-center"
+          disabled={sendDisabled}
+          style={sendDisabled ? undefined : { backgroundColor: 'var(--chat-accent, #6366f1)' }}
+          className={`w-9 h-9 rounded-full text-white flex items-center justify-center ${
+            sendDisabled ? 'bg-slate-300 cursor-not-allowed' : 'hover:brightness-110'
+          }`}
           aria-label={busy ? 'Sending…' : 'Send'}
         >
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
@@ -446,4 +597,25 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
       </div>
     </div>
   )
+}
+
+function FmtBtn({ icon: Icon, label, onClick }) {
+  return (
+    <button
+      type="button"
+      // Keep the textarea selection alive: prevent the button from stealing
+      // focus before the click handler reads selectionStart/selectionEnd.
+      onMouseDown={e => e.preventDefault()}
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="w-7 h-7 rounded flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-hover"
+    >
+      <Icon className="w-4 h-4" />
+    </button>
+  )
+}
+
+function FmtDivider() {
+  return <span className="mx-1 w-px h-4 bg-slate-200 dark:bg-dark-border" aria-hidden="true" />
 }

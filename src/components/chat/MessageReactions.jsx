@@ -23,9 +23,13 @@ function formatReactorNames(userIds, profileLookup, myUserId) {
   return [...you, ...others]
 }
 
-function ReactionPill({ reaction, onToggle, profileLookup, myUserId }) {
+function ReactionPill({ reaction, onToggle, profileLookup, myUserId, mineClassName }) {
   const reactors = formatReactorNames(reaction.users || [], profileLookup, myUserId)
   const reactorLine = reactors.join(', ')
+  // The "your reaction" highlight is overridable so the Slack-style MessageRow
+  // can render it as a stronger brand-indigo fill while the classic widget
+  // bubbles keep the lighter tint. Default preserves the original look.
+  const mineStyle = mineClassName || 'bg-brand-500/15 border-brand-400 text-brand-600 dark:text-brand-300'
   return (
     <span className="relative group/reaction inline-flex">
       <button
@@ -33,7 +37,7 @@ function ReactionPill({ reaction, onToggle, profileLookup, myUserId }) {
         onClick={() => onToggle?.(reaction.emoji)}
         className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] leading-none border transition-colors ${
           reaction.mine
-            ? 'bg-brand-500/15 border-brand-400 text-brand-600 dark:text-brand-300'
+            ? mineStyle
             : 'bg-slate-100 dark:bg-slate-700/60 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
         }`}
         aria-label={`${reaction.emoji} — ${reactorLine}`}
@@ -64,7 +68,7 @@ function ReactionPill({ reaction, onToggle, profileLookup, myUserId }) {
   )
 }
 
-export default function MessageReactions({ reactions, onToggle, profileLookup, myUserId }) {
+export default function MessageReactions({ reactions, onToggle, profileLookup, myUserId, mineClassName }) {
   if (!reactions || reactions.length === 0) return null
   return (
     <div className="flex flex-wrap gap-1 mt-1">
@@ -75,6 +79,7 @@ export default function MessageReactions({ reactions, onToggle, profileLookup, m
           onToggle={onToggle}
           profileLookup={profileLookup}
           myUserId={myUserId}
+          mineClassName={mineClassName}
         />
       ))}
     </div>

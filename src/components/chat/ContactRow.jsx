@@ -1,6 +1,6 @@
 import PresenceDot from './PresenceDot'
 
-export default function ContactRow({ row, online, onClick, selected = false }) {
+export default function ContactRow({ row, online, status, onClick, selected = false }) {
   const { profile, conversation } = row
   const initial = (profile.full_name || '?').charAt(0).toUpperCase()
   const unread = conversation?.unread || 0
@@ -25,7 +25,7 @@ export default function ContactRow({ row, online, onClick, selected = false }) {
           </div>
         )}
         <span className="absolute bottom-0 right-0">
-          <PresenceDot online={online} />
+          <PresenceDot online={online} status={status} />
         </span>
       </div>
       <div className="flex-1 min-w-0">

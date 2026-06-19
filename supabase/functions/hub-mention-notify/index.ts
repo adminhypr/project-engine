@@ -11,6 +11,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeadersFor, verifyWebhookSecret } from '../_shared/security.ts'
 import { isProfileOnline } from '../_shared/presence.ts'
 import { sendEmail } from '../_shared/email.ts'
+import { escapeHtml } from '../_shared/html.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -172,11 +173,11 @@ Deno.serve(async (req) => {
       ? `${APP_URL}/hub/${record.hub_id}?message=${messageId}`
       : `${APP_URL}/hub/${record.hub_id}`
 
-    const html = emailWrap(`You were mentioned in ${hubName}`, '#6366f1',
-      `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${mentionedUser.full_name}</strong>,</p>
-       <p style="margin: 0 0 16px; color: #374151;"><strong>${mentionerName}</strong> mentioned you in <strong>${hubName}</strong> — ${moduleLabel}:</p>
+    const html = emailWrap(`You were mentioned in ${escapeHtml(hubName)}`, '#6366f1',
+      `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${escapeHtml(mentionedUser.full_name)}</strong>,</p>
+       <p style="margin: 0 0 16px; color: #374151;"><strong>${escapeHtml(mentionerName)}</strong> mentioned you in <strong>${escapeHtml(hubName)}</strong> — ${escapeHtml(moduleLabel)}:</p>
        <div style="background: #f8f9fc; border-radius: 10px; padding: 16px; margin: 12px 0;">
-         <p style="margin: 0; font-size: 14px; color: #374151; font-style: italic;">"${preview}"</p>
+         <p style="margin: 0; font-size: 14px; color: #374151; font-style: italic;">"${escapeHtml(preview)}"</p>
        </div>
        <div style="margin-top: 20px; text-align: center;">
          <a href="${link}" style="display: inline-block; padding: 10px 24px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">Open Hub</a>

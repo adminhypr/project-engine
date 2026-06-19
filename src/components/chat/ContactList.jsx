@@ -139,6 +139,7 @@ function PeopleSection({ sectionKey, title, rows, presence, onOpen, collapsed, o
             key={row.profile.id}
             row={row}
             online={presence.get(row.profile.id)?.online || false}
+            status={presence.get(row.profile.id)?.status}
             onClick={onOpen}
             selected={!!selectedId && row.conversation?.id === selectedId}
           />

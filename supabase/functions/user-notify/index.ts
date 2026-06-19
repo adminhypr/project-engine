@@ -15,6 +15,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeadersFor, verifyJWT } from '../_shared/security.ts'
+import { escapeHtml } from '../_shared/html.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -79,8 +80,8 @@ async function onUserApproved(userId: string, approverName: string) {
   if (!profile?.email) return { ok: false, error: 'Profile not found' }
 
   const html = emailWrap('You\'re Approved!', '#22c55e',
-    `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${profile.full_name || 'there'}</strong>,</p>
-     <p style="margin: 0 0 16px; color: #374151;">Great news — <strong>${approverName}</strong> has approved your account on Hypr Task. You're all set to start using the app.</p>
+    `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${escapeHtml(profile.full_name || 'there')}</strong>,</p>
+     <p style="margin: 0 0 16px; color: #374151;">Great news — <strong>${escapeHtml(approverName)}</strong> has approved your account on Hypr Task. You're all set to start using the app.</p>
      <div style="padding: 16px; background: #f0fdf4; border-radius: 10px; text-align: center; margin: 16px 0;">
        <p style="margin: 0; font-size: 14px; color: #166534; font-weight: 600;">Your account is ready</p>
        <p style="margin: 4px 0 0; font-size: 13px; color: #15803d;">Sign in with your Google account to get started</p>
@@ -97,10 +98,10 @@ async function onUserApproved(userId: string, approverName: string) {
 async function onInviteUser(email: string, inviterName: string) {
   const html = emailWrap('You\'re Invited!', '#6366f1',
     `<p style="margin: 0 0 12px; color: #374151;">Hello,</p>
-     <p style="margin: 0 0 16px; color: #374151;"><strong>${inviterName}</strong> has invited you to join <strong>Hypr Task</strong> — the team's task management app.</p>
+     <p style="margin: 0 0 16px; color: #374151;"><strong>${escapeHtml(inviterName)}</strong> has invited you to join <strong>Hypr Task</strong> — the team's task management app.</p>
      <div style="padding: 16px; background: #eef2ff; border-radius: 10px; margin: 16px 0;">
        <p style="margin: 0; font-size: 14px; color: #3730a3; font-weight: 600;">Getting started is easy</p>
-       <p style="margin: 8px 0 0; font-size: 13px; color: #4338ca;">Click the button below and sign in with your Google account (<strong>${email}</strong>). Your account will be set up automatically.</p>
+       <p style="margin: 8px 0 0; font-size: 13px; color: #4338ca;">Click the button below and sign in with your Google account (<strong>${escapeHtml(email)}</strong>). Your account will be set up automatically.</p>
      </div>
      <div style="margin-top: 20px; text-align: center;">
        <a href="${APP_URL}" style="display: inline-block; padding: 12px 32px; background: #6366f1; color: white; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 14px;">Join Hypr Task</a>
@@ -179,13 +180,18 @@ async function onNewComment(
   if (recipientEmails.size === 0) return { ok: true }
 
   const truncated = commentText.length > 200 ? commentText.slice(0, 200) + '...' : commentText
-  const emailText = truncated.replace(/@(\w[\w\s]*?\w)(?=\s|$|[.,!?])/g, '<strong style="color: #6366f1;">@$1</strong>')
+  // SECURITY: escape the raw comment text FIRST so any <img onerror>/<script>
+  // the user typed becomes inert text, THEN bold @mentions on the escaped
+  // string (the mention regex matches word characters, which escaping leaves
+  // untouched). The <strong> markup is therefore the ONLY HTML in emailText.
+  const emailText = escapeHtml(truncated)
+    .replace(/@(\w[\w\s]*?\w)(?=\s|$|[.,!?])/g, '<strong style="color: #6366f1;">@$1</strong>')
 
   const html = emailWrap('New Comment on Task', '#6366f1',
-    `<p style="margin: 0 0 12px; color: #374151;"><strong>${authorName}</strong> commented on a task:</p>
+    `<p style="margin: 0 0 12px; color: #374151;"><strong>${escapeHtml(authorName)}</strong> commented on a task:</p>
      <div style="background: #f8f9fc; border-radius: 10px; padding: 16px; margin: 12px 0;">
-       <p style="margin: 0 0 4px; font-size: 16px; font-weight: 700; color: #111827;">${task.title}</p>
-       <p style="margin: 0; font-size: 13px; color: #6b7280;">${task.task_id}</p>
+       <p style="margin: 0 0 4px; font-size: 16px; font-weight: 700; color: #111827;">${escapeHtml(task.title)}</p>
+       <p style="margin: 0; font-size: 13px; color: #6b7280;">${escapeHtml(task.task_id)}</p>
      </div>
      <div style="padding: 12px; background: #f8f9fc; border-left: 3px solid #6366f1; border-radius: 0 8px 8px 0; margin: 16px 0;">
        <p style="margin: 0; font-size: 14px; color: #374151; line-height: 1.5;">${emailText}</p>

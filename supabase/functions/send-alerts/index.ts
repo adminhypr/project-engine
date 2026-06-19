@@ -6,6 +6,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeadersFor, verifyWebhookSecret } from '../_shared/security.ts'
 import { sendEmail as sharedSendEmail } from '../_shared/email.ts'
+import { escapeHtml } from '../_shared/html.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -65,13 +66,13 @@ function taskRow(label: string, value: string): string {
 function taskTable(task: any): string {
   return `
     <table style="width: 100%; border-collapse: collapse; margin: 12px 0;">
-      ${taskRow('Task ID', task.task_id)}
-      ${taskRow('Task', `<strong>${task.title}</strong>`)}
-      ${taskRow('Urgency', task.urgency)}
-      ${task.assigner?.full_name ? taskRow('Assigned By', task.assigner.full_name) : ''}
-      ${task.who_due_to ? taskRow('For', task.who_due_to) : ''}
+      ${taskRow('Task ID', escapeHtml(task.task_id))}
+      ${taskRow('Task', `<strong>${escapeHtml(task.title)}</strong>`)}
+      ${taskRow('Urgency', escapeHtml(task.urgency))}
+      ${task.assigner?.full_name ? taskRow('Assigned By', escapeHtml(task.assigner.full_name)) : ''}
+      ${task.who_due_to ? taskRow('For', escapeHtml(task.who_due_to)) : ''}
       ${task.due_date ? taskRow('Due Date', new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })) : ''}
-      ${taskRow('Status', task.status)}
+      ${taskRow('Status', escapeHtml(task.status))}
     </table>`
 }
 
@@ -146,7 +147,7 @@ async function sendRedAlerts(): Promise<number> {
       : 'No update for over 36 hours'
 
     const html = emailWrap('Overdue Task — Action Required', '#ef4444',
-      `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${task.assignee?.full_name}</strong>,</p>
+      `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${escapeHtml(task.assignee?.full_name)}</strong>,</p>
        <p style="margin: 0 0 16px; color: #374151;">A task requires your immediate attention:</p>
        ${taskTable(task)}
        <div style="padding: 12px; background: #fef2f2; border-radius: 8px; text-align: center; margin-top: 16px;">
@@ -210,7 +211,7 @@ async function sendDueReminders(): Promise<number> {
     const emoji = isUrgent ? '🟠' : '🟡'
 
     const html = emailWrap(`Due in ${timeLabel}`, color,
-      `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${task.assignee?.full_name}</strong>,</p>
+      `<p style="margin: 0 0 12px; color: #374151;">Hello <strong>${escapeHtml(task.assignee?.full_name)}</strong>,</p>
        <p style="margin: 0 0 16px; color: #374151;">You have a task due soon:</p>
        ${taskTable(task)}
        <div style="padding: 12px; background: ${isUrgent ? '#fff7ed' : '#fefce8'}; border-radius: 8px; text-align: center; margin-top: 16px;">

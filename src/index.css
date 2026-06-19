@@ -122,3 +122,10 @@
 ::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.18); }
 :is(.dark) ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); }
 :is(.dark) ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.15); }
+
+/* ── Slack chat shell font scope ──────────── */
+.slack-chat,
+.slack-chat * {
+  font-family: Lato, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+}

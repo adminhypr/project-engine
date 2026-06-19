@@ -3,28 +3,53 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { MessageCircle, ArrowLeft } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useContactList } from '../hooks/useContactList'
-import ChatSidebar from '../components/chat/ChatSidebar'
-import ConversationPane from '../components/chat/ConversationPane'
+import SlackMessagePane from '../components/chat/slack/SlackMessagePane'
 import CreateGroupModal from '../components/chat/CreateGroupModal'
-import { Spinner } from '../components/ui/index'
+import PreferencesModal from '../components/chat/slack/PreferencesModal'
+import WorkspaceRail from '../components/chat/slack/WorkspaceRail'
+import ChannelSidebar from '../components/chat/slack/ChannelSidebar'
+import QuickSwitcher from '../components/chat/slack/QuickSwitcher'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { readLastOpened, writeLastOpened, resolveActiveConversation } from '../lib/chatPage'
+import { matchShortcut } from '../lib/chatShortcuts'
+import { useChatPrefs } from '../hooks/useChatPrefs'
+import { sidebarThemeVars } from '../lib/chatPrefs'
+import {
+  getStatus as getPresenceStatus,
+  setStatus as setPresenceStatus,
+  subscribe as subscribePresenceStatus,
+} from '../lib/presenceStatus'
 
-// Dedicated full-page chat (/chat and /chat/:conversationId). Two-pane on
-// desktop (sidebar + conversation), single-pane on mobile (URL decides which
-// shows). Reuses the same hooks/components as the floating widget, so they
-// stay in sync. Zero DB changes — see
-// docs/plans/2026-06-16-dedicated-chat-page-design.md.
+// Dedicated full-viewport Slack-style chat takeover (/chat and
+// /chat/:conversationId). Composes the dark WorkspaceRail (68px) + dark
+// ChannelSidebar (260px) + the existing ConversationPane for the message area
+// (restyled in Phase 2). Renders OUTSIDE the normal app Layout chrome (see
+// App.jsx) so it owns the full viewport. Two-pane on desktop, single-pane on
+// mobile (URL decides which shows). Reuses the same hooks/components as the
+// floating widget so they stay in sync. Zero DB changes — see
+// docs/plans/2026-06-19-slack-chat-redesign.md (Task 1.6).
 export default function ChatPage() {
   usePageTitle('Chat')
   const { profile, isExternal } = useAuth()
   const navigate = useNavigate()
   const { conversationId } = useParams()
-  const [query, setQuery] = useState('')
-  const [createGroupOpen, setCreateGroupOpen] = useState(false)
 
+  // Chat preferences (per profile, localStorage). The sidebar-theme preset is
+  // applied as CSS vars on the .slack-chat root so the sidebar/rail/accent
+  // chrome (which reads var(--chat-*) with the static slack/brand tokens as
+  // fallbacks) recolors live. The default preset's hexes equal the current
+  // tokens, so the default look is unchanged.
+  const [chatPrefs] = useChatPrefs(profile?.id)
+
+  // SINGLE useContactList instance for the whole /chat takeover. The search
+  // query lives here (lifted from ChannelSidebar) and is fed to the hook so its
+  // existing internal filtering semantics are preserved exactly. ChannelSidebar
+  // is now presentation-only and receives this data + callbacks as props — so
+  // useContactList (and its useConversations subscription / Supabase channel)
+  // runs exactly once on /chat, instead of being double-subscribed.
+  const [query, setQuery] = useState('')
   const {
-    sections, groups, campfires, conversations, presence,
+    sections, groups, campfires, tasks, conversations, presence,
     createOrOpen, createGroup, markRead, refetch, loading,
   } = useContactList(query)
 
@@ -33,18 +58,85 @@ export default function ChatPage() {
     [conversations, conversationId],
   )
 
-  // Open a conversation by id → reflect in the URL + clear its unread.
+  // Pre-read cursor snapshot for the "New messages" amber line.
+  //
+  // Selecting a conversation calls markRead(convId), which optimistically bumps
+  // its last_read_at to ~now. If SlackMessageList snapshotted that live value it
+  // would always be "now" and firstUnreadId() would return null — the line would
+  // never show. So we capture each conversation's last_read_at AS IT WAS when it
+  // first became active, BEFORE markRead bumps it, and feed that stable value to
+  // the pane instead of the live activeConv.last_read_at.
+  //
+  // Captured synchronously during render (the first time we see a conv id) so it
+  // beats both openConversation's markRead AND the pane's mount markRead effect.
+  // The entry persists for the lifetime the conversation stays open, then is
+  // cleared on conversation change so re-opening re-captures a fresh cursor.
+  const preReadCursorRef = useRef(new Map())
+  const prevConvIdRef = useRef(conversationId)
+  if (prevConvIdRef.current !== conversationId) {
+    // Navigated away from the previous conversation — drop its snapshot so a
+    // later return re-captures the (now-advanced) cursor.
+    if (prevConvIdRef.current) preReadCursorRef.current.delete(prevConvIdRef.current)
+    prevConvIdRef.current = conversationId
+  }
+  if (activeConv && !preReadCursorRef.current.has(activeConv.id)) {
+    preReadCursorRef.current.set(activeConv.id, activeConv.last_read_at ?? null)
+  }
+  const preReadLastReadAt = activeConv
+    ? preReadCursorRef.current.get(activeConv.id) ?? null
+    : null
+
+  // Open a conversation by id → reflect in the URL + clear its unread. The
+  // pre-read cursor for convId is captured during render (above) before this
+  // markRead bumps last_read_at, so the amber line stays anchored.
   const openConversation = useCallback((convId) => {
     if (!convId) return
     navigate(`/chat/${convId}`)
     markRead?.(convId)
   }, [navigate, markRead])
 
-  // Clicking a person resolves (or creates) the DM, then opens it.
-  const openContact = useCallback(async (otherUserId) => {
-    const convId = await createOrOpen?.(otherUserId)
-    if (convId) openConversation(convId)
-  }, [createOrOpen, openConversation])
+  // ChannelSidebar already resolves DM rows (createOrOpen) to a conversation id
+  // before calling this — so onSelectConversation always receives a real id.
+  const onSelectConversation = useCallback((convId) => {
+    openConversation(convId)
+  }, [openConversation])
+
+  const onBackToApp = useCallback(() => navigate('/my-tasks'), [navigate])
+
+  // Deselect the open conversation (used when the sidebar closes the DM that's
+  // currently active — navigating to bare /chat clears selectedId so the row
+  // can filter out of the list).
+  const onCloseActive = useCallback(() => navigate('/chat'), [navigate])
+
+  // Workspace rail view: 'home' (full sidebar) or 'dms' (Direct messages only).
+  const [railActive, setRailActive] = useState('home')
+
+  // Bumped to ask ChannelSidebar to focus its search input (the "+" → New
+  // message flow). A counter (not a boolean) so repeated New-message clicks each
+  // re-trigger the focus effect.
+  const [composeFocusSignal, setComposeFocusSignal] = useState(0)
+  const onNewMessage = useCallback(() => {
+    setRailActive('dms')
+    setComposeFocusSignal(s => s + 1)
+  }, [])
+
+  // Create-group modal (restored from the pre-redesign ChatPage). Externals
+  // can't create groups, so the affordance is gated for them.
+  const [createGroupOpen, setCreateGroupOpen] = useState(false)
+  const openCreateGroup = useCallback(() => {
+    if (isExternal) return
+    setCreateGroupOpen(true)
+  }, [isExternal])
+
+  // Chat preferences modal (opened from the WorkspaceHeader "Preferences" item
+  // via ChannelSidebar → onPreferences).
+  const [prefsOpen, setPrefsOpen] = useState(false)
+
+  // Rail nav selection is only 'home' | 'dms' now (the "+" create button owns
+  // its own popover and calls onNewMessage / onNewChannel directly).
+  const onRailSelect = useCallback((id) => {
+    setRailActive(id)
+  }, [])
 
   // Persist the last-open conversation so a bare /chat reopens it next time.
   useEffect(() => {
@@ -79,42 +171,128 @@ export default function ChatPage() {
     refetch?.()
   }, [conversationId, activeConv, loading, refetch])
 
+  // Cmd/Ctrl+K quick switcher (key binding wired in Task 4.3).
+  const [switcherOpen, setSwitcherOpen] = useState(false)
+
   // Thread panel — scoped to this page, reset when the conversation changes.
   const [threadRoot, setThreadRoot] = useState(null)
   useEffect(() => { setThreadRoot(null) }, [conversationId])
   const openThread = useCallback((msg) => { if (msg) setThreadRoot(msg) }, [])
   const closeThread = useCallback(() => setThreadRoot(null), [])
 
-  const isGroup = activeConv && (activeConv.kind === 'group' || activeConv.kind === 'hub')
-  const online = activeConv && !isGroup ? !!presence.get(activeConv.other_user_id)?.online : false
+  // Global keyboard shortcuts for the chat takeover (design Task 4.3).
+  // matchShortcut() maps Cmd/Ctrl+K → 'quickSwitcher' and Escape → 'closePanel'.
+  //
+  // Cmd+K must work everywhere (including from inside the composer) and must
+  // preempt the browser default, so we always preventDefault + open the switcher.
+  //
+  // Escape is intentionally NOT hijacked while the user is typing in an
+  // input/textarea/contenteditable — Escape there should keep its native
+  // behaviour (blur/clear). The QuickSwitcher owns its own Escape via
+  // ModalWrapper's useEscapeToClose, so when it's open we let that handle the
+  // close and don't double-act here. Otherwise Escape closes an open thread.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      const action = matchShortcut(e)
+      if (action === 'quickSwitcher') {
+        e.preventDefault()
+        setSwitcherOpen(true)
+        return
+      }
+      if (action === 'closePanel') {
+        // Let the switcher's own Escape handler deal with closing it.
+        if (switcherOpen) return
+        const el = e.target
+        const typing = el && (
+          el.tagName === 'INPUT' ||
+          el.tagName === 'TEXTAREA' ||
+          el.isContentEditable
+        )
+        if (typing) return
+        if (threadRoot) {
+          e.preventDefault()
+          closeThread()
+        }
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [switcherOpen, threadRoot, closeThread])
 
-  const sidebarVisibility = conversationId ? 'hidden md:block' : 'block'
+  const isGroup = activeConv && (activeConv.kind === 'group' || activeConv.kind === 'hub')
+  const online = activeConv && !isGroup ? !!presence?.get(activeConv.other_user_id)?.online : false
+  const peerStatus = activeConv && !isGroup ? presence?.get(activeConv.other_user_id)?.status : undefined
+
+  // Rail avatar reflects the CURRENT USER's own status. Self is excluded from
+  // the presence Map (you're always online to yourself), so we read the manual
+  // override store directly and resolve it to a display status: an explicit
+  // override wins; 'auto' shows active (the user is here, on /chat).
+  const [myStatus, setMyStatus] = useState(() => getPresenceStatus(profile?.id))
+  useEffect(() => {
+    setMyStatus(getPresenceStatus(profile?.id))
+    const unsub = subscribePresenceStatus(({ profileId: changed }) => {
+      if (!changed || changed === profile?.id) setMyStatus(getPresenceStatus(profile?.id))
+    })
+    return unsub
+  }, [profile?.id])
+  const onSetMyStatus = useCallback((value) => {
+    if (profile?.id) setPresenceStatus(profile.id, value)
+  }, [profile?.id])
+  // 'auto' displays as active on the rail (you're using the app right now).
+  const selfDisplayStatus = myStatus === 'auto' ? 'active' : myStatus
+
+  // Mobile single-pane: when a conversation is open, show the message area and
+  // hide the rail + sidebar; otherwise show rail + sidebar. Desktop shows all
+  // three. The rail mirrors the sidebar so they appear/disappear together.
+  const railVisibility = conversationId ? 'hidden md:flex' : 'flex'
+  const sidebarVisibility = conversationId ? 'hidden md:flex' : 'flex'
   const mainVisibility = conversationId ? 'flex' : 'hidden md:flex'
 
   return (
-    <div className="h-full flex overflow-hidden">
-      {/* Left: conversation list */}
-      <div className={`${sidebarVisibility} w-full md:w-[320px] shrink-0 md:border-r border-slate-200 dark:border-dark-border h-full`}>
-        {loading && conversations.length === 0 ? (
-          <div className="h-full flex items-center justify-center"><Spinner /></div>
-        ) : (
-          <ChatSidebar
-            query={query}
-            onQueryChange={setQuery}
-            sections={sections}
-            groups={groups}
-            campfires={campfires}
-            presence={presence}
-            selectedId={conversationId}
-            onOpenContact={openContact}
-            onOpenConversation={openConversation}
-            onCreateGroup={isExternal ? undefined : () => setCreateGroupOpen(true)}
-          />
-        )}
+    <div
+      className="slack-chat h-screen w-screen flex overflow-hidden bg-[var(--chat-sidebar,#1a1d24)]"
+      style={sidebarThemeVars(chatPrefs.sidebarTheme)}
+    >
+      <div className={`${railVisibility} shrink-0`}>
+        <WorkspaceRail
+          active={railActive}
+          onSelect={onRailSelect}
+          profile={profile}
+          selfStatus={selfDisplayStatus}
+          manualStatus={myStatus}
+          onSetStatus={onSetMyStatus}
+          onBackToApp={onBackToApp}
+          onNewMessage={onNewMessage}
+          onNewChannel={isExternal ? undefined : openCreateGroup}
+        />
       </div>
 
-      {/* Right: open conversation, or empty/not-found state */}
-      <div className={`${mainVisibility} flex-1 min-w-0 flex-col bg-slate-50/40 dark:bg-dark-bg/30 h-full`}>
+      <div className={`${sidebarVisibility} w-full md:w-auto shrink-0`}>
+        <ChannelSidebar
+          query={query}
+          onQueryChange={setQuery}
+          sections={sections}
+          groups={groups}
+          campfires={campfires}
+          tasks={tasks}
+          presence={presence}
+          conversations={conversations}
+          loading={loading}
+          createOrOpen={createOrOpen}
+          selectedId={conversationId}
+          onSelectConversation={onSelectConversation}
+          onCloseActive={onCloseActive}
+          onCompose={isExternal ? undefined : openCreateGroup}
+          onCreateChannel={isExternal ? undefined : openCreateGroup}
+          onBackToApp={onBackToApp}
+          onPreferences={() => setPrefsOpen(true)}
+          view={railActive}
+          composeFocusSignal={composeFocusSignal}
+        />
+      </div>
+
+      {/* Message area: open conversation, or empty/not-found state */}
+      <div className={`${mainVisibility} flex-1 min-w-0 flex-col bg-white dark:bg-dark-bg h-full`}>
         {activeConv ? (
           <>
             <button
@@ -125,15 +303,16 @@ export default function ChatPage() {
               <ArrowLeft className="w-4 h-4" /> All conversations
             </button>
             <div className="flex-1 min-h-0 flex">
-              <ConversationPane
+              <SlackMessagePane
                 conversation={activeConv}
                 online={online}
+                status={peerStatus}
                 onMarkRead={markRead}
                 onGroupChanged={refetch}
+                lastReadAt={preReadLastReadAt}
                 threadRoot={threadRoot}
                 onOpenThread={openThread}
                 onCloseThread={closeThread}
-                fullPage
               />
             </div>
           </>
@@ -151,6 +330,18 @@ export default function ChatPage() {
         )}
       </div>
 
+      <QuickSwitcher
+        open={switcherOpen}
+        onClose={() => setSwitcherOpen(false)}
+        sections={sections}
+        groups={groups}
+        campfires={campfires}
+        tasks={tasks}
+        presence={presence}
+        createOrOpen={createOrOpen}
+        onSelectConversation={onSelectConversation}
+      />
+
       <CreateGroupModal
         isOpen={createGroupOpen}
         onClose={() => setCreateGroupOpen(false)}
@@ -159,6 +350,12 @@ export default function ChatPage() {
           setCreateGroupOpen(false)
           openConversation(convId)
         }}
+      />
+
+      <PreferencesModal
+        open={prefsOpen}
+        onClose={() => setPrefsOpen(false)}
+        profileId={profile?.id}
       />
     </div>
   )

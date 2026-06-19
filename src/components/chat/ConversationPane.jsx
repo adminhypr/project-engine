@@ -7,17 +7,18 @@ import { useDmTyping } from '../../hooks/useDmTyping'
 import { useOtherReadState } from '../../hooks/useOtherReadState'
 import { useGroupReadState } from '../../hooks/useGroupReadState'
 import ConversationHeader from './ConversationHeader'
-import MessageList from './MessageList'
 import ChatComposer from './ChatComposer'
 import TypingIndicator from './TypingIndicator'
 import GroupMembersModal from './GroupMembersModal'
 import AssignTodoFromChatModal from './AssignTodoFromChatModal'
 import ThreadPanel from './ThreadPanel'
-import { ReplyProvider } from './ReplyContext'
+import { ReplyProvider, useReplyContext } from './ReplyContext'
+import SlackMessageList from './slack/SlackMessageList'
 
 export default function ConversationPane({
   conversation,
   online,
+  status,
   onClose,
   onMinimize,
   onMarkRead,
@@ -211,6 +212,7 @@ export default function ConversationPane({
             conversation={conversation}
             otherProfile={conversation.other_profile}
             online={online}
+            status={status}
             canAssignTask={!isExternal && (conversation.kind === 'dm' || conversation.kind === 'group' || conversation.kind === 'hub')}
             onAssignTask={() => onAssignTask?.(conversation)}
             canAddTodo={isExternal && (conversation.kind === 'dm' || conversation.kind === 'group' || conversation.kind === 'hub')}
@@ -224,19 +226,21 @@ export default function ConversationPane({
             onToggleMaximize={onToggleMaximize ? () => onToggleMaximize(conversation.id) : undefined}
             onOpenMembers={isGroup ? () => setMembersOpen(true) : undefined}
           />
-          <MessageList
+          <WidgetPaneBody
             messages={messages}
             myId={profile?.id}
             loading={loading}
             hasMore={hasMore}
-            onLoadMore={loadMore}
-            onDelete={deleteMessage}
+            loadMore={loadMore}
+            deleteMessage={deleteMessage}
             otherLastReadAt={otherLastReadAt}
+            lastReadAt={conversation.last_read_at ?? null}
             groupReaders={isGroup ? groupReaders : null}
             scrollRootRef={scrollRootRef}
             conversationId={conversation.id}
             profileLookup={profileLookup}
-            onOpenThread={openThread}
+            openThread={openThread}
+            scrollToMessage={scrollToMessage}
           />
           {otherTyping && <TypingIndicator names={typingNames} />}
           <ChatComposer
@@ -273,5 +277,41 @@ export default function ConversationPane({
         />
       )}
     </ReplyProvider>
+  )
+}
+
+/**
+ * Inner body that consumes ReplyContext so MessageRow's hover toolbar can drive
+ * quote-reply + jump. Mirrors SlackMessagePane's SlackPaneBody bridge exactly:
+ * the new MessageRow takes onReply / onJumpToReply as props (the legacy
+ * MessageList achieved this via DmChatMessage calling useReplyContext()
+ * directly), so we bridge them here:
+ *   onReply       → requestReply (pushes the quoted target into ChatComposer)
+ *   onJumpToReply → scrollToMessage (same machinery the deep-link path uses)
+ */
+function WidgetPaneBody({
+  messages, myId, loading, hasMore, loadMore, deleteMessage,
+  otherLastReadAt, lastReadAt, groupReaders, scrollRootRef,
+  conversationId, profileLookup, openThread, scrollToMessage,
+}) {
+  const { requestReply } = useReplyContext()
+  return (
+    <SlackMessageList
+      messages={messages}
+      myId={myId}
+      loading={loading}
+      hasMore={hasMore}
+      onLoadMore={loadMore}
+      onDelete={deleteMessage}
+      otherLastReadAt={otherLastReadAt}
+      lastReadAt={lastReadAt}
+      groupReaders={groupReaders}
+      scrollRootRef={scrollRootRef}
+      conversationId={conversationId}
+      profileLookup={profileLookup}
+      onOpenThread={openThread}
+      onReply={(message, targetName) => requestReply(message, targetName)}
+      onJumpToReply={scrollToMessage}
+    />
   )
 }

@@ -25,7 +25,7 @@ function truncate(s, n) {
 }
 
 export default function ConversationHeader({
-  conversation, otherProfile, online, onMinimize, onClose,
+  conversation, otherProfile, online, status, onMinimize, onClose,
   onAssignTask, canAssignTask,
   onAddTodo, canAddTodo,
   onStartCall, callStarting,
@@ -39,11 +39,13 @@ export default function ConversationHeader({
     : isGroup
       ? groupDisplayName(conversation)
       : (otherProfile?.full_name || otherProfile?.email || 'Unknown')
+  const dmStatus = status || (online ? 'active' : 'offline')
+  const dmStatusLabel = dmStatus === 'active' ? 'Active' : dmStatus === 'away' ? 'Away' : 'Offline'
   const subtitle = isTask
     ? (conversation.task_status || 'Task chat')
     : isGroup
       ? memberCountLabel(conversation?.participants)
-      : (online ? 'Online' : 'Offline')
+      : dmStatusLabel
 
   const handleOpenTask = () => {
     if (!isTask || !conversation?.task_id) return
@@ -77,7 +79,7 @@ export default function ConversationHeader({
             <Users className="w-3 h-3" />
           </div>
         ) : (
-          <PresenceDot online={online} />
+          <PresenceDot online={online} status={status} />
         )}
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-slate-900 dark:text-white truncate">{name}</div>
