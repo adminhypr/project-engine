@@ -3,6 +3,7 @@ import { supabase } from '../../../lib/supabase'
 import { showToast } from '../../ui'
 import { useAuth } from '../../../hooks/useAuth'
 import { useConversation } from '../../../hooks/useConversation'
+import { useConversationMedia } from '../../../hooks/useConversationMedia'
 import { useDmTyping } from '../../../hooks/useDmTyping'
 import { useOtherReadState } from '../../../hooks/useOtherReadState'
 import { useGroupReadState } from '../../../hooks/useGroupReadState'
@@ -14,6 +15,8 @@ import ChatComposer from '../ChatComposer'
 import { ReplyProvider, useReplyContext } from '../ReplyContext'
 import ChannelHeader from './ChannelHeader'
 import SlackMessageList from './SlackMessageList'
+import FilesPanel from './FilesPanel'
+import LinksPanel from './LinksPanel'
 
 /**
  * Slack-style message pane for the full-page /chat experience (Task 2.4).
@@ -68,6 +71,25 @@ export default function SlackMessagePane({
     isGroup ? conversation.id : null,
     isGroup ? conversation.participants : null,
   )
+
+  // Header tab: Messages (default) | Files | Links. Reset to Messages whenever
+  // the conversation changes so a left-on Files tab doesn't carry across rooms.
+  const [tab, setTab] = useState('messages')
+  // Lazy media fetch: only query dm_messages for files/links once the user
+  // first opens a non-Messages tab in this conversation. `mediaActive` flips
+  // true on first open and resets when the conversation id changes.
+  const [mediaActive, setMediaActive] = useState(false)
+  useEffect(() => {
+    setTab('messages')
+    setMediaActive(false)
+  }, [conversation.id])
+  const { files, links, loading: mediaLoading } = useConversationMedia(
+    mediaActive ? conversation.id : null,
+  )
+  const handleTabChange = useCallback((next) => {
+    if (next !== 'messages') setMediaActive(true)
+    setTab(next)
+  }, [])
 
   const [membersOpen, setMembersOpen] = useState(false)
   const [todoOpen, setTodoOpen] = useState(false)
@@ -204,30 +226,42 @@ export default function SlackMessagePane({
             onStartCall={callsEnabled ? startCall : undefined}
             callStarting={callStarting}
             onOpenMembers={isGroup ? () => setMembersOpen(true) : undefined}
+            activeTab={tab}
+            onTabChange={handleTabChange}
+            fileCount={mediaActive ? files.length : undefined}
+            linkCount={mediaActive ? links.length : undefined}
           />
-          <SlackPaneBody
-            messages={messages}
-            myId={profile?.id}
-            loading={loading}
-            hasMore={hasMore}
-            loadMore={loadMore}
-            deleteMessage={deleteMessage}
-            otherLastReadAt={otherLastReadAt}
-            lastReadAt={lastReadAt}
-            groupReaders={isGroup ? groupReaders : null}
-            scrollRootRef={scrollRootRef}
-            conversationId={conversation.id}
-            profileLookup={profileLookup}
-            openThread={openThread}
-            scrollToMessage={scrollToMessage}
-          />
-          {otherTyping && <TypingIndicator names={typingNames} />}
-          <ChatComposer
-            conversationId={conversation.id}
-            onSend={sendMessage}
-            onTyping={emitTyping}
-            mentionablePeople={mentionablePeople}
-          />
+          {tab === 'messages' ? (
+            <>
+              <SlackPaneBody
+                messages={messages}
+                myId={profile?.id}
+                loading={loading}
+                hasMore={hasMore}
+                loadMore={loadMore}
+                deleteMessage={deleteMessage}
+                otherLastReadAt={otherLastReadAt}
+                lastReadAt={lastReadAt}
+                groupReaders={isGroup ? groupReaders : null}
+                scrollRootRef={scrollRootRef}
+                conversationId={conversation.id}
+                profileLookup={profileLookup}
+                openThread={openThread}
+                scrollToMessage={scrollToMessage}
+              />
+              {otherTyping && <TypingIndicator names={typingNames} />}
+              <ChatComposer
+                conversationId={conversation.id}
+                onSend={sendMessage}
+                onTyping={emitTyping}
+                mentionablePeople={mentionablePeople}
+              />
+            </>
+          ) : tab === 'files' ? (
+            <FilesPanel files={files} loading={mediaLoading} />
+          ) : (
+            <LinksPanel links={links} loading={mediaLoading} />
+          )}
         </div>
         {/* Thread column — flex sibling that PUSHES the pane on desktop */}
         {threadRoot && (

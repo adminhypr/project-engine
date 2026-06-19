@@ -92,6 +92,13 @@ export default function ChannelHeader({
   // search yet, so when omitted the button is a visible-but-disabled stub
   // (see TODO below). Wire it once a search surface exists.
   onSearchInChannel,
+  // Tab row (Messages | Files | Links). Additive: when activeTab/onTabChange
+  // are omitted (e.g. the floating widget) the row still renders Messages-only
+  // styling and clicking is a no-op, preserving the legacy single-tab look.
+  activeTab = 'messages',
+  onTabChange,
+  fileCount,
+  linkCount,
 }) {
   const navigate = useNavigate()
   const isGroup = conversation?.kind === 'group' || conversation?.kind === 'hub'
@@ -272,13 +279,33 @@ export default function ChannelHeader({
         </div>
       </div>
 
-      {/* Tab row: Messages (active). Files tab is intentionally omitted — there
-          is no per-conversation files surface to wire it to without stubbing a
-          broken tab (the design notes a Files tab as optional). */}
+      {/* Tab row: Messages | Files | Links. Files/Links panels are auto-
+          collected from the conversation (inline images, attachments, links). */}
       <div className="px-4 flex items-center gap-4 -mt-px">
-        <span className="py-1.5 text-[13px] font-bold text-slate-900 dark:text-white border-b-2 border-slate-900 dark:border-white">
-          Messages
-        </span>
+        {[
+          { key: 'messages', label: 'Messages', count: undefined },
+          { key: 'files', label: 'Files', count: fileCount },
+          { key: 'links', label: 'Links', count: linkCount },
+        ].map(t => {
+          const active = activeTab === t.key
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => onTabChange?.(t.key)}
+              className={
+                active
+                  ? 'py-1.5 text-[13px] font-bold text-slate-900 dark:text-white border-b-2 border-slate-900 dark:border-white'
+                  : 'py-1.5 text-[13px] font-medium text-slate-500 dark:text-slate-400 border-b-2 border-transparent hover:text-slate-700 dark:hover:text-slate-200'
+              }
+            >
+              {t.label}
+              {t.count != null && t.count > 0 && (
+                <span className="ml-1 text-slate-400 tabular-nums">{t.count}</span>
+              )}
+            </button>
+          )
+        })}
       </div>
     </header>
   )
