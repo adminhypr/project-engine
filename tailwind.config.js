@@ -68,7 +68,21 @@ export default {
           orange: '#f97316',
           yellow: '#eab308',
           green:  '#22c55e',
-        }
+        },
+        slack: {
+          sidebar:      '#1a1d24',
+          'sidebar-2':  '#15171d',
+          'item-active':'#4f46e5',   // brand-600
+          presence:     '#22c55e',
+          mention:      '#ef4444',
+          'pane-text':  '#1d1c1d',
+        },
+      },
+      fontSize: {
+        msg:          ['15px', { lineHeight: '22px' }],
+        'sidebar-hdr':['13px', { lineHeight: '18px' }],
+        timestamp:    ['12px', { lineHeight: '18px' }],
+        'channel-hdr':['18px', { lineHeight: '24px' }],
       },
       animation: {
         'fade-in': 'fadeIn 0.3s ease-out',
