@@ -48,8 +48,23 @@ export default function ChannelSidebar({
   onBackToApp,
   onInvite,
   onPreferences,
+  view = 'home',
+  composeFocusSignal = 0,
 }) {
   const searchRef = useRef(null)
+
+  // "DMs" rail view shows only the Direct messages section; "home" shows all.
+  const dmsOnly = view === 'dms'
+
+  // Focus the search input when the "+" → New message flow bumps the signal.
+  // Skip the initial value so it never steals focus on first render / page load.
+  const prevFocusSignalRef = useRef(composeFocusSignal)
+  useEffect(() => {
+    if (composeFocusSignal === prevFocusSignalRef.current) return
+    prevFocusSignalRef.current = composeFocusSignal
+    searchRef.current?.focus()
+    searchRef.current?.select?.()
+  }, [composeFocusSignal])
 
   // Focus the search input — the "search + compose" entry point for starting a
   // new DM (typing a name surfaces everyone via includeAllPeople) and for
@@ -158,26 +173,28 @@ export default function ChannelSidebar({
           <div className="h-full flex items-center justify-center"><Spinner /></div>
         ) : (
           <>
-            <SidebarSection
-              title="Channels"
-              onAdd={onCreateChannel}
-              onFilter={focusSearch}
-            >
-              {channels.length === 0 ? (
-                <p className="px-3 py-1 text-[13px] text-white/30">No channels</p>
-              ) : (
-                channels.map((c) => (
-                  <SidebarRow
-                    key={c.id}
-                    kind="channel"
-                    label={groupDisplayName(c)}
-                    unread={(c.unread || 0) > 0}
-                    active={c.id === selectedId}
-                    onClick={() => selectById(c.id)}
-                  />
-                ))
-              )}
-            </SidebarSection>
+            {!dmsOnly && (
+              <SidebarSection
+                title="Channels"
+                onAdd={onCreateChannel}
+                onFilter={focusSearch}
+              >
+                {channels.length === 0 ? (
+                  <p className="px-3 py-1 text-[13px] text-white/30">No channels</p>
+                ) : (
+                  channels.map((c) => (
+                    <SidebarRow
+                      key={c.id}
+                      kind="channel"
+                      label={groupDisplayName(c)}
+                      unread={(c.unread || 0) > 0}
+                      active={c.id === selectedId}
+                      onClick={() => selectById(c.id)}
+                    />
+                  ))
+                )}
+              </SidebarSection>
+            )}
 
             <SidebarSection title="Direct messages" onAdd={focusSearch}>
               {visibleDms.length === 0 ? (
@@ -198,7 +215,7 @@ export default function ChannelSidebar({
               )}
             </SidebarSection>
 
-            {taskChats.length > 0 && (
+            {!dmsOnly && taskChats.length > 0 && (
               <SidebarSection title="Task chats">
                 {taskChats.map((t) => (
                   <SidebarRow

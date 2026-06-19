@@ -88,9 +88,17 @@ export default function ChatPage() {
 
   const onBackToApp = useCallback(() => navigate('/my-tasks'), [navigate])
 
-  // Workspace rail tabs aren't fully wired yet (Home is the default view).
-  // Track selection locally so the rail highlights without breaking anything.
+  // Workspace rail view: 'home' (full sidebar) or 'dms' (Direct messages only).
   const [railActive, setRailActive] = useState('home')
+
+  // Bumped to ask ChannelSidebar to focus its search input (the "+" → New
+  // message flow). A counter (not a boolean) so repeated New-message clicks each
+  // re-trigger the focus effect.
+  const [composeFocusSignal, setComposeFocusSignal] = useState(0)
+  const onNewMessage = useCallback(() => {
+    setRailActive('dms')
+    setComposeFocusSignal(s => s + 1)
+  }, [])
 
   // Create-group modal (restored from the pre-redesign ChatPage). Externals
   // can't create groups, so the affordance is gated for them.
@@ -100,13 +108,11 @@ export default function ChatPage() {
     setCreateGroupOpen(true)
   }, [isExternal])
 
-  // The rail '+' create button and the WorkspaceHeader compose pencil both
-  // open the create-group flow. railActive 'create' is transient — don't
-  // persist it as a selected tab.
+  // Rail nav selection is only 'home' | 'dms' now (the "+" create button owns
+  // its own popover and calls onNewMessage / onNewChannel directly).
   const onRailSelect = useCallback((id) => {
-    if (id === 'create') { openCreateGroup(); return }
     setRailActive(id)
-  }, [openCreateGroup])
+  }, [])
 
   // Persist the last-open conversation so a bare /chat reopens it next time.
   useEffect(() => {
@@ -211,6 +217,8 @@ export default function ChatPage() {
           profile={profile}
           presenceOnline={selfOnline}
           onBackToApp={onBackToApp}
+          onNewMessage={onNewMessage}
+          onNewChannel={isExternal ? undefined : openCreateGroup}
         />
       </div>
 
@@ -231,6 +239,8 @@ export default function ChatPage() {
           onCompose={isExternal ? undefined : openCreateGroup}
           onCreateChannel={isExternal ? undefined : openCreateGroup}
           onBackToApp={onBackToApp}
+          view={railActive}
+          composeFocusSignal={composeFocusSignal}
         />
       </div>
 
