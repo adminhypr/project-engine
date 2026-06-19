@@ -41,7 +41,37 @@ export default function ChatPage() {
     [conversations, conversationId],
   )
 
-  // Open a conversation by id → reflect in the URL + clear its unread.
+  // Pre-read cursor snapshot for the "New messages" amber line.
+  //
+  // Selecting a conversation calls markRead(convId), which optimistically bumps
+  // its last_read_at to ~now. If SlackMessageList snapshotted that live value it
+  // would always be "now" and firstUnreadId() would return null — the line would
+  // never show. So we capture each conversation's last_read_at AS IT WAS when it
+  // first became active, BEFORE markRead bumps it, and feed that stable value to
+  // the pane instead of the live activeConv.last_read_at.
+  //
+  // Captured synchronously during render (the first time we see a conv id) so it
+  // beats both openConversation's markRead AND the pane's mount markRead effect.
+  // The entry persists for the lifetime the conversation stays open, then is
+  // cleared on conversation change so re-opening re-captures a fresh cursor.
+  const preReadCursorRef = useRef(new Map())
+  const prevConvIdRef = useRef(conversationId)
+  if (prevConvIdRef.current !== conversationId) {
+    // Navigated away from the previous conversation — drop its snapshot so a
+    // later return re-captures the (now-advanced) cursor.
+    if (prevConvIdRef.current) preReadCursorRef.current.delete(prevConvIdRef.current)
+    prevConvIdRef.current = conversationId
+  }
+  if (activeConv && !preReadCursorRef.current.has(activeConv.id)) {
+    preReadCursorRef.current.set(activeConv.id, activeConv.last_read_at ?? null)
+  }
+  const preReadLastReadAt = activeConv
+    ? preReadCursorRef.current.get(activeConv.id) ?? null
+    : null
+
+  // Open a conversation by id → reflect in the URL + clear its unread. The
+  // pre-read cursor for convId is captured during render (above) before this
+  // markRead bumps last_read_at, so the amber line stays anchored.
   const openConversation = useCallback((convId) => {
     if (!convId) return
     navigate(`/chat/${convId}`)
@@ -176,7 +206,7 @@ export default function ChatPage() {
                 online={online}
                 onMarkRead={markRead}
                 onGroupChanged={refetch}
-                lastReadAt={activeConv.last_read_at}
+                lastReadAt={preReadLastReadAt}
                 threadRoot={threadRoot}
                 onOpenThread={openThread}
                 onCloseThread={closeThread}

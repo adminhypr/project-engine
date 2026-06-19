@@ -152,6 +152,14 @@ export default function SlackMessageList({
     snapConvRef.current = conversationId
     initialLastReadRef.current = lastReadAt
   }
+  // The memo intentionally reads initialLastReadRef.current rather than taking
+  // it as a dependency. The ref is (re)assigned synchronously a few lines above
+  // in THIS render whenever conversationId changes, so by the time the memo body
+  // runs it already holds the fresh snapshot for the current conversation. The
+  // [messages, conversationId] deps are sufficient: the anchor only needs to
+  // recompute when new messages arrive or the conversation switches — the
+  // snapshot itself is constant for the lifetime of a given conversationId
+  // (that's the whole point — it must NOT track later lastReadAt bumps).
   const unreadAnchorId = useMemo(
     () => firstUnreadId(messages, initialLastReadRef.current),
     [messages, conversationId]

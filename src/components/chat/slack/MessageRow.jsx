@@ -10,6 +10,7 @@ import { extractMeetUrl } from '../../../lib/meetLink'
 import ChatTaskCard from '../ChatTaskCard'
 import ReactionPicker from '../ReactionPicker'
 import MessageReactions from '../MessageReactions'
+import SeenByAvatars from '../SeenByAvatars'
 
 // One-click quick reaction shown directly in the hover toolbar (Slack puts
 // a small palette of common emoji here before the full picker).
@@ -84,8 +85,11 @@ function QuotedReply({ message, onJump }) {
  *   onReply(message, targetName)   — quote-reply (requestReply equivalent)
  *   onJumpToReply(messageId)       — scroll to a quoted message
  *   onDelete(messageId)            — soft-delete (own messages only)
- *   onMarkUnread(message)          — optional; stubbed if absent (see report)
- *   onEdit(message)                — optional; stubbed if absent (no edit yet)
+ *   onMarkUnread(message)          — optional; menu item hidden if absent
+ *   onEdit(message)                — optional; menu item hidden if absent
+ *   seenBy                         — group "seen by" readers for THIS message
+ *                                    (from computeSeenByMessage; empty/absent
+ *                                    for 1:1 and non-terminal group messages)
  */
 export default function MessageRow({
   message,
@@ -102,6 +106,7 @@ export default function MessageRow({
   onDelete,
   onMarkUnread,
   onEdit,
+  seenBy,
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerPos, setPickerPos] = useState(null)
@@ -265,11 +270,20 @@ export default function MessageRow({
             )}
           </button>
         )}
+
+        {/* Group "seen by" avatars — shown under the last message seen by
+            others (computeSeenByMessage only populates that row). Mirrors the
+            legacy DmChatMessage placement at the end of the body column. */}
+        {seenBy && seenBy.length > 0 && (
+          <SeenByAvatars readers={seenBy} align="start" />
+        )}
       </div>
 
-      {/* Hover toolbar — floats above the row's top-right, never shifts layout */}
+      {/* Hover toolbar — floats above the row's top-right, never shifts layout.
+          Revealed on hover AND keyboard focus-within so tabbing to the toolbar
+          buttons surfaces it for keyboard users. */}
       {!isDeleted && (
-        <div className="hidden group-hover/message:inline-flex absolute -top-3 right-9 z-20 rounded-md border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card shadow-card p-0.5">
+        <div className="hidden group-hover/message:inline-flex group-focus-within/message:inline-flex absolute -top-3 right-9 z-20 rounded-md border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card shadow-card p-0.5">
           <button
             type="button"
             onClick={() => onToggleReaction?.(message.id, QUICK_EMOJI)}
@@ -331,13 +345,15 @@ export default function MessageRow({
                       <MessageSquare className="w-3.5 h-3.5" /> Reply
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => { onMarkUnread?.(message); setMenuOpen(false) }}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10"
-                  >
-                    <MailMinus className="w-3.5 h-3.5" /> Mark unread
-                  </button>
+                  {onMarkUnread && (
+                    <button
+                      type="button"
+                      onClick={() => { onMarkUnread(message); setMenuOpen(false) }}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10"
+                    >
+                      <MailMinus className="w-3.5 h-3.5" /> Mark unread
+                    </button>
+                  )}
                   {isMine && onEdit && (
                     <button
                       type="button"
