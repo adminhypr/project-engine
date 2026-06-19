@@ -97,7 +97,7 @@ export default function SlackMessagePane({
   const [todoOpen, setTodoOpen] = useState(false)
   const [wallpaperOpen, setWallpaperOpen] = useState(false)
   const { resolvedBackground, wallpaper, setPreset, uploadImage, removeWallpaper, busy: wallpaperBusy } =
-    useConversationWallpaper(conversation.id, conversation.wallpaper)
+    useConversationWallpaper(conversation.id)
   const [callStarting, setCallStarting] = useState(false)
   const callsEnabled = import.meta.env.VITE_CALLS_ENABLED === 'true'
 

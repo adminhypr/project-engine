@@ -38,7 +38,6 @@ export function shapeConversationRow({ row, participantsByConv, profileById, unr
       other_user_id: null,
       other_profile: null,
       participants,
-      wallpaper: conv.wallpaper ?? null,
       unread: unreadByConv.get(row.conversation_id) || 0,
       task_id: conv.task_id || null,
       task_title: task?.title ?? null,
@@ -64,7 +63,6 @@ export function shapeConversationRow({ row, participantsByConv, profileById, unr
       other_user_id: null,
       other_profile: null,
       participants,
-      wallpaper: conv.wallpaper ?? null,
       unread: unreadByConv.get(row.conversation_id) || 0,
     }
   }
@@ -82,7 +80,6 @@ export function shapeConversationRow({ row, participantsByConv, profileById, unr
     other_user_id: otherId,
     other_profile: otherId ? (profileById.get(otherId) || null) : null,
     participants: null,
-    wallpaper: conv.wallpaper ?? null,
     unread: unreadByConv.get(row.conversation_id) || 0,
   }
 }

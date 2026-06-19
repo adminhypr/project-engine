@@ -13,7 +13,12 @@ import { parseWallpaper, resolveWallpaperBackground } from '../lib/chatWallpaper
 //   null            → no wallpaper
 //
 // This hook:
-//   • seeds from `initialWallpaper` (from the conversation row) to avoid a flash,
+//   • fetches the wallpaper for the SINGLE active conversation on its own
+//     (a targeted select on conversations.wallpaper), so the main
+//     `useConversations` list query does NOT have to reference the migration-107
+//     columns. If the column doesn't exist yet (migration 107 un-applied), the
+//     fetch degrades gracefully to "no wallpaper" instead of throwing — the
+//     chat UI works normally, just without wallpaper, until the migration lands.
 //   • subscribes to conversations UPDATE for this id so all participants see
 //     changes live,
 //   • signs the storage path when the value is an upload,
@@ -22,20 +27,54 @@ import { parseWallpaper, resolveWallpaperBackground } from '../lib/chatWallpaper
 
 const MAX_BYTES = 5 * 1024 * 1024 // 5 MB cap for wallpaper uploads
 
-export function useConversationWallpaper(conversationId, initialWallpaper = null) {
+// Postgres "undefined column" (42703) surfaces through PostgREST as a 400 with
+// code '42703'. When migration 107 hasn't been applied, selecting/updating the
+// wallpaper columns errors with this code; we treat it as "feature not enabled"
+// and degrade to no-wallpaper rather than surfacing an error to the user.
+function isUndefinedColumnError(error) {
+  if (!error) return false
+  return (
+    error.code === '42703' ||
+    /column .*wallpaper.* does not exist/i.test(error.message || '')
+  )
+}
+
+export function useConversationWallpaper(conversationId) {
   const { profile } = useAuth()
-  const [wallpaper, setWallpaper] = useState(initialWallpaper)
+  const [wallpaper, setWallpaper] = useState(null)
   const [signedUrl, setSignedUrl] = useState(null)
   const [busy, setBusy] = useState(false)
 
   const cidRef = useRef(conversationId)
   cidRef.current = conversationId
 
-  // Reset local state when switching conversations; seed from the new initial.
+  // Reset local state when switching conversations, then fetch the wallpaper for
+  // the new conversation on its own. Degrades to no-wallpaper if the column
+  // doesn't exist yet (migration 107 un-applied) — never throws into the UI.
   useEffect(() => {
-    setWallpaper(initialWallpaper)
+    setWallpaper(null)
     setSignedUrl(null)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!conversationId) return
+    let alive = true
+    supabase
+      .from('conversations')
+      .select('wallpaper, wallpaper_set_by, wallpaper_set_at')
+      .eq('id', conversationId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!alive) return
+        if (error) {
+          // Undefined-column (migration not applied) or any fetch error →
+          // silently treat as no wallpaper. The list + chat keep working.
+          if (!isUndefinedColumnError(error)) {
+            // Non-schema errors are non-fatal here too; log for visibility only.
+            console.warn('[wallpaper] fetch failed', error)
+          }
+          return
+        }
+        setWallpaper(data?.wallpaper ?? null)
+      })
+    return () => { alive = false }
   }, [conversationId])
 
   // Realtime: any participant changing the wallpaper updates everyone live.
@@ -90,7 +129,11 @@ export function useConversationWallpaper(conversationId, initialWallpaper = null
       })
       .eq('id', cid)
     if (error) {
-      showToast('Could not update the wallpaper', 'error')
+      if (isUndefinedColumnError(error)) {
+        showToast('Wallpapers aren’t enabled yet', 'error')
+      } else {
+        showToast('Could not update the wallpaper', 'error')
+      }
       return false
     }
     // Optimistic — realtime echo from our own write is dedup'd by value.
