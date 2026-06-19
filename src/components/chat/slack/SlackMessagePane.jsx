@@ -4,6 +4,7 @@ import { showToast } from '../../ui'
 import { useAuth } from '../../../hooks/useAuth'
 import { useConversation } from '../../../hooks/useConversation'
 import { useConversationMedia } from '../../../hooks/useConversationMedia'
+import { useConversationWallpaper } from '../../../hooks/useConversationWallpaper'
 import { useDmTyping } from '../../../hooks/useDmTyping'
 import { useOtherReadState } from '../../../hooks/useOtherReadState'
 import { useGroupReadState } from '../../../hooks/useGroupReadState'
@@ -15,6 +16,7 @@ import ChatComposer from '../ChatComposer'
 import { ReplyProvider, useReplyContext } from '../ReplyContext'
 import ChannelHeader from './ChannelHeader'
 import SlackMessageList from './SlackMessageList'
+import WallpaperPicker from './WallpaperPicker'
 import FilesPanel from './FilesPanel'
 import LinksPanel from './LinksPanel'
 
@@ -93,6 +95,9 @@ export default function SlackMessagePane({
 
   const [membersOpen, setMembersOpen] = useState(false)
   const [todoOpen, setTodoOpen] = useState(false)
+  const [wallpaperOpen, setWallpaperOpen] = useState(false)
+  const { resolvedBackground, wallpaper, setPreset, uploadImage, removeWallpaper, busy: wallpaperBusy } =
+    useConversationWallpaper(conversation.id, conversation.wallpaper)
   const [callStarting, setCallStarting] = useState(false)
   const callsEnabled = import.meta.env.VITE_CALLS_ENABLED === 'true'
 
@@ -225,6 +230,7 @@ export default function SlackMessagePane({
             onAddTodo={() => setTodoOpen(true)}
             onStartCall={callsEnabled ? startCall : undefined}
             callStarting={callStarting}
+            onSetWallpaper={() => setWallpaperOpen(true)}
             onOpenMembers={isGroup ? () => setMembersOpen(true) : undefined}
             activeTab={tab}
             onTabChange={handleTabChange}
@@ -248,6 +254,7 @@ export default function SlackMessagePane({
                 profileLookup={profileLookup}
                 openThread={openThread}
                 scrollToMessage={scrollToMessage}
+                wallpaperBackground={resolvedBackground}
               />
               {otherTyping && <TypingIndicator names={typingNames} />}
               <ChatComposer
@@ -288,6 +295,15 @@ export default function SlackMessagePane({
           onClose={() => setTodoOpen(false)}
         />
       )}
+      <WallpaperPicker
+        isOpen={wallpaperOpen}
+        onClose={() => setWallpaperOpen(false)}
+        wallpaper={wallpaper}
+        busy={wallpaperBusy}
+        onSetPreset={setPreset}
+        onUploadImage={uploadImage}
+        onRemove={removeWallpaper}
+      />
     </ReplyProvider>
   )
 }
@@ -304,6 +320,7 @@ function SlackPaneBody({
   messages, myId, loading, hasMore, loadMore, deleteMessage,
   otherLastReadAt, lastReadAt, groupReaders, scrollRootRef,
   conversationId, profileLookup, openThread, scrollToMessage,
+  wallpaperBackground,
 }) {
   const { requestReply } = useReplyContext()
   return (
@@ -323,6 +340,7 @@ function SlackPaneBody({
       onOpenThread={openThread}
       onReply={(message, targetName) => requestReply(message, targetName)}
       onJumpToReply={scrollToMessage}
+      wallpaperBackground={wallpaperBackground}
     />
   )
 }

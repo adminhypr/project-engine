@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Hash, ChevronDown, Users, Search, Video, Loader2,
   ClipboardList, CheckSquare, ArrowUpRight, Maximize2, Minimize2,
-  Minus, X,
+  Minus, X, Image as ImageIcon,
 } from 'lucide-react'
 import PresenceDot from '../PresenceDot'
 import { groupDisplayName, memberCountLabel } from '../../../lib/groupConversations'
@@ -82,6 +82,7 @@ export default function ChannelHeader({
   onAssignTask, canAssignTask,
   onAddTodo, canAddTodo,
   onStartCall, callStarting,
+  onSetWallpaper,
   onOpenMembers,
   // Widget-shell controls — optional. On the full page these are usually
   // undefined (no minimize/maximize/close chrome), so each renders only when
@@ -228,6 +229,20 @@ export default function ChannelHeader({
           >
             <Search className="w-4 h-4" />
           </button>
+
+          {/* Set wallpaper — shared per-conversation background. Any participant
+              can change it (migration 107); shown whenever a handler is wired. */}
+          {onSetWallpaper && (
+            <button
+              type="button"
+              onClick={onSetWallpaper}
+              className="p-1.5 rounded-md text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-white/5"
+              aria-label="Set chat wallpaper"
+              title="Set chat wallpaper"
+            >
+              <ImageIcon className="w-4 h-4" />
+            </button>
+          )}
 
           {/* Call / huddle button — gated identically to ConversationHeader:
               the parent only passes onStartCall when VITE_CALLS_ENABLED is on. */}

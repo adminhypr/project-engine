@@ -17,7 +17,7 @@ import { isExternal } from '../lib/roleHelpers'
 async function fetchConversationsForUser(userId) {
   const { data: myRows, error: myErr } = await supabase
     .from('conversation_participants')
-    .select('conversation_id, last_read_at, muted, conversation:conversations!inner(id, kind, title, team_id, task_id, hub_id, last_message_at, last_message_preview)')
+    .select('conversation_id, last_read_at, muted, conversation:conversations!inner(id, kind, title, team_id, task_id, hub_id, last_message_at, last_message_preview, wallpaper)')
     .eq('user_id', userId)
   if (myErr) throw myErr
   if (!myRows || myRows.length === 0) return []

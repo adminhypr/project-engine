@@ -52,6 +52,7 @@ export default function SlackMessageList({
   onJumpToReply,
   onMarkUnread,
   onEdit,
+  wallpaperBackground,
 }) {
   const { byMessageId, toggle } = useMessageReactions(conversationId)
   const messageIds = useMemo(
@@ -180,19 +181,38 @@ export default function SlackMessageList({
   }
   if (messages.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-1 p-8 text-center">
+      <div
+        className="relative flex-1 flex flex-col items-center justify-center gap-1 p-8 text-center"
+        style={wallpaperBackground ? { background: wallpaperBackground } : undefined}
+      >
+        {wallpaperBackground && (
+          <div className="absolute inset-0 bg-white/70 dark:bg-dark-bg/70 pointer-events-none" aria-hidden="true" />
+        )}
+        <div className="relative z-10 flex flex-col items-center gap-1">
         <span className="text-3xl" aria-hidden="true">👋</span>
         <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
           This is the very beginning of this conversation.
         </p>
         <p className="text-xs text-slate-500 dark:text-slate-400">Say hi to get things started.</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div ref={scrollRootRef} className="relative flex-1 overflow-y-auto">
-      <div className="min-h-full flex flex-col justify-end py-2">
+    <div
+      ref={scrollRootRef}
+      className="relative flex-1 overflow-y-auto"
+      style={wallpaperBackground ? { background: wallpaperBackground, backgroundAttachment: 'local' } : undefined}
+    >
+      <div className="relative min-h-full flex flex-col justify-end py-2">
+      {/* Readability scrim — a semi-opaque theme-bg layer between the wallpaper
+          and the message rows. As an absolute child of this min-h-full track it
+          spans the full scrollable content height, so messages stay legible over
+          an image in both light and dark. Rows render above it (relative z-10). */}
+      {wallpaperBackground && (
+        <div className="absolute inset-0 bg-white/72 dark:bg-dark-bg/72 pointer-events-none" aria-hidden="true" />
+      )}
       {hasMore && (
         <div className="text-center mb-2">
           <button
