@@ -186,7 +186,7 @@ export default function SlackMessageList({
         style={wallpaperBackground ? { background: wallpaperBackground } : undefined}
       >
         {wallpaperBackground && (
-          <div className="absolute inset-0 bg-white/70 dark:bg-dark-bg/70 pointer-events-none" aria-hidden="true" />
+          <div className="absolute inset-0 bg-white/78 dark:bg-dark-bg/78 pointer-events-none" aria-hidden="true" />
         )}
         <div className="relative z-10 flex flex-col items-center gap-1">
         <span className="text-3xl" aria-hidden="true">👋</span>
@@ -211,7 +211,7 @@ export default function SlackMessageList({
           spans the full scrollable content height, so messages stay legible over
           an image in both light and dark. Rows render above it (relative z-10). */}
       {wallpaperBackground && (
-        <div className="absolute inset-0 bg-white/72 dark:bg-dark-bg/72 pointer-events-none" aria-hidden="true" />
+        <div className="absolute inset-0 bg-white/78 dark:bg-dark-bg/78 pointer-events-none" aria-hidden="true" />
       )}
       {hasMore && (
         <div className="text-center mb-2">

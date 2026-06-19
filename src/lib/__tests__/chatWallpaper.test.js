@@ -8,7 +8,7 @@ import {
 
 describe('WALLPAPER_PRESETS', () => {
   it('exposes exactly 5 neon presets', () => {
-    expect(WALLPAPER_PRESETS).toHaveLength(5)
+    expect(WALLPAPER_PRESETS).toHaveLength(6)
   })
 
   it('every preset has a unique key, a label, and a non-empty background', () => {

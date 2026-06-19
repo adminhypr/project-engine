@@ -71,11 +71,13 @@ export default function WallpaperPicker({
                   aria-pressed={active}
                 >
                   {active && (
-                    <span className="absolute top-1.5 right-1.5 grid place-items-center w-5 h-5 rounded-full bg-white/90 text-brand-600 shadow-soft">
+                    <span className="absolute top-1.5 right-1.5 grid place-items-center w-5 h-5 rounded-full bg-brand-600 text-white shadow-soft">
                       <Check className="w-3.5 h-3.5" />
                     </span>
                   )}
-                  <span className="absolute bottom-1 left-2 text-[11px] font-semibold text-white/95 drop-shadow">
+                  {/* Dark label — the presets are light, so dark text + a soft
+                      light halo stays readable on every swatch. */}
+                  <span className="absolute bottom-1 left-2 text-[11px] font-semibold text-slate-700 [text-shadow:0_1px_2px_rgba(255,255,255,0.65)]">
                     {p.label}
                   </span>
                 </button>
