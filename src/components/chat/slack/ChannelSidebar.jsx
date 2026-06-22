@@ -73,6 +73,8 @@ export default function ChannelSidebar({
   onBackToApp,
   onInvite,
   onPreferences,
+  manualStatus = 'auto',
+  onSetStatus,
   view = 'home',
   composeFocusSignal = 0,
 }) {
@@ -338,6 +340,8 @@ export default function ChannelSidebar({
         onBackToApp={onBackToApp}
         onInvite={onInvite}
         onPreferences={onPreferences}
+        manualStatus={manualStatus}
+        onSetStatus={onSetStatus}
       />
 
       {/* Search */}

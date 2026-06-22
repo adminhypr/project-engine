@@ -1,6 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, PenSquare, UserPlus, Settings, ArrowLeft, LogOut } from 'lucide-react'
+import { ChevronDown, PenSquare, UserPlus, Settings, ArrowLeft, LogOut, Check } from 'lucide-react'
 import { signOut } from '../../../lib/auth'
+import PresenceDot from '../PresenceDot'
+
+// Status choices for the workspace dropdown. On mobile the rail (which owns the
+// avatar status menu on desktop) is hidden, so this is the only way to set
+// status on a phone. 'active' maps to the 'auto' override (resume automatic idle
+// detection), mirroring WorkspaceRail's STATUS_OPTIONS.
+const STATUS_CHOICES = [
+  { value: 'active', label: 'Active', status: 'active' },
+  { value: 'away', label: 'Away', status: 'away' },
+  { value: 'offline', label: 'Appear offline', status: 'offline' },
+]
 
 // Slack-style workspace header for the channel sidebar (design Task 1.5).
 // Workspace name + chevron dropdown + compose pencil. Pure presentation aside
@@ -19,6 +30,8 @@ export default function WorkspaceHeader({
   onInvite,
   onPreferences,
   onBackToApp,
+  manualStatus = 'auto',
+  onSetStatus,
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -72,6 +85,29 @@ export default function WorkspaceHeader({
 
       {open && (
         <div className="absolute left-2 top-12 z-50 w-60 rounded-lg border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card shadow-elevated py-1 overflow-hidden">
+          {onSetStatus && (
+            <>
+              <div className="px-3 pt-1.5 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                Set yourself as
+              </div>
+              {STATUS_CHOICES.map(opt => {
+                const selected = (manualStatus === 'auto' ? 'active' : manualStatus) === opt.value
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => { setOpen(false); onSetStatus(opt.value === 'active' ? 'auto' : opt.value) }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 text-left"
+                  >
+                    <PresenceDot status={opt.status} className="!ring-0 !w-2.5 !h-2.5 shrink-0" />
+                    <span className="flex-1 truncate">{opt.label}</span>
+                    {selected && <Check className="w-4 h-4 text-brand-600 dark:text-brand-400 shrink-0" />}
+                  </button>
+                )
+              })}
+              <div className="my-1 border-t border-slate-200 dark:border-dark-border" />
+            </>
+          )}
           {menuItem(UserPlus, 'Invite people', onInvite)}
           {menuItem(Settings, 'Preferences', onPreferences)}
           <div className="my-1 border-t border-slate-200 dark:border-dark-border" />
