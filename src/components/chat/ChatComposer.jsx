@@ -53,7 +53,14 @@ const DEFAULT_H = 40
 const MAX_H = 260
 const MAX_MENTION_MATCHES = 6
 
-export default function ChatComposer({ conversationId, onSend, onTyping, disabled, mentionablePeople = [], threadRootId = null, placeholder = 'Type a message…' }) {
+export default function ChatComposer({ conversationId, onSend, onTyping, disabled, mentionablePeople = [], threadRootId = null, placeholder = 'Type a message…', fullPage = false }) {
+  // The full-page /chat mobile pass declutters the action row (only attach /
+  // emoji / send under md) and adds bottom safe-area padding (the composer is
+  // flush to the screen edge there). Shared surfaces — the floating widget, task
+  // chat, thread panels — keep the full action row and no safe-area padding, so
+  // `fullPage` is the gate. The 16px textarea and tap-to-reveal message actions
+  // are universal mobile fixes and intentionally apply everywhere.
+  const mobileHide = fullPage ? 'hidden md:flex' : 'flex'
   const { profile } = useAuth()
   const profileId = profile?.id
   // Chat prefs: toolbarDefault seeds the initial toolbar visibility (still
@@ -475,7 +482,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
 
   return (
     <div
-      className={`border-t border-slate-200 dark:border-dark-border pb-[env(safe-area-inset-bottom)] md:pb-0 ${dragOver ? 'ring-2 ring-inset ring-brand-400' : ''}`}
+      className={`border-t border-slate-200 dark:border-dark-border ${fullPage ? 'pb-[env(safe-area-inset-bottom)] md:pb-0' : ''} ${dragOver ? 'ring-2 ring-inset ring-brand-400' : ''}`}
       onDragOver={e => { e.preventDefault(); setDragOver(true) }}
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
@@ -561,7 +568,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
       <div
         onPointerDown={startResize}
         onDoubleClick={() => setTextareaHeight(DEFAULT_H)}
-        className="h-1.5 mx-2 rounded-full bg-transparent hover:bg-slate-200 dark:hover:bg-slate-700 cursor-ns-resize hidden md:flex items-center justify-center group"
+        className={`h-1.5 mx-2 rounded-full bg-transparent hover:bg-slate-200 dark:hover:bg-slate-700 cursor-ns-resize ${mobileHide} items-center justify-center group`}
         role="separator"
         aria-label="Resize composer (double-click to reset)"
         title="Drag to resize · double-click to reset"
@@ -594,7 +601,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
           aria-label="Formatting"
           aria-pressed={showToolbar}
           title="Show formatting toolbar"
-          className={`w-9 h-9 shrink-0 rounded-full hidden md:flex items-center justify-center hover:bg-slate-100 dark:hover:bg-dark-hover ${showToolbar ? 'text-brand-600 dark:text-brand-400 bg-slate-100 dark:bg-dark-hover' : 'text-slate-400 hover:text-brand-600 dark:hover:text-brand-400'}`}
+          className={`w-9 h-9 shrink-0 rounded-full ${mobileHide} items-center justify-center hover:bg-slate-100 dark:hover:bg-dark-hover ${showToolbar ? 'text-brand-600 dark:text-brand-400 bg-slate-100 dark:bg-dark-hover' : 'text-slate-400 hover:text-brand-600 dark:hover:text-brand-400'}`}
         >
           <Type className="w-4 h-4" />
         </button>
@@ -622,7 +629,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
           disabled={busy || disabled}
           aria-label="Mention someone"
           title="Mention someone"
-          className="w-9 h-9 shrink-0 rounded-full hidden md:flex items-center justify-center text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40"
+          className={`w-9 h-9 shrink-0 rounded-full ${mobileHide} items-center justify-center text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40`}
         >
           <AtSign className="w-4 h-4" />
         </button>
@@ -636,7 +643,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
               aria-label="Send a GIF"
               aria-pressed={gifOpen}
               title="Send a GIF"
-              className={`w-9 h-9 shrink-0 rounded-full hidden md:flex items-center justify-center hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40 ${gifOpen ? 'text-brand-600 dark:text-brand-400 bg-slate-100 dark:bg-dark-hover' : 'text-slate-400 hover:text-brand-600 dark:hover:text-brand-400'}`}
+              className={`w-9 h-9 shrink-0 rounded-full ${mobileHide} items-center justify-center hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40 ${gifOpen ? 'text-brand-600 dark:text-brand-400 bg-slate-100 dark:bg-dark-hover' : 'text-slate-400 hover:text-brand-600 dark:hover:text-brand-400'}`}
             >
               <Film className="w-4 h-4" />
             </button>

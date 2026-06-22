@@ -137,6 +137,16 @@ conversation up instead of hiding the input.
 - Bottom tab-bar navigation paradigm (rejected; rail simply hides).
 - Pull-to-refresh, virtualized message list, message-content search.
 - Any change to the floating `ChatWidget`, hubs, task chat, or DB.
+  - **Shared-component note (decided during code review):** `ChatComposer` and
+    `MessageRow` are shared by the widget / task chat / thread panels. The
+    chat-page declutter (hiding the secondary composer buttons + the bottom
+    safe-area padding) is gated behind a `fullPage` prop (passed only by
+    `SlackMessagePane`) so those surfaces stay byte-for-byte unchanged. Two
+    changes are intentionally left GLOBAL because they are universal mobile
+    bug-fixes with no downside anywhere: the **16px composer textarea** (prevents
+    iOS focus-zoom) and **tap-to-reveal message actions** (the only way to reach
+    react/reply/thread/delete on touch — those toolbars were 100% hover-dead on
+    every chat surface before this).
 - Standalone-PWA chrome (status bar theming, install prompts). Safe-area insets
   are applied but no manifest/display-mode work.
 

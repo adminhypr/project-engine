@@ -264,6 +264,7 @@ export default function SlackMessagePane({
                 onSend={sendMessage}
                 onTyping={emitTyping}
                 mentionablePeople={mentionablePeople}
+                fullPage
               />
             </>
           ) : tab === 'files' ? (
