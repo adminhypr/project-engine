@@ -13,6 +13,7 @@ import { usePageTitle } from '../hooks/usePageTitle'
 import { readLastOpened, writeLastOpened, resolveActiveConversation } from '../lib/chatPage'
 import { matchShortcut } from '../lib/chatShortcuts'
 import { useChatPrefs } from '../hooks/useChatPrefs'
+import { useVisualViewportHeight } from '../hooks/useVisualViewportHeight'
 import { sidebarThemeVars } from '../lib/chatPrefs'
 import {
   getStatus as getPresenceStatus,
@@ -33,6 +34,10 @@ export default function ChatPage() {
   const { profile, isExternal } = useAuth()
   const navigate = useNavigate()
   const { conversationId } = useParams()
+
+  // Keep the full-page chat sized to the visual viewport so the iOS keyboard
+  // pushes the conversation up instead of covering the composer.
+  useVisualViewportHeight()
 
   // Chat preferences (per profile, localStorage). The sidebar-theme preset is
   // applied as CSS vars on the .slack-chat root so the sidebar/rail/accent
@@ -250,8 +255,8 @@ export default function ChatPage() {
 
   return (
     <div
-      className="slack-chat h-screen w-screen flex overflow-hidden bg-[var(--chat-sidebar,#1a1d24)]"
-      style={sidebarThemeVars(chatPrefs.sidebarTheme)}
+      className="slack-chat fixed inset-0 flex overflow-hidden bg-[var(--chat-sidebar,#1a1d24)]"
+      style={{ ...sidebarThemeVars(chatPrefs.sidebarTheme), height: 'var(--chat-vh, 100dvh)' }}
     >
       <div className={`${railVisibility} shrink-0`}>
         <WorkspaceRail
