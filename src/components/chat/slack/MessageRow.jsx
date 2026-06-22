@@ -1,5 +1,6 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { isCoarsePointer, shouldToggleMessageActions } from '../../../lib/chatTouch'
 import {
   Trash2, MessageSquare, SmilePlus, MoreHorizontal,
   Link2, MailMinus, Pencil, Video,
@@ -106,6 +107,23 @@ export default function MessageRow({
   const [pickerPos, setPickerPos] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const reactBtnRef = useRef(null)
+
+  // Tap-to-reveal the action toolbar on touch devices (there is no :hover there).
+  // Desktop is unaffected: the coarse-pointer guard makes onRowClick a no-op.
+  const rowRef = useRef(null)
+  const [touchActive, setTouchActive] = useState(false)
+  const onRowClick = (e) => {
+    const hitInteractive = !!e.target.closest('a, button, img, [role="button"], [data-msg-toolbar]')
+    if (!shouldToggleMessageActions({ coarsePointer: isCoarsePointer(), hitInteractive })) return
+    setTouchActive(v => !v)
+  }
+  // While the toolbar is open, a tap anywhere outside this row closes it.
+  useEffect(() => {
+    if (!touchActive) return
+    const onDoc = (e) => { if (rowRef.current && !rowRef.current.contains(e.target)) setTouchActive(false) }
+    document.addEventListener('click', onDoc)
+    return () => document.removeEventListener('click', onDoc)
+  }, [touchActive])
   const PICKER_W = 248
 
   // Presentational prefs (density + 12h/24h time). Read from the per-profile
@@ -188,6 +206,8 @@ export default function MessageRow({
 
   return (
     <div
+      ref={rowRef}
+      onClick={onRowClick}
       className={`group/message relative flex pl-5 pr-10 hover:bg-slate-50 dark:hover:bg-white/5 ${
         compact ? 'py-0.5' : 'py-1'
       } ${mentionsMe ? 'border-l-2 border-amber-400 bg-amber-400/10' : ''}`}
@@ -209,7 +229,7 @@ export default function MessageRow({
         {isLead ? (
           <Avatar author={message.author} compact={compact} />
         ) : (
-          <span className="hidden group-hover/message:block absolute left-5 text-timestamp text-slate-400 leading-[22px] pt-px">
+          <span className={`${touchActive ? 'block' : 'hidden'} group-hover/message:block absolute left-5 text-timestamp text-slate-400 leading-[22px] pt-px`}>
             {fmtTime(message.created_at)}
           </span>
         )}
@@ -285,7 +305,7 @@ export default function MessageRow({
           Revealed on hover AND keyboard focus-within so tabbing to the toolbar
           buttons surfaces it for keyboard users. */}
       {!isDeleted && (
-        <div className="hidden group-hover/message:inline-flex group-focus-within/message:inline-flex absolute -top-3 right-9 z-20 rounded-md border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card shadow-card p-0.5">
+        <div data-msg-toolbar className={`${touchActive ? 'inline-flex' : 'hidden'} group-hover/message:inline-flex group-focus-within/message:inline-flex absolute -top-3 right-9 z-20 rounded-md border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card shadow-card p-0.5`}>
           <button
             type="button"
             onClick={() => onToggleReaction?.(message.id, QUICK_EMOJI)}
