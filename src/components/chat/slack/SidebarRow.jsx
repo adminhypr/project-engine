@@ -88,7 +88,7 @@ export default function SidebarRow({
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.() }
       }}
       aria-current={active ? 'true' : undefined}
-      className={`group/row relative h-7 w-full px-2 mx-2 rounded-md flex items-center gap-2 cursor-pointer text-left ${
+      className={`group/row relative h-10 md:h-7 w-full px-2 mx-2 rounded-md flex items-center gap-2 cursor-pointer text-left ${
         active
           ? 'bg-[var(--chat-accent,#4f46e5)] text-white'
           : unread
@@ -146,7 +146,7 @@ export default function SidebarRow({
             className={`shrink-0 grid place-items-center w-5 h-5 rounded hover:text-white hover:bg-white/10 focus:opacity-100 focus:outline-none ${
               starred
                 ? 'text-yellow-400 opacity-100'
-                : 'text-white/50 opacity-0 group-hover/row:opacity-100'
+                : 'text-white/50 opacity-0 group-hover/row:opacity-100 max-md:opacity-100'
             }`}
           >
             <Star className={`w-3.5 h-3.5 ${starred ? 'fill-current' : ''}`} />
@@ -159,7 +159,7 @@ export default function SidebarRow({
             aria-label={`Close ${label || 'conversation'}`}
             title="Close"
             onClick={(e) => { e.stopPropagation(); onHide() }}
-            className="mr-1 shrink-0 grid place-items-center w-5 h-5 rounded text-white/50 hover:text-white hover:bg-white/10 opacity-0 group-hover/row:opacity-100 focus:opacity-100 focus:outline-none"
+            className="mr-1 shrink-0 grid place-items-center w-5 h-5 rounded text-white/50 hover:text-white hover:bg-white/10 opacity-0 group-hover/row:opacity-100 focus:opacity-100 focus:outline-none max-md:opacity-100"
           >
             <X className="w-3.5 h-3.5" />
           </button>
