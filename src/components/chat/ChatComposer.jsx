@@ -475,7 +475,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
 
   return (
     <div
-      className={`border-t border-slate-200 dark:border-dark-border ${dragOver ? 'ring-2 ring-inset ring-brand-400' : ''}`}
+      className={`border-t border-slate-200 dark:border-dark-border pb-[env(safe-area-inset-bottom)] md:pb-0 ${dragOver ? 'ring-2 ring-inset ring-brand-400' : ''}`}
       onDragOver={e => { e.preventDefault(); setDragOver(true) }}
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
@@ -561,7 +561,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
       <div
         onPointerDown={startResize}
         onDoubleClick={() => setTextareaHeight(DEFAULT_H)}
-        className="h-1.5 mx-2 rounded-full bg-transparent hover:bg-slate-200 dark:hover:bg-slate-700 cursor-ns-resize flex items-center justify-center group"
+        className="h-1.5 mx-2 rounded-full bg-transparent hover:bg-slate-200 dark:hover:bg-slate-700 cursor-ns-resize hidden md:flex items-center justify-center group"
         role="separator"
         aria-label="Resize composer (double-click to reset)"
         title="Drag to resize · double-click to reset"
@@ -594,7 +594,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
           aria-label="Formatting"
           aria-pressed={showToolbar}
           title="Show formatting toolbar"
-          className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center hover:bg-slate-100 dark:hover:bg-dark-hover ${showToolbar ? 'text-brand-600 dark:text-brand-400 bg-slate-100 dark:bg-dark-hover' : 'text-slate-400 hover:text-brand-600 dark:hover:text-brand-400'}`}
+          className={`w-9 h-9 shrink-0 rounded-full hidden md:flex items-center justify-center hover:bg-slate-100 dark:hover:bg-dark-hover ${showToolbar ? 'text-brand-600 dark:text-brand-400 bg-slate-100 dark:bg-dark-hover' : 'text-slate-400 hover:text-brand-600 dark:hover:text-brand-400'}`}
         >
           <Type className="w-4 h-4" />
         </button>
@@ -622,7 +622,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
           disabled={busy || disabled}
           aria-label="Mention someone"
           title="Mention someone"
-          className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40"
+          className="w-9 h-9 shrink-0 rounded-full hidden md:flex items-center justify-center text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40"
         >
           <AtSign className="w-4 h-4" />
         </button>
@@ -636,7 +636,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
               aria-label="Send a GIF"
               aria-pressed={gifOpen}
               title="Send a GIF"
-              className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40 ${gifOpen ? 'text-brand-600 dark:text-brand-400 bg-slate-100 dark:bg-dark-hover' : 'text-slate-400 hover:text-brand-600 dark:hover:text-brand-400'}`}
+              className={`w-9 h-9 shrink-0 rounded-full hidden md:flex items-center justify-center hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40 ${gifOpen ? 'text-brand-600 dark:text-brand-400 bg-slate-100 dark:bg-dark-hover' : 'text-slate-400 hover:text-brand-600 dark:hover:text-brand-400'}`}
             >
               <Film className="w-4 h-4" />
             </button>
@@ -654,7 +654,7 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
           placeholder={replyTarget ? `Reply to ${replyTarget.authorName}…` : placeholder}
           rows={1}
           style={{ height: textareaHeight }}
-          className="flex-1 resize-none rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-dark-border px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+          className="flex-1 resize-none rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-dark-border px-3 py-2 text-base md:text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
         />
         <button
           type="button"
