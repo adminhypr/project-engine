@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { MessageCircle, ArrowLeft } from 'lucide-react'
+import { MessageCircle } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useContactList } from '../hooks/useContactList'
 import SlackMessagePane from '../components/chat/slack/SlackMessagePane'
@@ -249,7 +249,10 @@ export default function ChatPage() {
   // Mobile single-pane: when a conversation is open, show the message area and
   // hide the rail + sidebar; otherwise show rail + sidebar. Desktop shows all
   // three. The rail mirrors the sidebar so they appear/disappear together.
-  const railVisibility = conversationId ? 'hidden md:flex' : 'flex'
+  // Rail is desktop-only on the mobile-optimized page: its actions live in the
+  // sidebar's WorkspaceHeader dropdown (status, preferences, back-to-app) on a
+  // phone. Always hidden under md.
+  const railVisibility = 'hidden md:flex'
   const sidebarVisibility = conversationId ? 'hidden md:flex' : 'flex'
   const mainVisibility = conversationId ? 'flex' : 'hidden md:flex'
 
@@ -291,6 +294,8 @@ export default function ChatPage() {
           onCreateChannel={isExternal ? undefined : openCreateGroup}
           onBackToApp={onBackToApp}
           onPreferences={() => setPrefsOpen(true)}
+          manualStatus={myStatus}
+          onSetStatus={onSetMyStatus}
           view={railActive}
           composeFocusSignal={composeFocusSignal}
         />
@@ -299,28 +304,20 @@ export default function ChatPage() {
       {/* Message area: open conversation, or empty/not-found state */}
       <div className={`${mainVisibility} flex-1 min-w-0 flex-col bg-white dark:bg-dark-bg h-full`}>
         {activeConv ? (
-          <>
-            <button
-              type="button"
-              onClick={() => navigate('/chat')}
-              className="md:hidden flex items-center gap-1.5 px-3 py-2 text-sm text-brand-600 dark:text-brand-400 border-b border-slate-200 dark:border-dark-border"
-            >
-              <ArrowLeft className="w-4 h-4" /> All conversations
-            </button>
-            <div className="flex-1 min-h-0 flex">
-              <SlackMessagePane
-                conversation={activeConv}
-                online={online}
-                status={peerStatus}
-                onMarkRead={markRead}
-                onGroupChanged={refetch}
-                lastReadAt={preReadLastReadAt}
-                threadRoot={threadRoot}
-                onOpenThread={openThread}
-                onCloseThread={closeThread}
-              />
-            </div>
-          </>
+          <div className="flex-1 min-h-0 flex">
+            <SlackMessagePane
+              conversation={activeConv}
+              online={online}
+              status={peerStatus}
+              onMarkRead={markRead}
+              onGroupChanged={refetch}
+              lastReadAt={preReadLastReadAt}
+              threadRoot={threadRoot}
+              onOpenThread={openThread}
+              onCloseThread={closeThread}
+              onBack={() => navigate('/chat')}
+            />
+          </div>
         ) : conversationId && !loading ? (
           <EmptyMain
             title="This conversation isn't available"
