@@ -55,6 +55,7 @@ export default function SlackMessagePane({
   threadRoot,
   onOpenThread,
   onCloseThread,
+  onBack,
 }) {
   const { profile, isExternal } = useAuth()
   const { messages, loading, hasMore, sendMessage, deleteMessage, loadMore } =
@@ -224,6 +225,7 @@ export default function SlackMessagePane({
             otherProfile={conversation.other_profile}
             online={online}
             status={status}
+            onBack={onBack}
             canAssignTask={!isExternal && (conversation.kind === 'dm' || conversation.kind === 'group' || conversation.kind === 'hub')}
             onAssignTask={() => onAssignTask?.(conversation)}
             canAddTodo={isExternal && (conversation.kind === 'dm' || conversation.kind === 'group' || conversation.kind === 'hub')}

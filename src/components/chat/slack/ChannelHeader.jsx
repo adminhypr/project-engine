@@ -1,8 +1,9 @@
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Hash, ChevronDown, Users, Search, Video, Loader2,
+  Hash, ChevronDown, ChevronLeft, Users, Search, Video, Loader2,
   ClipboardList, CheckSquare, ArrowUpRight, Maximize2, Minimize2,
-  Minus, X, Image as ImageIcon,
+  Minus, X, Image as ImageIcon, MoreVertical,
 } from 'lucide-react'
 import PresenceDot from '../PresenceDot'
 import { groupDisplayName, memberCountLabel } from '../../../lib/groupConversations'
@@ -93,6 +94,9 @@ export default function ChannelHeader({
   // search yet, so when omitted the button is a visible-but-disabled stub
   // (see TODO below). Wire it once a search surface exists.
   onSearchInChannel,
+  // Mobile-only back affordance: when provided, a chevron renders at the left of
+  // the header (md:hidden) to return to the conversation list. Desktop omits it.
+  onBack,
   // Tab row (Messages | Files | Links). Additive: when activeTab/onTabChange
   // are omitted (e.g. the floating widget) the row still renders Messages-only
   // styling and clicking is a no-op, preserving the legacy single-tab look.
@@ -105,6 +109,19 @@ export default function ChannelHeader({
   const isGroup = conversation?.kind === 'group' || conversation?.kind === 'hub'
   const isTask = conversation?.kind === 'task'
   const isDm = !isGroup && !isTask
+
+  // Mobile-only overflow menu for the secondary header actions (assign task,
+  // wallpaper, call). Inline on desktop; collapsed behind a kebab under md.
+  const [overflowOpen, setOverflowOpen] = useState(false)
+  const overflowRef = useRef(null)
+  useEffect(() => {
+    if (!overflowOpen) return
+    const onDoc = (e) => { if (overflowRef.current && !overflowRef.current.contains(e.target)) setOverflowOpen(false) }
+    const onKey = (e) => { if (e.key === 'Escape') setOverflowOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey) }
+  }, [overflowOpen])
 
   // --- Title / icon derivation (copied from ConversationHeader) ---
   const name = isTask
@@ -137,6 +154,16 @@ export default function ChannelHeader({
   return (
     <header className="flex flex-col bg-white dark:bg-dark-card border-b border-slate-200 dark:border-dark-border">
       <div className="h-[50px] px-4 flex items-center gap-2">
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="md:hidden -ml-1.5 mr-0.5 w-9 h-9 shrink-0 grid place-items-center rounded-md text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5"
+            aria-label="Back to conversations"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+        )}
         {/* Leading icon + name + caret → opens members/details */}
         <button
           type="button"
@@ -191,7 +218,7 @@ export default function ChannelHeader({
             <button
               type="button"
               onClick={onAssignTask}
-              className="flex items-center gap-1 px-2 py-1 text-[13px] font-medium rounded-md bg-brand-50 text-brand-700 hover:bg-brand-100 dark:bg-brand-900/30 dark:text-brand-200 dark:hover:bg-brand-900/50"
+              className="hidden md:flex items-center gap-1 px-2 py-1 text-[13px] font-medium rounded-md bg-brand-50 text-brand-700 hover:bg-brand-100 dark:bg-brand-900/30 dark:text-brand-200 dark:hover:bg-brand-900/50"
               title="Assign task"
             >
               <ClipboardList className="w-3.5 h-3.5" />
@@ -202,7 +229,7 @@ export default function ChannelHeader({
             <button
               type="button"
               onClick={onAddTodo}
-              className="flex items-center gap-1 px-2 py-1 text-[13px] font-medium rounded-md bg-brand-50 text-brand-700 hover:bg-brand-100 dark:bg-brand-900/30 dark:text-brand-200 dark:hover:bg-brand-900/50"
+              className="hidden md:flex items-center gap-1 px-2 py-1 text-[13px] font-medium rounded-md bg-brand-50 text-brand-700 hover:bg-brand-100 dark:bg-brand-900/30 dark:text-brand-200 dark:hover:bg-brand-900/50"
               title="Add to-do"
             >
               <CheckSquare className="w-3.5 h-3.5" />
@@ -223,7 +250,7 @@ export default function ChannelHeader({
             type="button"
             onClick={onSearchInChannel}
             disabled={!onSearchInChannel}
-            className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-white/5 dark:hover:text-slate-200 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-default"
+            className="hidden md:inline-flex items-center justify-center p-1.5 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-white/5 dark:hover:text-slate-200 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-default"
             aria-label="Search in conversation"
             title="Search in conversation"
           >
@@ -236,7 +263,7 @@ export default function ChannelHeader({
             <button
               type="button"
               onClick={onSetWallpaper}
-              className="p-1.5 rounded-md text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-white/5"
+              className="hidden md:inline-flex items-center justify-center p-1.5 rounded-md text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-white/5"
               aria-label="Set chat wallpaper"
               title="Set chat wallpaper"
             >
@@ -251,12 +278,45 @@ export default function ChannelHeader({
               type="button"
               onClick={onStartCall}
               disabled={callStarting}
-              className="p-1.5 rounded-md text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-wait"
+              className="hidden md:inline-flex items-center justify-center p-1.5 rounded-md text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-wait"
               aria-label="Start video call"
               title="Start a video call"
             >
               {callStarting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />}
             </button>
+          )}
+
+          {/* Mobile overflow — the secondary actions that are inline on desktop.
+              Only rendered when at least one action is available. */}
+          {(canAssignTask || canAddTodo || onSetWallpaper || onStartCall) && (
+            <div className="relative md:hidden" ref={overflowRef}>
+              <button
+                type="button"
+                onClick={() => setOverflowOpen(o => !o)}
+                aria-haspopup="menu"
+                aria-expanded={overflowOpen}
+                className="w-9 h-9 grid place-items-center rounded-md text-slate-500 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5"
+                aria-label="More actions"
+              >
+                <MoreVertical className="w-5 h-5" />
+              </button>
+              {overflowOpen && (
+                <div role="menu" className="absolute right-0 top-10 z-30 w-52 rounded-lg border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card shadow-elevated py-1">
+                  {canAssignTask && (
+                    <OverflowItem icon={ClipboardList} label="Assign task" onClick={() => { setOverflowOpen(false); onAssignTask?.() }} />
+                  )}
+                  {canAddTodo && (
+                    <OverflowItem icon={CheckSquare} label="Add to-do" onClick={() => { setOverflowOpen(false); onAddTodo?.() }} />
+                  )}
+                  {onSetWallpaper && (
+                    <OverflowItem icon={ImageIcon} label="Set wallpaper" onClick={() => { setOverflowOpen(false); onSetWallpaper() }} />
+                  )}
+                  {onStartCall && (
+                    <OverflowItem icon={Video} label="Start call" onClick={() => { setOverflowOpen(false); onStartCall() }} />
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Widget-shell chrome (only when handlers provided) */}
@@ -323,5 +383,20 @@ export default function ChannelHeader({
         })}
       </div>
     </header>
+  )
+}
+
+// A single row in the mobile header overflow menu.
+function OverflowItem({ icon: Icon, label, onClick }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 text-left"
+    >
+      <Icon className="w-4 h-4 shrink-0 text-slate-400" />
+      <span className="truncate">{label}</span>
+    </button>
   )
 }
