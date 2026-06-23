@@ -1,10 +1,12 @@
 import { motion, AnimatePresence } from 'framer-motion'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Archive, ArchiveRestore } from 'lucide-react'
 
 export default function MassActionBar({
   selectedCount, onSelectAll, onDeselectAll,
-  onBulkStatusChange, onBulkUrgencyChange, onBulkDelete
+  onBulkStatusChange, onBulkUrgencyChange, onBulkDelete,
+  mode = 'active', onBulkArchive, onBulkUnarchive,
 }) {
+  const archived = mode === 'archived'
   return (
     <AnimatePresence>
       {selectedCount > 0 && (
@@ -25,31 +27,45 @@ export default function MassActionBar({
 
             <div className="border-l border-slate-300 dark:border-dark-border h-5" />
 
-            <select
-              defaultValue=""
-              onChange={e => { if (e.target.value) { onBulkStatusChange(e.target.value); e.target.value = '' } }}
-              className="form-input text-xs py-1.5 px-2 w-auto"
-            >
-              <option value="" disabled>Change status...</option>
-              <option value="Not Started">Not Started</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Blocked">Blocked</option>
-              <option value="Done">Done</option>
-            </select>
+            {!archived && (
+              <>
+                <select
+                  defaultValue=""
+                  onChange={e => { if (e.target.value) { onBulkStatusChange(e.target.value); e.target.value = '' } }}
+                  className="form-input text-xs py-1.5 px-2 w-auto"
+                >
+                  <option value="" disabled>Change status...</option>
+                  <option value="Not Started">Not Started</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Blocked">Blocked</option>
+                  <option value="Done">Done</option>
+                </select>
 
-            <select
-              defaultValue=""
-              onChange={e => { if (e.target.value) { onBulkUrgencyChange(e.target.value); e.target.value = '' } }}
-              className="form-input text-xs py-1.5 px-2 w-auto"
-            >
-              <option value="" disabled>Change urgency...</option>
-              <option value="High">High</option>
-              <option value="Med">Med</option>
-              <option value="Low">Low</option>
-            </select>
+                <select
+                  defaultValue=""
+                  onChange={e => { if (e.target.value) { onBulkUrgencyChange(e.target.value); e.target.value = '' } }}
+                  className="form-input text-xs py-1.5 px-2 w-auto"
+                >
+                  <option value="" disabled>Change urgency...</option>
+                  <option value="High">High</option>
+                  <option value="Med">Med</option>
+                  <option value="Low">Low</option>
+                </select>
+
+                <button onClick={onBulkArchive} className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5">
+                  <Archive size={13} /> Archive
+                </button>
+              </>
+            )}
+
+            {archived && (
+              <button onClick={onBulkUnarchive} className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-1.5">
+                <ArchiveRestore size={13} /> Unarchive
+              </button>
+            )}
 
             <button onClick={onBulkDelete} className="btn-danger text-xs px-3 py-1.5 flex items-center gap-1.5">
-              <Trash2 size={13} /> Delete
+              <Trash2 size={13} /> {archived ? 'Delete forever' : 'Delete'}
             </button>
           </div>
         </motion.div>
