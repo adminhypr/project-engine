@@ -180,6 +180,20 @@ function useTasksImpl() {
       }
     }
 
+    // Personal archive set (migration 105). task_archives is per-user; RLS
+    // already scopes rows to the caller, so no user_id filter is needed. Tag
+    // tasks below so active lists can drop archived rows and the Archived tab
+    // can keep them. A failure here degrades gracefully (set stays empty →
+    // nothing looks archived) rather than breaking the whole task fetch.
+    const archivedSet = new Set()
+    {
+      const { data: archRows, error: archErr } = await supabase
+        .from('task_archives')
+        .select('task_id')
+      if (archErr) console.warn('task_archives fetch failed:', archErr.message)
+      else for (const r of archRows || []) archivedSet.add(r.task_id)
+    }
+
     const subtaskCounts = buildSubtaskCounts(data || [])
 
     const enriched = (data || []).map(t => {
@@ -204,6 +218,7 @@ function useTasksImpl() {
         open_subtask_count: counts.open,
         assignee:      t.assignee ? { ...t.assignee, manager: managerMap[t.assignee.reports_to] || null } : t.assignee,
         assignees,
+        archived:      archivedSet.has(t.id),
       }
     })
 
@@ -240,6 +255,7 @@ function useTasksImpl() {
           a.assigned_by === b.assigned_by &&
           a.team_id === b.team_id &&
           a.priority === b.priority &&
+          a.archived === b.archived &&
           (a.comment_count || 0) === (b.comment_count || 0) &&
           (a.unread_chat_count || 0) === (b.unread_chat_count || 0) &&
           (a.subtask_count || 0) === (b.subtask_count || 0) &&
@@ -771,6 +787,29 @@ export function useTaskActions() {
     return { ok: true }
   }
 
+  async function archiveTasks(taskIds) {
+    if (!profile?.id || !taskIds?.length) return { ok: true }
+    const rows = taskIds.map(id => ({ user_id: profile.id, task_id: id }))
+    // Idempotent: re-archiving an already-archived task is a no-op (composite
+    // PK + ignoreDuplicates), so bulk-archiving a mixed selection is safe.
+    const { error } = await supabase
+      .from('task_archives')
+      .upsert(rows, { onConflict: 'user_id,task_id', ignoreDuplicates: true })
+    if (error) return { ok: false, msg: error.message }
+    return { ok: true }
+  }
+
+  async function unarchiveTasks(taskIds) {
+    if (!profile?.id || !taskIds?.length) return { ok: true }
+    const { error } = await supabase
+      .from('task_archives')
+      .delete()
+      .eq('user_id', profile.id)
+      .in('task_id', taskIds)
+    if (error) return { ok: false, msg: error.message }
+    return { ok: true }
+  }
+
   async function addAssignee(taskId, profileId) {
     const { error } = await supabase.from('task_assignees').insert({
       task_id: taskId,
@@ -790,7 +829,7 @@ export function useTaskActions() {
     return { ok: true }
   }
 
-  return { assignTask, updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask, deleteTask, deleteTasks, updateTasks, addAssignee, removeAssignee }
+  return { assignTask, updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask, deleteTask, deleteTasks, updateTasks, archiveTasks, unarchiveTasks, addAssignee, removeAssignee }
 }
 
 // Shared profile/team state. Same singleton pattern as TasksContext —
