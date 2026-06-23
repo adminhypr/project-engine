@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useTasks, useTaskActions, useProfiles } from '../hooks/useTasks'
 import { useAuth } from '../hooks/useAuth'
 import { applyFilters } from '../lib/filters'
+import { splitByArchived } from '../lib/archive'
 import { applyHideSubtasksFilter, anyHasSubtasks } from '../lib/subtasks'
 import { useRecurrences } from '../hooks/useRecurrences'
 import RecurringList from '../components/recurring/RecurringList'
@@ -30,7 +31,7 @@ export default function MyTasksPage() {
   const ownedRecurringCount = (recurringTemplates || []).filter(
     t => profile?.role === 'Admin' || t.created_by === profile?.id
   ).length
-  const { acceptTask, declineTask, deleteTasks, updateTasks, updateTask, deleteTask, assignTask } = useTaskActions()
+  const { acceptTask, declineTask, deleteTasks, updateTasks, updateTask, deleteTask, assignTask, archiveTasks, unarchiveTasks } = useTaskActions()
   const { profiles } = useProfiles()
   const location = useLocation()
   const navigate = useNavigate()
@@ -39,8 +40,8 @@ export default function MyTasksPage() {
     // ?tab=recurring after creating a recurring task).
     const params = new URLSearchParams(window.location.search)
     const t = params.get('tab')
-    return (t === 'assigned' || t === 'recurring') ? t : 'mine'
-  }) // 'mine' | 'assigned' | 'recurring'
+    return (t === 'assigned' || t === 'recurring' || t === 'archived') ? t : 'mine'
+  }) // 'mine' | 'assigned' | 'recurring' | 'archived'
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'list') // 'list' | 'board'
   const [filters,    setFilters]    = useState({ statuses: ['Not Started', 'In Progress', 'Blocked'] })
   // Open-task is mirrored to ?task=<id> so it survives navigation away and
@@ -76,7 +77,19 @@ export default function MyTasksPage() {
 
   // Tasks I assigned to others (exclude self-assignments)
   const assignedByMe = tasks.filter(t => t.assigned_by === profile?.id && t.assigned_to !== profile?.id)
-  const activeTasks = tab === 'mine' ? myTasks : assignedByMe
+
+  // Archive split (migration 105). Active tabs exclude tasks I archived; the
+  // Archived tab is the universal personal bin across every source list.
+  const archivedTasks  = splitByArchived(tasks).archived
+  const activeMine     = splitByArchived(myTasks).active
+  const activeAssigned = splitByArchived(assignedByMe).active
+  const activeTasks =
+    tab === 'archived' ? archivedTasks
+    : tab === 'mine'   ? activeMine
+    :                    activeAssigned
+
+  // The Archived tab is a flat bin — the kanban board is meaningless there.
+  const boardView = view === 'board' && tab !== 'archived'
 
   // Two sources of "open this task":
   //   • location.state.openTaskId — pushed by NotificationBell when the user
@@ -165,8 +178,10 @@ export default function MyTasksPage() {
 
   const pendingTasks = myTasks.filter(t => t.acceptance_status === 'Pending')
 
-  // In board view, don't filter by status (columns handle it)
-  const effectiveFilters = view === 'board'
+  // In board view the columns handle status; in the Archived bin we never want
+  // the active-list default (which excludes 'Done') to hide completed-and-
+  // archived tasks. Both cases strip the `statuses` filter but keep the rest.
+  const effectiveFilters = (boardView || tab === 'archived')
     ? (({ statuses, ...rest }) => rest)(filters)
     : filters
   const filtered = applyHideSubtasksFilter(applyFilters(activeTasks, effectiveFilters), hideSubtasks)
@@ -175,13 +190,19 @@ export default function MyTasksPage() {
   const mineRedOverdue = filtered.filter(t => t.priority === 'red' && t.due_date && new Date(t.due_date) < new Date()).length
   const mineRedInactive = filtered.filter(t => t.priority === 'red' && (!t.due_date || new Date(t.due_date) >= new Date())).length
 
-  const stats = view === 'board'
+  const stats = boardView
     ? [
         { label: 'Not Started', value: filtered.filter(t => t.status === 'Not Started').length, color: 'text-slate-500' },
         { label: 'In Progress', value: filtered.filter(t => t.status === 'In Progress').length, color: 'text-blue-500' },
         { label: 'Blocked',     value: filtered.filter(t => t.status === 'Blocked').length,     color: 'text-red-500' },
         { label: 'Done',        value: filtered.filter(t => t.status === 'Done').length,        color: 'text-emerald-600' },
       ]
+    : tab === 'archived'
+      ? [
+          { label: 'Archived',  value: filtered.length, color: 'text-slate-500' },
+          { label: 'Completed', value: filtered.filter(t => t.status === 'Done').length, color: 'text-emerald-600' },
+          { label: 'Open',      value: filtered.filter(t => t.status !== 'Done').length, color: 'text-slate-900 dark:text-white' },
+        ]
     : tab === 'mine'
       ? [
           { label: 'Overdue / Inactive', value: filtered.filter(t => t.priority === 'red').length, color: 'text-red-500',
@@ -244,6 +265,20 @@ export default function MyTasksPage() {
     else showToast(result.msg, 'error')
   }
 
+  async function handleBulkArchive() {
+    const n = selectedIds.size
+    const result = await archiveTasks([...selectedIds])
+    if (result.ok) { showToast(`${n} task(s) archived`); setSelectedIds(new Set()); refetch(true) }
+    else showToast(result.msg, 'error')
+  }
+
+  async function handleBulkUnarchive() {
+    const n = selectedIds.size
+    const result = await unarchiveTasks([...selectedIds])
+    if (result.ok) { showToast(`${n} task(s) restored`); setSelectedIds(new Set()); refetch(true) }
+    else showToast(result.msg, 'error')
+  }
+
   if (loading) return <LoadingScreen />
 
   // View toggle component
@@ -279,9 +314,11 @@ export default function MyTasksPage() {
       <div>
         <PageHeader
           title="My Tasks"
-          subtitle={tab === 'mine'
-            ? `Tasks assigned to ${profile?.full_name}`
-            : `Tasks you've assigned to others`
+          subtitle={tab === 'archived'
+            ? `Tasks you've archived — hidden from your other lists`
+            : tab === 'mine'
+              ? `Tasks assigned to ${profile?.full_name}`
+              : `Tasks you've assigned to others`
           }
           actions={viewToggle}
         />
@@ -303,7 +340,7 @@ export default function MyTasksPage() {
                   ? 'bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-300'
                   : 'bg-slate-200/60 text-slate-500 dark:bg-dark-border dark:text-slate-400'
               }`}>
-                {myTasks.length}
+                {activeMine.length}
               </span>
             </button>
             <button
@@ -320,7 +357,7 @@ export default function MyTasksPage() {
                   ? 'bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-300'
                   : 'bg-slate-200/60 text-slate-500 dark:bg-dark-border dark:text-slate-400'
               }`}>
-                {assignedByMe.length}
+                {activeAssigned.length}
               </span>
             </button>
             {ownedRecurringCount > 0 && (
@@ -342,6 +379,23 @@ export default function MyTasksPage() {
                 </span>
               </button>
             )}
+            <button
+              onClick={() => setTab('archived')}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                tab === 'archived'
+                  ? 'bg-white dark:bg-dark-card text-slate-900 dark:text-white shadow-soft'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+              }`}
+            >
+              Archived
+              <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-md ${
+                tab === 'archived'
+                  ? 'bg-slate-200 text-slate-600 dark:bg-dark-border dark:text-slate-300'
+                  : 'bg-slate-200/60 text-slate-500 dark:bg-dark-border dark:text-slate-400'
+              }`}>
+                {archivedTasks.length}
+              </span>
+            </button>
           </div>
         </div>
 
@@ -355,7 +409,7 @@ export default function MyTasksPage() {
         <>
         <StatsStrip stats={stats} />
 
-        {view === 'board' ? (
+        {boardView ? (
           <>
             {/* Inline filters for board view (no status checkboxes) */}
             <div className="px-4 sm:px-6 pt-4">
@@ -436,23 +490,28 @@ export default function MyTasksPage() {
                 selectedCount={filtered.filter(t => selectedIds.has(t.id)).length}
                 onSelectAll={() => setSelectedIds(new Set(filtered.map(t => t.id)))}
                 onDeselectAll={() => setSelectedIds(new Set())}
+                mode={tab === 'archived' ? 'archived' : 'active'}
                 onBulkStatusChange={handleBulkStatusChange}
                 onBulkUrgencyChange={handleBulkUrgencyChange}
+                onBulkArchive={handleBulkArchive}
+                onBulkUnarchive={handleBulkUnarchive}
                 onBulkDelete={() => setShowBulkDelete(true)}
               />
               {filtered.length === 0
                 ? <EmptyState
-                    icon={tab === 'mine' ? '✓' : '📋'}
-                    title="No tasks"
-                    description={tab === 'mine'
-                      ? (Object.keys(filters).length > 1 ? "No tasks match your filters." : "You have no tasks assigned to you yet.")
-                      : (Object.keys(filters).length > 1 ? "No tasks match your filters." : "You haven't assigned any tasks to others yet.")}
+                    icon={tab === 'archived' ? '🗄️' : tab === 'mine' ? '✓' : '📋'}
+                    title={tab === 'archived' ? 'Nothing archived' : 'No tasks'}
+                    description={tab === 'archived'
+                      ? (Object.keys(filters).length > 1 ? "No archived tasks match your filters." : "Tasks you archive show up here, hidden from your other lists.")
+                      : tab === 'mine'
+                        ? (Object.keys(filters).length > 1 ? "No tasks match your filters." : "You have no tasks assigned to you yet.")
+                        : (Object.keys(filters).length > 1 ? "No tasks match your filters." : "You haven't assigned any tasks to others yet.")}
                   />
                 : <TaskTable
                     tasks={filtered}
                     onRowClick={(t) => setActiveTaskId(t.id)}
-                    showAssignedBy={tab === 'mine'}
-                    showAssignedTo={tab === 'assigned'}
+                    showAssignedBy={tab === 'mine' || tab === 'archived'}
+                    showAssignedTo={tab === 'assigned' || tab === 'archived'}
                     showAcceptanceActions={tab === 'mine'}
                     onAccept={handleAccept}
                     onDecline={task => setDeclineTarget(task)}
