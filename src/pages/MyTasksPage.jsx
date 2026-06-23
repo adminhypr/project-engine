@@ -320,7 +320,7 @@ export default function MyTasksPage() {
               ? `Tasks assigned to ${profile?.full_name}`
               : `Tasks you've assigned to others`
           }
-          actions={viewToggle}
+          actions={tab === 'archived' ? null : viewToggle}
         />
 
         {/* Tab toggle */}
