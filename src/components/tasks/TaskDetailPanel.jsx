@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { X, Send, Check, RefreshCw, Pencil, Trash2, Plus, Users, Paperclip, CheckCircle2, Circle, Repeat } from 'lucide-react'
+import { X, Send, Check, RefreshCw, Pencil, Trash2, Plus, Users, Paperclip, CheckCircle2, Circle, Repeat, Archive, ArchiveRestore } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useTaskActions, useProfiles } from '../../hooks/useTasks'
 import { useAuth } from '../../hooks/useAuth'
@@ -59,7 +59,7 @@ function linkifyText(text, keyBase) {
 
 export default function TaskDetailPanel({ task, tasks = [], onClose, onUpdated }) {
   const { profile, isAdmin, isManager } = useAuth()
-  const { updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask, deleteTask, addAssignee, removeAssignee } = useTaskActions()
+  const { updateTask, addComment, getTaskComments, acceptTask, declineTask, reassignTask, deleteTask, addAssignee, removeAssignee, archiveTasks, unarchiveTasks } = useTaskActions()
   const { profiles: allProfiles } = useProfiles({ excludeExternals: true })
   const { uploadAttachments, getTaskAttachments, getAttachmentUrl, deleteAttachment } = useAttachments()
   const { markSelfComplete, unmarkSelf, setAssigneeCompletion, forceClose } = useTaskAssigneeCompletion()
@@ -289,6 +289,21 @@ export default function TaskDetailPanel({ task, tasks = [], onClose, onUpdated }
     }
   }
 
+  async function handleArchiveToggle() {
+    // Archive is personal (migration 105) — any viewer can file the task away
+    // for themselves, so this isn't gated behind edit permissions. onUpdated
+    // closes the panel + refetches, so the row leaves whichever list it was in.
+    const result = task.archived
+      ? await unarchiveTasks([task.id])
+      : await archiveTasks([task.id])
+    if (result.ok) {
+      showToast(task.archived ? 'Task restored' : 'Task archived')
+      onUpdated?.()
+    } else {
+      showToast(result.msg, 'error')
+    }
+  }
+
   async function handleAddAssignee(profileId) {
     const result = await addAssignee(task.id, profileId)
     if (result.ok) {
@@ -483,6 +498,14 @@ export default function TaskDetailPanel({ task, tasks = [], onClose, onUpdated }
             </div>
           )}
         </div>
+        <button
+          onClick={handleArchiveToggle}
+          className="text-slate-400 hover:text-brand-500 dark:text-slate-500 dark:hover:text-brand-400 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-dark-hover transition-all duration-200 flex-shrink-0"
+          title={task.archived ? 'Unarchive task' : 'Archive task'}
+          aria-label={task.archived ? 'Unarchive task' : 'Archive task'}
+        >
+          {task.archived ? <ArchiveRestore size={18} /> : <Archive size={18} />}
+        </button>
         {canEdit && (
           <button
             onClick={() => setShowDeleteConfirm(true)}
