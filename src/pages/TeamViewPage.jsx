@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { useTasks, useTaskActions, useProfiles } from '../hooks/useTasks'
 import { useAuth } from '../hooks/useAuth'
 import { applyFilters } from '../lib/filters'
+import { splitByArchived } from '../lib/archive'
 import { applyHideSubtasksFilter, anyHasSubtasks } from '../lib/subtasks'
 import { PageHeader, StatsStrip, FilterRow, LoadingScreen, EmptyState, showToast } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
@@ -42,7 +43,7 @@ export default function TeamViewPage() {
   usePageTitle('Team View')
   const { profile, isAdmin } = useAuth()
   const { tasks, teamTasks, loading, refetch } = useTasks()
-  const { deleteTasks, updateTasks, updateTask, deleteTask, assignTask } = useTaskActions()
+  const { deleteTasks, updateTasks, updateTask, deleteTask, assignTask, archiveTasks } = useTaskActions()
   const { profiles } = useProfiles()
   const location = useLocation()
   const navigate = useNavigate()
@@ -93,7 +94,9 @@ export default function TeamViewPage() {
     showToast('Default view cleared')
   }
 
-  const viewTasks = isAdmin ? tasks : teamTasks
+  // Exclude tasks the current user personally archived (migration 105) so a
+  // task you filed away doesn't reappear in the team grid.
+  const viewTasks = splitByArchived(isAdmin ? tasks : teamTasks).active
 
   // Derive the live active task from the current tasks array so realtime
   // updates (e.g. per-assignee completion checkboxes) flow into the open panel.
@@ -154,6 +157,13 @@ export default function TeamViewPage() {
   async function handleBulkDelete() {
     const result = await deleteTasks([...selectedIds])
     if (result.ok) { showToast(`${selectedIds.size} task(s) deleted`); setSelectedIds(new Set()); refetch(true) }
+    else showToast(result.msg, 'error')
+  }
+
+  async function handleBulkArchive() {
+    const n = selectedIds.size
+    const result = await archiveTasks([...selectedIds])
+    if (result.ok) { showToast(`${n} task(s) archived`); setSelectedIds(new Set()); refetch(true) }
     else showToast(result.msg, 'error')
   }
 
@@ -371,6 +381,7 @@ export default function TeamViewPage() {
                   onDeselectAll={() => setSelectedIds(new Set())}
                   onBulkStatusChange={handleBulkStatusChange}
                   onBulkUrgencyChange={handleBulkUrgencyChange}
+                  onBulkArchive={handleBulkArchive}
                   onBulkDelete={() => setShowBulkDelete(true)}
                 />
               )}

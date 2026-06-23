@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { useTasks, useTaskActions, useProfiles } from '../hooks/useTasks'
 import { useAuth } from '../hooks/useAuth'
 import { applyFilters } from '../lib/filters'
+import { splitByArchived } from '../lib/archive'
 import { buildTeamIdsByProfileId, taskOnTeam } from '../lib/teamMembership'
 import { PageHeader, StatsStrip, FilterRow, LoadingScreen, EmptyState, showToast } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
@@ -21,7 +22,7 @@ export default function AdminOverviewPage() {
   usePageTitle('Admin Overview')
   const { profile } = useAuth()
   const { tasks, loading, refetch } = useTasks()
-  const { deleteTasks, updateTasks, updateTask, deleteTask, assignTask } = useTaskActions()
+  const { deleteTasks, updateTasks, updateTask, deleteTask, assignTask, archiveTasks } = useTaskActions()
   const { profiles } = useProfiles()
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'list')
   const [filters, setFilters] = useState({})
@@ -41,6 +42,12 @@ export default function AdminOverviewPage() {
   // Derive the live active task from the current tasks array so realtime
   // updates (e.g. per-assignee completion checkboxes) flow into the open panel.
   const activeTask = activeTaskId ? (tasks.find(t => t.id === activeTaskId) ?? null) : null
+
+  // Tasks the current admin hasn't personally archived (migration 105). All the
+  // list/board/breakdown surfaces below read from this so an archived task
+  // vanishes from the admin overview too. `tasks` (full set) is kept for the
+  // detail-panel lookup above so a deep-linked archived task can still open.
+  const visibleTasks = splitByArchived(tasks).active
 
   // Listen for the chat widget's "Open task →" link. The header dispatches a
   // window-level open-task CustomEvent with { taskId }; we set activeTaskId so
@@ -82,7 +89,7 @@ export default function AdminOverviewPage() {
       acc[team.id] = { name: team.name, total: 0, red: 0, done: 0, blocked: 0 }
     }
     acc['none'] = { name: 'No Team', total: 0, red: 0, done: 0, blocked: 0 }
-    for (const t of tasks) {
+    for (const t of visibleTasks) {
       const ids = t.assignees?.length
         ? t.assignees.map(a => a.id)
         : (t.assigned_to ? [t.assigned_to] : [])
@@ -108,14 +115,14 @@ export default function AdminOverviewPage() {
   // (e.g. assigned to externals or to since-deleted users).
   const boardTasks = view === 'board' && sidebarTeamFilter
     ? (sidebarTeamFilter === 'none'
-        ? tasks.filter(t => {
+        ? visibleTasks.filter(t => {
             const ids = t.assignees?.length
               ? t.assignees.map(a => a.id)
               : (t.assigned_to ? [t.assigned_to] : [])
             return !ids.some(id => (teamIdsByProfileId.get(id)?.size || 0) > 0)
           })
-        : tasks.filter(t => taskOnTeam(t, sidebarTeamFilter, teamIdsByProfileId)))
-    : tasks
+        : visibleTasks.filter(t => taskOnTeam(t, sidebarTeamFilter, teamIdsByProfileId)))
+    : visibleTasks
 
   // Strip `team` from the filters object before passing to applyFilters so
   // the shared filter (which compares t.team_id) doesn't double-apply or
@@ -130,8 +137,8 @@ export default function AdminOverviewPage() {
   const teamFilteredSource = view === 'board'
     ? boardTasks
     : (filters.team
-        ? tasks.filter(t => taskOnTeam(t, filters.team, teamIdsByProfileId))
-        : tasks)
+        ? visibleTasks.filter(t => taskOnTeam(t, filters.team, teamIdsByProfileId))
+        : visibleTasks)
 
   const filtered = applyFilters(teamFilteredSource, effectiveFilters)
 
@@ -184,6 +191,13 @@ export default function AdminOverviewPage() {
   async function handleBulkDelete() {
     const result = await deleteTasks([...selectedIds])
     if (result.ok) { showToast(`${selectedIds.size} task(s) deleted`); setSelectedIds(new Set()); refetch(true) }
+    else showToast(result.msg, 'error')
+  }
+
+  async function handleBulkArchive() {
+    const n = selectedIds.size
+    const result = await archiveTasks([...selectedIds])
+    if (result.ok) { showToast(`${n} task(s) archived`); setSelectedIds(new Set()); refetch(true) }
     else showToast(result.msg, 'error')
   }
 
@@ -260,11 +274,11 @@ export default function AdminOverviewPage() {
                       }`}
                   >
                     <td className="py-2 px-2 text-brand-600 dark:text-brand-300">All Teams</td>
-                    <td className="py-2 px-2 text-center">{tasks.length}</td>
-                    <td className={`py-2 px-2 text-center font-semibold ${tasks.filter(t => t.priority === 'red').length > 0 ? 'text-red-500' : 'text-slate-400 dark:text-slate-500'}`}>
-                      {tasks.filter(t => t.priority === 'red').length}
+                    <td className="py-2 px-2 text-center">{visibleTasks.length}</td>
+                    <td className={`py-2 px-2 text-center font-semibold ${visibleTasks.filter(t => t.priority === 'red').length > 0 ? 'text-red-500' : 'text-slate-400 dark:text-slate-500'}`}>
+                      {visibleTasks.filter(t => t.priority === 'red').length}
                     </td>
-                    <td className="py-2 px-2 text-center text-emerald-600">{tasks.filter(t => t.status === 'Done').length}</td>
+                    <td className="py-2 px-2 text-center text-emerald-600">{visibleTasks.filter(t => t.status === 'Done').length}</td>
                   </tr>
                 )}
                 {teamBreakdown.map(([teamId, s]) => (
@@ -349,6 +363,7 @@ export default function AdminOverviewPage() {
                 onDeselectAll={() => setSelectedIds(new Set())}
                 onBulkStatusChange={handleBulkStatusChange}
                 onBulkUrgencyChange={handleBulkUrgencyChange}
+                onBulkArchive={handleBulkArchive}
                 onBulkDelete={() => setShowBulkDelete(true)}
               />
               {filtered.length === 0
