@@ -1,7 +1,7 @@
 # Task Archive + Bulk Actions — Design
 
 **Date:** 2026-06-23
-**Status:** Approved, ready for implementation
+**Status:** Implemented (branch `task-archive-bulk`). Pending: apply migration 105 to Supabase; real-UI smoke test.
 
 ## Problem
 
@@ -111,6 +111,9 @@ My Tasks — a task archived from Team View still lands there.
 | `src/pages/TeamViewPage.jsx` | `!archived` filter; Archive bulk action |
 | `src/pages/AdminOverviewPage.jsx` | `!archived` filter; Archive bulk action |
 | `src/components/tasks/TaskDetailPanel.jsx` | Single-row Archive/Unarchive toggle |
+| `src/components/notifications/NotificationBell.jsx` | Exclude archived tasks from bell (overdue/pending/due-soon/new) — added post-review |
+| `src/lib/archive.js` (new) + test | `splitByArchived` pure helper |
+| `supabase/migrations/105_task_archives.sql` (new) | Table + RLS |
 
 ## Verification gates
 
