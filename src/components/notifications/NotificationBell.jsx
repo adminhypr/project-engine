@@ -368,7 +368,11 @@ export default function NotificationBell({ onTaskClick }) {
     return () => supabase.removeChannel(channel)
   }, [profile?.id])
 
-  const allNotifications = getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInvites, hubMentions, dmConversations, todoAssignments)
+  // Exclude tasks the user personally archived (migration 105): archiving is
+  // meant to clear a task off your lists, so the bell shouldn't keep nagging
+  // about an archived task being overdue / pending / due-soon.
+  const activeMyTasks = myTasks.filter(t => !t.archived)
+  const allNotifications = getNotifications(activeMyTasks, profile, unsetupUsers, recentComments, hubInvites, hubMentions, dmConversations, todoAssignments)
   const notifications = allNotifications.filter(n => !dismissed.includes(n.id))
   const count = notifications.length
 
