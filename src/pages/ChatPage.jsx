@@ -4,12 +4,14 @@ import { MessageCircle } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useContactList } from '../hooks/useContactList'
 import SlackMessagePane from '../components/chat/slack/SlackMessagePane'
+import AssignFromChatModal from '../components/chat/AssignFromChatModal'
 import CreateGroupModal from '../components/chat/CreateGroupModal'
 import PreferencesModal from '../components/chat/slack/PreferencesModal'
 import WorkspaceRail from '../components/chat/slack/WorkspaceRail'
 import ChannelSidebar from '../components/chat/slack/ChannelSidebar'
 import QuickSwitcher from '../components/chat/slack/QuickSwitcher'
 import { usePageTitle } from '../hooks/usePageTitle'
+import { supabase } from '../lib/supabase'
 import { readLastOpened, writeLastOpened, resolveActiveConversation } from '../lib/chatPage'
 import { matchShortcut } from '../lib/chatShortcuts'
 import { useChatPrefs } from '../hooks/useChatPrefs'
@@ -136,6 +138,23 @@ export default function ChatPage() {
   // Chat preferences modal (opened from the WorkspaceHeader "Preferences" item
   // via ChannelSidebar → onPreferences).
   const [prefsOpen, setPrefsOpen] = useState(false)
+
+  // Assign-task-from-chat modal. The ChannelHeader's "Assign task" button calls
+  // SlackMessagePane's onAssignTask(conversation), which bubbles up to here.
+  // This was wired in the floating ChatWidget but never in the full-page /chat
+  // takeover, so the button was a no-op. AssignFromChatModal is self-contained
+  // (pulls profiles/assignTask internally); onPosted drops a system message into
+  // the conversation summarizing the assignment (same as ChatWidget).
+  const [assignForConversation, setAssignForConversation] = useState(null)
+  const handleAssignSystemPost = useCallback(async (sysText) => {
+    if (!assignForConversation || !profile?.id) return
+    await supabase.from('dm_messages').insert({
+      conversation_id: assignForConversation.id,
+      author_id: profile.id,
+      kind: 'system',
+      content: sysText,
+    })
+  }, [assignForConversation, profile?.id])
 
   // Rail nav selection is only 'home' | 'dms' now (the "+" create button owns
   // its own popover and calls onNewMessage / onNewChannel directly).
@@ -310,6 +329,7 @@ export default function ChatPage() {
               online={online}
               status={peerStatus}
               onMarkRead={markRead}
+              onAssignTask={conv => setAssignForConversation(conv)}
               onGroupChanged={refetch}
               lastReadAt={preReadLastReadAt}
               threadRoot={threadRoot}
@@ -359,6 +379,14 @@ export default function ChatPage() {
         onClose={() => setPrefsOpen(false)}
         profileId={profile?.id}
       />
+
+      {assignForConversation && (
+        <AssignFromChatModal
+          conversation={assignForConversation}
+          onClose={() => setAssignForConversation(null)}
+          onPosted={handleAssignSystemPost}
+        />
+      )}
     </div>
   )
 }
