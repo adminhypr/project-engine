@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { showToast } from '../components/ui'
 import { upsertConversation, sortByLastMessage } from '../lib/conversationOrdering'
-import { onMessage } from '../lib/dmEventBus'
+import { onMessage, emitRead, onRead } from '../lib/dmEventBus'
 import { shapeConversationRow } from '../lib/groupConversations'
 import { sortTaskChatRows } from '../lib/taskChat'
 import { isExternal } from '../lib/roleHelpers'
@@ -132,6 +132,35 @@ export function useConversations() {
     })
   }, [profile?.id, refetch])
 
+  // Cross-instance read propagation. markRead (below) only mutates ITS OWN
+  // instance's state — but the app mounts MULTIPLE useConversations instances
+  // (AuthProvider tab-badge via useTotalUnread, Layout nav badge, ChatWidget,
+  // NotificationBell, the /chat sidebar). The increment path (onMessage) already
+  // fans out to all of them; without this, the decrement (read) does not, so the
+  // browser-tab `(N)`, favicon dot, and Chat-nav badge stay inflated after you
+  // read a conversation. The 'read' event (emitted by markRead) lets every
+  // instance zero the same conversation's unread.
+  //
+  // Scoped to MY OWN reads (userId === profile.id): another user reading must
+  // never affect my badge. Only the in-memory `unread` integer is reset — we do
+  // NOT touch last_read_at, so the amber "New messages" snapshot logic is left
+  // intact. When the target conversation is absent or already at 0 unread we
+  // return the SAME array reference so React skips re-rendering every consumer;
+  // the handler never emits, so there is no feedback loop.
+  useEffect(() => {
+    if (!profile?.id) return
+    return onRead(({ conversationId, userId }) => {
+      if (userId !== profile.id) return
+      setConversations(prev => {
+        const idx = prev.findIndex(c => c.id === conversationId)
+        if (idx === -1 || prev[idx].unread === 0) return prev // no-op → same ref, no re-render
+        const next = prev.slice()
+        next[idx] = { ...next[idx], unread: 0 }
+        return next
+      })
+    })
+  }, [profile?.id])
+
   // Tasks realtime: when a task's status flips into/out of Done, or the
   // task is deleted, the widget's Tasks section needs to re-evaluate
   // (Done tasks are filtered out of the active list). Without this, the
@@ -209,12 +238,17 @@ export function useConversations() {
   const markRead = useCallback(async (conversationId) => {
     const { error } = await supabase.rpc('mark_conversation_read', { cid: conversationId })
     if (error) return
+    const readAt = new Date().toISOString()
     setConversations(prev => prev.map(c =>
       c.id === conversationId
-        ? { ...c, last_read_at: new Date().toISOString(), unread: 0 }
+        ? { ...c, last_read_at: readAt, unread: 0 }
         : c
     ))
-  }, [])
+    // Fan the decrement out to every OTHER useConversations instance so the
+    // tab badge / favicon dot / nav badge clear in lockstep (the onRead effect
+    // above zeroes each instance's unread). Scoped to my own id on the receiver.
+    emitRead(conversationId, profile?.id, readAt)
+  }, [profile?.id])
 
   // Externals (Agent/Client) only ever see their team group conversations,
   // task chats they're part of, and hub conversations they're members of —

@@ -1,5 +1,28 @@
 import { describe, it, expect } from 'vitest';
-import { buildSidebarSections } from '@/lib/slackSidebar';
+import { buildSidebarSections, normalizeDm } from '@/lib/slackSidebar';
+
+describe('normalizeDm (exported for starred-DM sourcing from the full list)', () => {
+  it('maps a conversation row + other_profile into the sidebar DM shape', () => {
+    const conv = { id: 'd9', kind: 'dm', unread: 3 };
+    const profile = { id: 'u9', full_name: 'Quiet Star', email: 'q@x.com' };
+    const dm = normalizeDm({ profile, conversation: conv });
+    expect(dm.id).toBe('d9');
+    expect(dm.conversationId).toBe('d9');
+    expect(dm.profileId).toBe('u9');
+    expect(dm.name).toBe('Quiet Star');
+    expect(dm.kind).toBe('dm');
+    expect(dm.conversation).toBe(conv);
+    expect(dm.profile).toBe(profile);
+  });
+
+  it('falls back to email when full_name is missing and tolerates a null profile', () => {
+    expect(normalizeDm({ profile: { id: 'u1', email: 'e@x.com' }, conversation: { id: 'd1' } }).name)
+      .toBe('e@x.com');
+    const empty = normalizeDm({ conversation: { id: 'd2' } });
+    expect(empty.profileId).toBe(null);
+    expect(empty.conversationId).toBe('d2');
+  });
+});
 
 // NOTE: input shapes mirror the REAL output of useContactList:
 //  - sections.recent/teammates/company entries are { profile, conversation? }

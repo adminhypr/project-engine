@@ -53,6 +53,7 @@ export default function SlackMessageList({
   onJumpToReply,
   onMarkUnread,
   onEdit,
+  onAtBottomChange,
   wallpaperBackground,
 }) {
   const { dark } = useTheme()
@@ -86,6 +87,18 @@ export default function SlackMessageList({
   const initializedRef = useRef(false)
   const [atBottom, setAtBottom] = useState(true)
   const [unseenCount, setUnseenCount] = useState(0)
+
+  // Bridge atBottom out to the pane (drives its "only mark read when at the
+  // bottom" gate) without re-subscribing the scroll listener on every render.
+  // Held in a ref so the scroll handler / auto-scroll effect can call the
+  // latest callback. `updateAtBottom` keeps local state + the bridge in lockstep
+  // so there's a single source of truth for "are we at the bottom".
+  const onAtBottomChangeRef = useRef(onAtBottomChange)
+  onAtBottomChangeRef.current = onAtBottomChange
+  const updateAtBottom = (next) => {
+    setAtBottom(next)
+    onAtBottomChangeRef.current?.(next)
+  }
   const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null
   const lastId = lastMsg?.id ?? null
   const lastIsMine = lastMsg ? lastMsg.author_id === myId : false
@@ -112,7 +125,7 @@ export default function SlackMessageList({
     const onScroll = () => {
       const near = root.scrollHeight - root.scrollTop - root.clientHeight < 120
       nearBottomRef.current = near
-      setAtBottom(near)
+      updateAtBottom(near)
       if (near) setUnseenCount(0)
       if (root.scrollTop < 80 && hasMore && !loadingMoreRef.current) {
         requestLoadMore()
@@ -149,6 +162,11 @@ export default function SlackMessageList({
     if (loadingMoreRef.current) return // prepend, not a new tail message
     if (first || lastIsMine || !scrollRootRef?.current || nearBottomRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: 'auto' })
+      // We've programmatically pinned to the bottom — reflect that in both the
+      // local state and the pane bridge so the new-message mark-read gate sees
+      // "at bottom" even before the scroll event fires.
+      nearBottomRef.current = true
+      updateAtBottom(true)
       setUnseenCount(0)
     } else {
       setUnseenCount(c => c + 1)
