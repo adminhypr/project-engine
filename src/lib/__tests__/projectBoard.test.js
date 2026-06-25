@@ -13,6 +13,7 @@ import {
   filterFeatures,
   hasActiveFeatureFilter,
   EMPTY_FEATURE_FILTERS,
+  projectStats,
 } from '../projectBoard'
 
 describe('fractionalPos', () => {
@@ -160,6 +161,48 @@ describe('hasActiveFeatureFilter', () => {
     expect(hasActiveFeatureFilter({ mine: true, urgencies: [], due: 'any' })).toBe(true)
     expect(hasActiveFeatureFilter({ mine: false, urgencies: ['High'], due: 'any' })).toBe(true)
     expect(hasActiveFeatureFilter({ mine: false, urgencies: [], due: 'overdue' })).toBe(true)
+  })
+})
+
+describe('projectStats', () => {
+  const now = new Date('2026-06-25T12:00:00Z')
+  const feats = [
+    { status: 'Done',        subtask_count: 2, open_subtask_count: 0, due_date: '2026-06-20' }, // 100
+    { status: 'In Progress', due_date: '2026-06-20' },                                          // overdue, pct null->0
+    { status: 'In Progress', due_date: '2026-07-10' },                                          // pct null->0
+    { status: 'Not Started', due_date: null },                                                  // pct 0
+  ]
+  const requests = [
+    { status: 'Requested' }, { status: 'Under Review' }, { status: 'Planned' },
+    { status: 'Promoted' }, { status: 'Rejected' },
+  ]
+  const bugs = [
+    { status: 'Reported', severity: 'Critical' },
+    { status: 'Confirmed', severity: 'Low' },
+    { status: 'Reported', severity: 'High' },
+    { status: "Won't Fix", severity: 'Critical' },
+    { status: 'Promoted', severity: 'High' },
+  ]
+
+  it('rolls up feature counts, progress, overdue', () => {
+    const s = projectStats(feats, requests, bugs, now)
+    expect(s.features).toBe(4)
+    expect(s.done).toBe(1)
+    expect(s.inProgress).toBe(2)
+    expect(s.overdue).toBe(1)        // only the In Progress one past due (Done is excluded)
+    expect(s.pct).toBe(25)           // (100 + 0 + 0 + 0) / 4
+  })
+  it('counts only non-terminal requests as open', () => {
+    expect(projectStats(feats, requests, bugs, now).openRequests).toBe(3)
+  })
+  it('counts open bugs and the critical/high subset', () => {
+    const s = projectStats(feats, requests, bugs, now)
+    expect(s.openBugs).toBe(3)       // 2 Reported + 1 Confirmed (Won't Fix / Promoted excluded)
+    expect(s.criticalBugs).toBe(2)   // Critical + High among open
+  })
+  it('handles empty / null input', () => {
+    const s = projectStats(null, null, null, now)
+    expect(s).toEqual({ features: 0, done: 0, inProgress: 0, overdue: 0, pct: 0, openRequests: 0, openBugs: 0, criticalBugs: 0 })
   })
 })
 

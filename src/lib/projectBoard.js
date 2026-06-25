@@ -134,6 +134,44 @@ function parseDueLocal(s) {
   return new Date(s)  // full timestamp — leave as-is
 }
 
+// Quick-glance roll-up for the top of a project page. Summarizes all three
+// lanes (Features / Requests / Bugs) into a handful of counts. `now` is
+// injectable for deterministic tests. Overdue mirrors filterFeatures exactly
+// (due in the past, not Done) so the strip and the filter never disagree.
+export function projectStats(features, requests, bugs, now = new Date()) {
+  const feats = features || []
+  let done = 0, inProgress = 0, overdue = 0
+  for (const f of feats) {
+    if (f?.status === 'Done') done++
+    else if (f?.status === 'In Progress') inProgress++
+    const d = parseDueLocal(f?.due_date)
+    if (d && f?.status !== 'Done' && d < now) overdue++
+  }
+  const pct = projectProgress(feats.map(f => ({ pct: featureProgress(f).pct })))
+
+  const isOpenBug = (b) => b?.status === 'Reported' || b?.status === 'Confirmed'
+  const bugList = bugs || []
+  const openBugs = bugList.filter(isOpenBug).length
+  const criticalBugs = bugList.filter(
+    (b) => isOpenBug(b) && (b?.severity === 'Critical' || b?.severity === 'High'),
+  ).length
+
+  const openRequests = (requests || []).filter(
+    (r) => r?.status !== 'Promoted' && r?.status !== 'Rejected',
+  ).length
+
+  return {
+    features: feats.length,
+    done,
+    inProgress,
+    overdue,
+    pct,
+    openRequests,
+    openBugs,
+    criticalBugs,
+  }
+}
+
 // Filter Features (= tasks) for the board/list by the lightweight project
 // filters: mine (assigned to me), urgencies (empty = all), and a due bucket
 // (any | overdue | week | none). `now` is injectable for deterministic tests.

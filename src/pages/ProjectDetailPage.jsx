@@ -8,6 +8,7 @@ import { useProjectColumns, useProjectFeatures } from '../hooks/useProjectBoard'
 import { useFeatureRequests } from '../hooks/useFeatureRequests'
 import { projectProgress, featureProgress, filterFeatures, EMPTY_FEATURE_FILTERS } from '../lib/projectBoard'
 import FeaturesFilterBar from '../components/projects/FeaturesFilterBar'
+import ProjectStats from '../components/projects/ProjectStats'
 import { LoadingScreen, EmptyState } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
 import { usePageTitle } from '../hooks/usePageTitle'
@@ -151,6 +152,9 @@ export default function ProjectDetailPage() {
         </div>
 
         <div className="p-4 sm:p-6 space-y-8">
+          {/* Quick-glance roll-up across all three lanes */}
+          <ProjectStats features={features} requests={requests} bugs={bugs} />
+
           {/* Features */}
           <section>
             <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide mb-3">Features</h2>
