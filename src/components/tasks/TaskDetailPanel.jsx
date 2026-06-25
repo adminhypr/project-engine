@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { X, Send, Check, RefreshCw, Pencil, Trash2, Plus, Users, Paperclip, CheckCircle2, Circle, Repeat, Archive, ArchiveRestore } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useTaskActions, useProfiles } from '../../hooks/useTasks'
+import { useProjects } from '../../hooks/useProjects'
 import { useAuth } from '../../hooks/useAuth'
 import { formatDate } from '../../lib/helpers'
 import { AssignmentBadge, UrgencyBadge, StatusBadge, PriorityBadge, showToast } from '../ui'
@@ -64,6 +65,21 @@ export default function TaskDetailPanel({ task, tasks = [], onClose, onUpdated }
   const { uploadAttachments, getTaskAttachments, getAttachmentUrl, deleteAttachment } = useAttachments()
   const { markSelfComplete, unmarkSelf, setAssigneeCompletion, forceClose } = useTaskAssigneeCompletion()
   const { blockers: dependencyBlockerRows } = useTaskDependencies(task?.id)
+  const { projects: myProjects } = useProjects()
+
+  // Tag this task to a project (turns it into a Feature) or untag it. Placing
+  // it in the project's first list keeps it visible on the board.
+  async function handleSetProject(projectId) {
+    if (!projectId) {
+      await updateTask(task.id, { project_id: null, project_column_id: null, project_pos: null })
+    } else {
+      const { data: cols } = await supabase
+        .from('project_columns').select('id').eq('project_id', projectId).order('pos', { ascending: true }).limit(1)
+      await updateTask(task.id, { project_id: projectId, project_column_id: cols?.[0]?.id || null, project_pos: 1000 })
+    }
+    showToast(projectId ? 'Added to project' : 'Removed from project')
+    onUpdated?.()
+  }
 
   // Per-assignee completion state (sourced from the raw task_assignees join).
   const completionMap = Object.fromEntries(
@@ -527,6 +543,22 @@ export default function TaskDetailPanel({ task, tasks = [], onClose, onUpdated }
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto">
+
+        {/* Project link — tag this task to a project (makes it a Feature on the
+            project board). Only projects the user is a member of are listed. */}
+        {myProjects.length > 0 && (
+          <div className="px-5 py-2.5 border-b border-slate-100 dark:border-dark-border flex items-center gap-2">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400 shrink-0">Project</span>
+            <select
+              value={task.project_id || ''}
+              onChange={e => handleSetProject(e.target.value || null)}
+              className="form-input text-xs py-1 px-2 w-auto"
+            >
+              <option value="">— None —</option>
+              {myProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+        )}
 
         {/* Acceptance actions */}
         {canAcceptDecline && (

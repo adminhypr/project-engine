@@ -1,7 +1,7 @@
 # Project Dev Board (Trello-style) — Design
 
 **Date:** 2026-06-25
-**Status:** Approved (brainstorm complete). Implementation plan: `2026-06-25-project-dev-board.md`. No code yet.
+**Status:** Implemented on branch `feat/project-dev-board` (621 tests pass, build clean). Pending: apply migrations 106–108 to Supabase; manual UI smoke; review before merge. `promote_request` RPC dropped (promote done frontend via `assignTask`).
 
 ## Goal
 
