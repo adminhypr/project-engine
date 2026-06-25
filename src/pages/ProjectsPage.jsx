@@ -16,7 +16,7 @@ const STATUS_STYLES = {
 }
 
 export default function ProjectsPage() {
-  usePageTitle('Projects')
+  usePageTitle('Dev Projects')
   const navigate = useNavigate()
   const { projects, loading, createProject } = useProjects()
   const { tasks } = useTasks()
@@ -45,7 +45,7 @@ export default function ProjectsPage() {
   return (
     <PageTransition>
       <div>
-        <PageHeader title="Projects" subtitle="Developer project boards" actions={newButton} />
+        <PageHeader title="Dev Projects" subtitle="Developer project boards" actions={newButton} />
 
         <div className="p-4 sm:p-6">
           {projects.length === 0 ? (

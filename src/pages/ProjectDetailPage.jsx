@@ -94,7 +94,7 @@ export default function ProjectDetailPage() {
         {/* Header */}
         <div className="px-4 sm:px-6 pt-5 pb-3 border-b border-slate-100 dark:border-dark-border">
           <button onClick={() => navigate('/projects')} className="text-xs text-slate-400 hover:text-brand-500 inline-flex items-center gap-1 mb-2">
-            <ArrowLeft size={13} /> Projects
+            <ArrowLeft size={13} /> Dev Projects
           </button>
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div className="min-w-0">

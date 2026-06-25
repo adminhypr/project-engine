@@ -39,7 +39,7 @@ export default function Layout({ children }) {
         { to: '/assign',   icon: Plus,            label: 'Assign a Task',   show: true },
         { to: '/chat',     icon: MessageCircle,   label: 'Chat',            show: true, count: totalUnread },
         { to: '/hub',      icon: Boxes,           label: 'Project Hub',     show: true, badge: 'BETA' },
-        { to: '/projects', icon: KanbanSquare,    label: 'Projects',        show: true, badge: 'BETA' },
+        { to: '/projects', icon: KanbanSquare,    label: 'Dev Projects',    show: true, badge: 'BETA' },
         { to: '/team',     icon: Users,           label: 'Team View',       show: isManager },
         { to: '/admin',    icon: LayoutDashboard, label: 'Admin Overview',  show: isAdmin },
         { to: '/reports',  icon: BarChart2,       label: 'Reports',         show: isManager },
