@@ -2,16 +2,18 @@ import { useState } from 'react'
 import { ArrowUpRight, Trash2 } from 'lucide-react'
 import { ModalWrapper } from '../ui/animations'
 import { BUG_STATUSES, BUG_SEVERITIES } from '../../lib/projectBoard'
+import AssigneeSelect from './AssigneeSelect'
 
 // Edit a bug: title, description, severity, status. "Promote to Fix Task"
-// persists edits, then hands the merged bug up so the parent creates the task
-// and opens its setup panel.
-export default function BugEditModal({ bug, bugs, onClose, onPromote }) {
+// persists edits, then hands the merged bug + chosen assignee up so the parent
+// creates the task and opens its setup panel.
+export default function BugEditModal({ bug, bugs, onClose, onPromote, members = [], currentUserId = null }) {
   const { updateBug, setStatus, deleteBug } = bugs
   const [title, setTitle] = useState(bug.title || '')
   const [notes, setNotes] = useState(bug.description || '')
   const [severity, setSeverity] = useState(bug.severity || 'Medium')
   const [status, setLocalStatus] = useState(bug.status || 'Reported')
+  const [assigneeId, setAssigneeId] = useState(currentUserId)
   const [busy, setBusy] = useState(false)
 
   const persist = async () => {
@@ -28,7 +30,7 @@ export default function BugEditModal({ bug, bugs, onClose, onPromote }) {
   const promote = async () => {
     setBusy(true)
     await persist()
-    onPromote({ ...bug, title: title.trim() || bug.title, description: notes.trim() || null, severity, status: 'Promoted' })
+    onPromote({ ...bug, title: title.trim() || bug.title, description: notes.trim() || null, severity, status: 'Promoted' }, assigneeId)
   }
 
   const remove = async () => {
@@ -69,6 +71,12 @@ export default function BugEditModal({ bug, bugs, onClose, onPromote }) {
               </select>
             </div>
           </div>
+          {canPromote && (
+            <div>
+              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Assign fix to</label>
+              <AssigneeSelect members={members} value={assigneeId} onChange={setAssigneeId} className="w-full" />
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between gap-2 mt-5">

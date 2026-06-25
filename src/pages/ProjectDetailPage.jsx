@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { List, Columns3, ArrowLeft, Users as UsersIcon } from 'lucide-react'
-import { useProjects } from '../hooks/useProjects'
+import { useProjects, useProjectMembers } from '../hooks/useProjects'
+import { useAuth } from '../hooks/useAuth'
 import { useTasks } from '../hooks/useTasks'
 import { useProjectColumns, useProjectFeatures } from '../hooks/useProjectBoard'
 import { useFeatureRequests } from '../hooks/useFeatureRequests'
@@ -32,6 +33,7 @@ const STATUS_STYLES = {
 export default function ProjectDetailPage() {
   const { projectId } = useParams()
   const navigate = useNavigate()
+  const { profile } = useAuth()
   const { projects, loading: projectsLoading } = useProjects()
   const project = useMemo(() => projects.find(p => p.id === projectId), [projects, projectId])
   usePageTitle(project?.name || 'Project')
@@ -40,7 +42,9 @@ export default function ProjectDetailPage() {
   const { features, addFeature, moveFeature } = useProjectFeatures(projectId)
   const requests = useFeatureRequests(projectId)
   const bugs = useBugs(projectId)
+  const { members } = useProjectMembers(projectId)
   const { tasks, refetch: refetchTasks } = useTasks()
+  const currentUserId = profile?.id || null
 
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'board')
   const switchView = (v) => { setView(v); localStorage.setItem(VIEW_KEY, v) }
@@ -53,15 +57,15 @@ export default function ProjectDetailPage() {
 
   // Request edit modal (add notes / status) + promote-to-feature flow.
   const [editingRequest, setEditingRequest] = useState(null)
-  async function handlePromote(request) {
-    const task = await requests.promote(request, { columnId: columns[0]?.id || null })
+  async function handlePromote(request, assigneeId) {
+    const task = await requests.promote(request, { columnId: columns[0]?.id || null, assigneeId })
     if (task) { setEditingRequest(null); setActiveTaskId(task.id) }  // open the new feature's setup panel on the right
   }
 
   // Bug edit modal + promote-to-fix-task flow.
   const [editingBug, setEditingBug] = useState(null)
-  async function handlePromoteBug(bug) {
-    const task = await bugs.promote(bug, { columnId: columns[0]?.id || null })
+  async function handlePromoteBug(bug, assigneeId) {
+    const task = await bugs.promote(bug, { columnId: columns[0]?.id || null, assigneeId })
     if (task) { setEditingBug(null); setActiveTaskId(task.id) }
   }
 
@@ -142,6 +146,8 @@ export default function ProjectDetailPage() {
                 columnsLoading={columnsLoading}
                 features={features}
                 isAdmin={isAdmin}
+                members={members}
+                currentUserId={currentUserId}
                 onAddFeature={addFeature}
                 onMoveFeature={moveFeature}
                 onAddColumn={addColumn}
@@ -153,6 +159,8 @@ export default function ProjectDetailPage() {
               <FeatureList
                 features={features}
                 firstColumnId={firstColumnId}
+                members={members}
+                currentUserId={currentUserId}
                 onAddFeature={addFeature}
                 onOpenFeature={(t) => setActiveTaskId(t.id)}
               />
@@ -163,9 +171,9 @@ export default function ProjectDetailPage() {
           <section>
             <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide mb-3">Feature Requests</h2>
             {view === 'board' ? (
-              <RequestBoard requests={requests} onPromote={handlePromote} onOpenRequest={setEditingRequest} />
+              <RequestBoard requests={requests} onPromote={setEditingRequest} onOpenRequest={setEditingRequest} />
             ) : (
-              <RequestList requests={requests} onPromote={handlePromote} onOpenRequest={setEditingRequest} />
+              <RequestList requests={requests} onPromote={setEditingRequest} onOpenRequest={setEditingRequest} />
             )}
           </section>
 
@@ -173,9 +181,9 @@ export default function ProjectDetailPage() {
           <section>
             <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide mb-3">Bugs</h2>
             {view === 'board' ? (
-              <BugBoard bugs={bugs} onPromote={handlePromoteBug} onOpenBug={setEditingBug} />
+              <BugBoard bugs={bugs} onPromote={setEditingBug} onOpenBug={setEditingBug} />
             ) : (
-              <BugList bugs={bugs} onPromote={handlePromoteBug} onOpenBug={setEditingBug} />
+              <BugList bugs={bugs} onPromote={setEditingBug} onOpenBug={setEditingBug} />
             )}
           </section>
         </div>
@@ -184,6 +192,8 @@ export default function ProjectDetailPage() {
           <RequestEditModal
             request={editingRequest}
             requests={requests}
+            members={members}
+            currentUserId={currentUserId}
             onClose={() => setEditingRequest(null)}
             onPromote={handlePromote}
           />
@@ -193,6 +203,8 @@ export default function ProjectDetailPage() {
           <BugEditModal
             bug={editingBug}
             bugs={bugs}
+            members={members}
+            currentUserId={currentUserId}
             onClose={() => setEditingBug(null)}
             onPromote={handlePromoteBug}
           />

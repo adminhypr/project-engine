@@ -66,10 +66,10 @@ export function useBugs(projectId) {
 
   // Promote: create a fix task from the bug, assigned to the promoter, into the
   // given column; urgency from severity + 🐛 icon. Then mark Promoted + link.
-  const promote = useCallback(async (bug, { columnId = null } = {}) => {
+  const promote = useCallback(async (bug, { columnId = null, assigneeId = null } = {}) => {
     if (!bug || !profile?.id) return null
     const res = await assignTask({
-      assigneeIds: [profile.id],
+      assigneeIds: [assigneeId || profile.id],
       title: bug.title,
       notes: bug.description || null,
       urgency: severityToUrgency(bug.severity),

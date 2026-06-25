@@ -23,6 +23,7 @@ const CANVAS = 'rounded-xl bg-gradient-to-br from-brand-500/10 to-brand-600/10 d
 export default function FeatureBoard({
   columns, columnsLoading, features, isAdmin,
   onAddFeature, onMoveFeature, onAddColumn, onUpdateColumn, onDeleteColumn, onOpenFeature,
+  members = [], currentUserId = null,
 }) {
   const [activeId, setActiveId] = useState(null)
   const sensors = useSensors(
@@ -92,6 +93,8 @@ export default function FeatureBoard({
               cards={cardsByCol.get(col.id) || []}
               isAdmin={isAdmin}
               activeId={activeId}
+              members={members}
+              currentUserId={currentUserId}
               onOpenFeature={onOpenFeature}
               onAddFeature={onAddFeature}
               onUpdateColumn={onUpdateColumn}

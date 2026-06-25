@@ -71,12 +71,12 @@ export function useProjectFeatures(projectId) {
   // Create a Feature = a self-assigned task tagged to the project + column.
   // Reuses assignTask (task_id generation, task_assignees, poke) rather than
   // re-implementing the insert.
-  const addFeature = useCallback(async ({ title, columnId, urgency = 'Med', dueDate = null }) => {
+  const addFeature = useCallback(async ({ title, columnId, urgency = 'Med', dueDate = null, assigneeId = null }) => {
     if (!profile?.id || !title?.trim()) return null
     const colFeatures = features.filter(f => f.project_column_id === columnId)
     const pos = colFeatures.length ? Math.max(...colFeatures.map(f => f.project_pos ?? 0)) + POS_STEP : POS_STEP
     const res = await assignTask({
-      assigneeIds: [profile.id],
+      assigneeIds: [assigneeId || profile.id],
       title: title.trim(),
       urgency,
       dueDate,

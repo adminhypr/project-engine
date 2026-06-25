@@ -2,15 +2,18 @@ import { useState } from 'react'
 import { ArrowUpRight, Trash2 } from 'lucide-react'
 import { ModalWrapper } from '../ui/animations'
 import { REQUEST_STATUSES } from '../../lib/projectBoard'
+import AssigneeSelect from './AssigneeSelect'
 
 // Edit a feature request: title, notes (inherited as the feature's notes on
 // promote), and status. "Promote to Feature" persists edits, then hands the
-// merged request up so the parent creates the task and opens its setup panel.
-export default function RequestEditModal({ request, requests, onClose, onPromote }) {
+// merged request + chosen assignee up so the parent creates the task and opens
+// its setup panel.
+export default function RequestEditModal({ request, requests, onClose, onPromote, members = [], currentUserId = null }) {
   const { updateRequest, setStatus, deleteRequest } = requests
   const [title, setTitle] = useState(request.title || '')
   const [notes, setNotes] = useState(request.description || '')
   const [status, setLocalStatus] = useState(request.status || 'Requested')
+  const [assigneeId, setAssigneeId] = useState(currentUserId)
   const [busy, setBusy] = useState(false)
 
   const persist = async () => {
@@ -25,7 +28,7 @@ export default function RequestEditModal({ request, requests, onClose, onPromote
     await persist()
     // Pass the merged values so the new feature inherits the just-typed notes
     // even before the refetch lands.
-    onPromote({ ...request, title: title.trim() || request.title, description: notes.trim() || null, status: 'Promoted' })
+    onPromote({ ...request, title: title.trim() || request.title, description: notes.trim() || null, status: 'Promoted' }, assigneeId)
   }
 
   const remove = async () => {
@@ -58,6 +61,12 @@ export default function RequestEditModal({ request, requests, onClose, onPromote
               {REQUEST_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
+          {canPromote && (
+            <div>
+              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Assign feature to</label>
+              <AssigneeSelect members={members} value={assigneeId} onChange={setAssigneeId} className="w-full" />
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between gap-2 mt-5">

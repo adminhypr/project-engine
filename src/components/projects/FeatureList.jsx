@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { featureProgress } from '../../lib/projectBoard'
 import { ProgressBar } from './FeatureCard'
+import AssigneeSelect from './AssigneeSelect'
 
 const STATUS_STYLES = {
   'Not Started': 'bg-slate-100 text-slate-600 dark:bg-dark-border dark:text-slate-300',
@@ -10,13 +11,14 @@ const STATUS_STYLES = {
   'Done':        'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
 }
 
-export default function FeatureList({ features, firstColumnId, onAddFeature, onOpenFeature }) {
+export default function FeatureList({ features, firstColumnId, onAddFeature, onOpenFeature, members = [], currentUserId = null }) {
   const [title, setTitle] = useState('')
+  const [assigneeId, setAssigneeId] = useState(currentUserId)
   const sorted = [...features].sort((a, b) => (a.project_pos ?? 0) - (b.project_pos ?? 0))
 
   const add = async () => {
     if (!title.trim()) return
-    await onAddFeature({ title: title.trim(), columnId: firstColumnId })
+    await onAddFeature({ title: title.trim(), columnId: firstColumnId, assigneeId })
     setTitle('')
   }
 
@@ -53,7 +55,12 @@ export default function FeatureList({ features, firstColumnId, onAddFeature, onO
           placeholder="Add a feature…"
           className="form-input text-sm flex-1 border-0 bg-transparent focus:ring-0 px-0"
         />
-        {title.trim() && <button onClick={add} className="btn-primary text-xs px-3 py-1">Add</button>}
+        {title.trim() && (
+          <>
+            <AssigneeSelect members={members} value={assigneeId} onChange={setAssigneeId} className="text-[11px] py-1 px-1.5 w-auto shrink-0" />
+            <button onClick={add} className="btn-primary text-xs px-3 py-1">Add</button>
+          </>
+        )}
       </div>
     </div>
   )
