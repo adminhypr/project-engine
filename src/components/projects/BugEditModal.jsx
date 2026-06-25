@@ -3,6 +3,7 @@ import { ArrowUpRight, Trash2 } from 'lucide-react'
 import { ModalWrapper } from '../ui/animations'
 import { BUG_STATUSES, BUG_SEVERITIES } from '../../lib/projectBoard'
 import AssigneeSelect from './AssigneeSelect'
+import ProjectAttachments from './ProjectAttachments'
 
 // Edit a bug: title, description, severity, status. "Promote to Fix Task"
 // persists edits, then hands the merged bug + chosen assignee up so the parent
@@ -14,7 +15,15 @@ export default function BugEditModal({ bug, bugs, onClose, onPromote, members = 
   const [severity, setSeverity] = useState(bug.severity || 'Medium')
   const [status, setLocalStatus] = useState(bug.status || 'Reported')
   const [assigneeId, setAssigneeId] = useState(currentUserId)
+  const [attachments, setAttachments] = useState(bug.attachments || [])
   const [busy, setBusy] = useState(false)
+
+  // Persist attachments immediately (independent of Save) so an upload isn't
+  // lost if the modal is closed without saving — mirrors card attachments.
+  const onAttachmentsChange = async (next) => {
+    setAttachments(next)
+    await updateBug(bug.id, { attachments: next })
+  }
 
   const persist = async () => {
     await updateBug(bug.id, {
@@ -55,6 +64,16 @@ export default function BugEditModal({ bug, bugs, onClose, onPromote, members = 
               value={notes} onChange={e => setNotes(e.target.value)} rows={4}
               placeholder="Steps to reproduce / Expected / Actual… (carried over to the fix task when promoted)"
               className="form-input w-full resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Attachments</label>
+            <ProjectAttachments
+              attachments={attachments}
+              onChange={onAttachmentsChange}
+              projectId={bug.project_id}
+              entityKind="bug"
+              entityId={bug.id}
             />
           </div>
           <div className="grid grid-cols-2 gap-3">

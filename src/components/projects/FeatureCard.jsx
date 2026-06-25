@@ -26,6 +26,14 @@ const STATUS_DOT = {
   'Done':        'bg-emerald-500',
 }
 
+// Urgency badge colors (shown on every card). Urgent/High pop; Med/Low subtle.
+const URGENCY_STYLES = {
+  'Urgent': 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+  'High':   'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300',
+  'Med':    'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300',
+  'Low':    'bg-slate-100 text-slate-500 dark:bg-white/5 dark:text-slate-400',
+}
+
 // A Trello-style card: white tile, optional label strip, title, then a footer
 // row of badges (status dot, checklist count, due-date chip) + member avatar.
 export default function FeatureCard({ feature, onClick, dragHandleProps }) {
@@ -47,6 +55,11 @@ export default function FeatureCard({ feature, onClick, dragHandleProps }) {
         {total > 0 && <div className="mb-2"><ProgressBar pct={pct} /></div>}
 
         <div className="flex items-center gap-1.5 flex-wrap">
+          {feature.urgency && (
+            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${URGENCY_STYLES[feature.urgency] || URGENCY_STYLES.Med}`}>
+              {feature.urgency}
+            </span>
+          )}
           {total > 0 && (
             <span className={`inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded ${pct === 100 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'text-slate-500 dark:text-slate-400'}`}>
               <CheckSquare size={12} /> {done}/{total}

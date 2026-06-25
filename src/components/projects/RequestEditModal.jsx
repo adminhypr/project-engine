@@ -3,6 +3,7 @@ import { ArrowUpRight, Trash2 } from 'lucide-react'
 import { ModalWrapper } from '../ui/animations'
 import { REQUEST_STATUSES } from '../../lib/projectBoard'
 import AssigneeSelect from './AssigneeSelect'
+import ProjectAttachments from './ProjectAttachments'
 
 // Edit a feature request: title, notes (inherited as the feature's notes on
 // promote), and status. "Promote to Feature" persists edits, then hands the
@@ -14,7 +15,14 @@ export default function RequestEditModal({ request, requests, onClose, onPromote
   const [notes, setNotes] = useState(request.description || '')
   const [status, setLocalStatus] = useState(request.status || 'Requested')
   const [assigneeId, setAssigneeId] = useState(currentUserId)
+  const [attachments, setAttachments] = useState(request.attachments || [])
   const [busy, setBusy] = useState(false)
+
+  // Persist attachments immediately (independent of Save).
+  const onAttachmentsChange = async (next) => {
+    setAttachments(next)
+    await updateRequest(request.id, { attachments: next })
+  }
 
   const persist = async () => {
     await updateRequest(request.id, { title: title.trim() || request.title, description: notes.trim() || null })
@@ -53,6 +61,16 @@ export default function RequestEditModal({ request, requests, onClose, onPromote
               value={notes} onChange={e => setNotes(e.target.value)} rows={4}
               placeholder="Context, requirements, links… (carried over to the feature when promoted)"
               className="form-input w-full resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Attachments</label>
+            <ProjectAttachments
+              attachments={attachments}
+              onChange={onAttachmentsChange}
+              projectId={request.project_id}
+              entityKind="request"
+              entityId={request.id}
             />
           </div>
           <div>

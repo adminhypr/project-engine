@@ -6,7 +6,8 @@ import { useAuth } from '../hooks/useAuth'
 import { useTasks } from '../hooks/useTasks'
 import { useProjectColumns, useProjectFeatures } from '../hooks/useProjectBoard'
 import { useFeatureRequests } from '../hooks/useFeatureRequests'
-import { projectProgress, featureProgress } from '../lib/projectBoard'
+import { projectProgress, featureProgress, filterFeatures, EMPTY_FEATURE_FILTERS } from '../lib/projectBoard'
+import FeaturesFilterBar from '../components/projects/FeaturesFilterBar'
 import { LoadingScreen, EmptyState } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
 import { usePageTitle } from '../hooks/usePageTitle'
@@ -48,6 +49,14 @@ export default function ProjectDetailPage() {
   const { tasks, refetch: refetchTasks } = useTasks()
   const currentUserId = profile?.id || null
   const [showMembers, setShowMembers] = useState(false)
+
+  // Features filter (Mine / Urgency / Due). Applies to the Features board + list
+  // only — Requests/Bugs are status backlogs without these fields.
+  const [featureFilters, setFeatureFilters] = useState(EMPTY_FEATURE_FILTERS)
+  const visibleFeatures = useMemo(
+    () => filterFeatures(features, featureFilters, currentUserId),
+    [features, featureFilters, currentUserId],
+  )
 
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'board')
   const switchView = (v) => { setView(v); localStorage.setItem(VIEW_KEY, v) }
@@ -145,11 +154,12 @@ export default function ProjectDetailPage() {
           {/* Features */}
           <section>
             <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide mb-3">Features</h2>
+            <FeaturesFilterBar filters={featureFilters} onChange={setFeatureFilters} />
             {view === 'board' ? (
               <FeatureBoard
                 columns={columns}
                 columnsLoading={columnsLoading}
-                features={features}
+                features={visibleFeatures}
                 isAdmin={isAdmin}
                 members={members}
                 currentUserId={currentUserId}
@@ -162,7 +172,7 @@ export default function ProjectDetailPage() {
               />
             ) : (
               <FeatureList
-                features={features}
+                features={visibleFeatures}
                 firstColumnId={firstColumnId}
                 members={members}
                 currentUserId={currentUserId}
