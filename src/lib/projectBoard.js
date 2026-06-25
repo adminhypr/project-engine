@@ -1,0 +1,79 @@
+// Pure helpers for the Trello-style project dev board. Kept out of the
+// components so the board math (fractional ordering, % completion, grouping)
+// is unit-tested. See docs/plans/2026-06-25-project-dev-board-design.md.
+
+// Base gap for fractional positioning. A drag rewrites only the moved row's
+// `pos` to the midpoint of its neighbors, so the rest of the column is
+// untouched (Trello's `pos` float trick).
+const POS_STEP = 1000
+
+// Canonical Feature Request statuses, in board (left→right) order.
+export const REQUEST_STATUSES = [
+  'Requested',
+  'Under Review',
+  'Planned',
+  'Rejected',
+  'Promoted',
+]
+
+// New fractional position for a card dropped between `before` and `after`
+// (either may be null at the ends of a column / an empty column).
+export function fractionalPos(before, after) {
+  const hasBefore = typeof before === 'number'
+  const hasAfter = typeof after === 'number'
+  if (hasBefore && hasAfter) return (before + after) / 2
+  if (!hasBefore && hasAfter) return after / 2           // dropped at the top
+  if (hasBefore && !hasAfter) return before + POS_STEP   // dropped at the bottom
+  return POS_STEP                                         // empty column
+}
+
+// % completion for a Feature (= a task). Prefer sub-tasks done/total; when a
+// feature has no sub-tasks, fall back to status (Done = 100, Not Started = 0,
+// anything mid-flight = null → render a dash, not a misleading number).
+export function featureProgress(task) {
+  const total = Number(task?.subtask_count) || 0
+  const open = Number(task?.open_subtask_count) || 0
+  if (total > 0) {
+    const done = Math.max(0, total - open)
+    return { pct: Math.round((done / total) * 100), done, total, fromSubtasks: true }
+  }
+  const status = task?.status
+  const pct = status === 'Done' ? 100 : status === 'Not Started' ? 0 : null
+  return { pct, done: 0, total: 0, fromSubtasks: false }
+}
+
+// Overall project progress = average of feature pcts (a null pct — an
+// in-flight feature with no sub-tasks — counts as 0 toward the rollup).
+export function projectProgress(features) {
+  const list = features || []
+  if (list.length === 0) return 0
+  const sum = list.reduce((acc, f) => acc + (typeof f?.pct === 'number' ? f.pct : 0), 0)
+  return Math.round(sum / list.length)
+}
+
+const byPos = (a, b) => (a?.project_pos ?? 0) - (b?.project_pos ?? 0)
+
+// Group features into their board columns. Columns are returned ordered by
+// `pos`; each column's cards are ordered by `project_pos`. Features whose
+// column isn't on the board (orphans) are dropped from the board view (they
+// still show in the list view).
+export function groupFeaturesByColumn(features, columns) {
+  const cols = [...(columns || [])].sort((a, b) => (a?.pos ?? 0) - (b?.pos ?? 0))
+  const feats = features || []
+  return cols.map(column => ({
+    column,
+    cards: feats.filter(f => f?.project_column_id === column.id).sort(byPos),
+  }))
+}
+
+// Bucket feature requests into the 5 canonical statuses (always all 5, in
+// order), each sorted by `pos`.
+export function groupRequestsByStatus(requests) {
+  const list = requests || []
+  return REQUEST_STATUSES.map(status => ({
+    status,
+    requests: list
+      .filter(r => r?.status === status)
+      .sort((a, b) => (a?.pos ?? 0) - (b?.pos ?? 0)),
+  }))
+}
