@@ -47,7 +47,7 @@ export default function BugEditModal({ bug, bugs, onClose, onPromote, members = 
     setBusy(true); await deleteBug(bug.id); onClose()
   }
 
-  const canPromote = bug.status !== 'Promoted'
+  const canPromote = bug.status !== 'Promoted' && bug.status !== "Won't Fix"
 
   return (
     <ModalWrapper isOpen onClose={onClose}>

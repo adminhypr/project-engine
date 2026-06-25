@@ -27,7 +27,7 @@ function Avatar({ profile }) {
 
 export default function ProjectMembersModal({ projectMembers, isAdmin, currentUserId, onClose }) {
   const { members, addMember, removeMember, loading } = projectMembers
-  const { profiles } = useProfiles()           // already excludes externals (Agent/Client)
+  const { profiles } = useProfiles({ excludeExternals: true })  // Agent/Client aren't on the dev board
   const [adding, setAdding] = useState('')      // profileId selected to add
   const [busy, setBusy] = useState(false)
 
