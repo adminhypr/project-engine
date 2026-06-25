@@ -10,6 +10,9 @@ import {
   BUG_SEVERITIES,
   severityToUrgency,
   groupBugsByStatus,
+  filterFeatures,
+  hasActiveFeatureFilter,
+  EMPTY_FEATURE_FILTERS,
 } from '../projectBoard'
 
 describe('fractionalPos', () => {
@@ -145,5 +148,49 @@ describe('groupBugsByStatus', () => {
   })
   it('handles null/empty input', () => {
     expect(groupBugsByStatus(null).every(g => g.bugs.length === 0)).toBe(true)
+  })
+})
+
+describe('hasActiveFeatureFilter', () => {
+  it('is false for the empty filter', () => {
+    expect(hasActiveFeatureFilter(EMPTY_FEATURE_FILTERS)).toBe(false)
+    expect(hasActiveFeatureFilter(null)).toBe(false)
+  })
+  it('is true when any dimension is set', () => {
+    expect(hasActiveFeatureFilter({ mine: true, urgencies: [], due: 'any' })).toBe(true)
+    expect(hasActiveFeatureFilter({ mine: false, urgencies: ['High'], due: 'any' })).toBe(true)
+    expect(hasActiveFeatureFilter({ mine: false, urgencies: [], due: 'overdue' })).toBe(true)
+  })
+})
+
+describe('filterFeatures', () => {
+  const now = new Date('2026-06-25T12:00:00Z')
+  const feats = [
+    { id: 'a', urgency: 'Urgent', status: 'In Progress', assigned_to: 'me',   due_date: '2026-06-20' }, // overdue, mine
+    { id: 'b', urgency: 'Med',    status: 'Not Started', assigned_to: 'you',  assignees: [{ id: 'me' }], due_date: '2026-06-27' }, // due this week, mine (secondary)
+    { id: 'c', urgency: 'Low',    status: 'Not Started', assigned_to: 'you',  due_date: null },          // no due, not mine
+    { id: 'd', urgency: 'High',   status: 'Done',        assigned_to: 'you',  due_date: '2026-06-20' },  // past due but Done -> not overdue
+  ]
+
+  it('returns all with the empty filter', () => {
+    expect(filterFeatures(feats, EMPTY_FEATURE_FILTERS, 'me', now).map(f => f.id)).toEqual(['a', 'b', 'c', 'd'])
+  })
+  it('mine matches primary OR secondary assignee', () => {
+    expect(filterFeatures(feats, { mine: true }, 'me', now).map(f => f.id)).toEqual(['a', 'b'])
+  })
+  it('urgencies filter is a whitelist (empty = all)', () => {
+    expect(filterFeatures(feats, { urgencies: ['Urgent', 'High'] }, 'me', now).map(f => f.id)).toEqual(['a', 'd'])
+  })
+  it('due=overdue excludes Done tasks even when past due', () => {
+    expect(filterFeatures(feats, { due: 'overdue' }, 'me', now).map(f => f.id)).toEqual(['a'])
+  })
+  it('due=week matches due dates within the next 7 days', () => {
+    expect(filterFeatures(feats, { due: 'week' }, 'me', now).map(f => f.id)).toEqual(['b'])
+  })
+  it('due=none matches only features without a due date', () => {
+    expect(filterFeatures(feats, { due: 'none' }, 'me', now).map(f => f.id)).toEqual(['c'])
+  })
+  it('combines dimensions (AND)', () => {
+    expect(filterFeatures(feats, { mine: true, urgencies: ['Urgent'], due: 'overdue' }, 'me', now).map(f => f.id)).toEqual(['a'])
   })
 })

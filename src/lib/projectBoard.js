@@ -103,3 +103,43 @@ export function groupBugsByStatus(bugs) {
       .sort((a, b) => (a?.pos ?? 0) - (b?.pos ?? 0)),
   }))
 }
+
+// Urgency levels offered in the Features filter (board card values).
+export const FEATURE_URGENCIES = ['Urgent', 'High', 'Med', 'Low']
+
+// Default (empty) filter state for the Features board.
+export const EMPTY_FEATURE_FILTERS = { mine: false, urgencies: [], due: 'any' }
+
+// True when any Features filter is narrowing the set.
+export function hasActiveFeatureFilter(filters) {
+  const f = filters || {}
+  return !!(f.mine || (f.urgencies?.length || 0) > 0 || (f.due && f.due !== 'any'))
+}
+
+// Is the current user one of a feature's assignees (primary or secondary)?
+function isAssignedTo(feature, userId) {
+  if (!userId) return false
+  if (feature?.assigned_to === userId) return true
+  return (feature?.assignees || []).some(a => a?.id === userId)
+}
+
+// Filter Features (= tasks) for the board/list by the lightweight project
+// filters: mine (assigned to me), urgencies (empty = all), and a due bucket
+// (any | overdue | week | none). `now` is injectable for deterministic tests.
+export function filterFeatures(features, filters = {}, currentUserId = null, now = new Date()) {
+  const { mine = false, urgencies = [], due = 'any' } = filters || {}
+  const startOfToday = new Date(now); startOfToday.setHours(0, 0, 0, 0)
+  const weekAhead = new Date(startOfToday); weekAhead.setDate(weekAhead.getDate() + 7)
+
+  return (features || []).filter(f => {
+    if (mine && !isAssignedTo(f, currentUserId)) return false
+    if (urgencies.length && !urgencies.includes(f?.urgency)) return false
+    if (due !== 'any') {
+      const d = f?.due_date ? new Date(f.due_date) : null
+      if (due === 'none') { if (d) return false }
+      else if (due === 'overdue') { if (!(d && f?.status !== 'Done' && d < now)) return false }
+      else if (due === 'week') { if (!(d && d >= startOfToday && d <= weekAhead)) return false }
+    }
+    return true
+  })
+}
