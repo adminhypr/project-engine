@@ -123,6 +123,17 @@ function isAssignedTo(feature, userId) {
   return (feature?.assignees || []).some(a => a?.id === userId)
 }
 
+// Parse a task due_date as LOCAL midnight. due_date is a date-only string
+// ('YYYY-MM-DD'); `new Date('YYYY-MM-DD')` parses as UTC midnight, which in
+// negative-UTC timezones lands on the previous local day and skews the
+// overdue/week buckets by one. Build from local Y/M/D instead.
+function parseDueLocal(s) {
+  if (!s) return null
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  return new Date(s)  // full timestamp — leave as-is
+}
+
 // Filter Features (= tasks) for the board/list by the lightweight project
 // filters: mine (assigned to me), urgencies (empty = all), and a due bucket
 // (any | overdue | week | none). `now` is injectable for deterministic tests.
@@ -135,7 +146,7 @@ export function filterFeatures(features, filters = {}, currentUserId = null, now
     if (mine && !isAssignedTo(f, currentUserId)) return false
     if (urgencies.length && !urgencies.includes(f?.urgency)) return false
     if (due !== 'any') {
-      const d = f?.due_date ? new Date(f.due_date) : null
+      const d = parseDueLocal(f?.due_date)
       if (due === 'none') { if (d) return false }
       else if (due === 'overdue') { if (!(d && f?.status !== 'Done' && d < now)) return false }
       else if (due === 'week') { if (!(d && d >= startOfToday && d <= weekAhead)) return false }

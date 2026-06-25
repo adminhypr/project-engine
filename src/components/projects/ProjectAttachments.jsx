@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react'
-import { Paperclip, X, Loader2, Download } from 'lucide-react'
+import { Paperclip, X, Loader2, Download, ImageOff } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { showToast } from '../ui/index'
 import { isBlockedImageType } from '../../lib/uploadGuards'
@@ -51,7 +51,10 @@ export default function ProjectAttachments({
   // resolved.
   useEffect(() => {
     let cancelled = false
-    const need = attachments.filter(a => isImage(a) && !previews[a.storage_path])
+    // `previews[path] === undefined` = not attempted; `null` = attempted but
+    // failed. Filter on key-presence (not truthiness) so a failed sign DOESN'T
+    // get retried every render — that was an infinite refetch loop.
+    const need = attachments.filter(a => isImage(a) && !(a.storage_path in previews))
     if (need.length === 0) return
     ;(async () => {
       const entries = await Promise.all(need.map(async (a) => {
@@ -61,19 +64,19 @@ export default function ProjectAttachments({
       if (cancelled) return
       setPreviews(prev => {
         const next = { ...prev }
-        for (const [path, url] of entries) if (url) next[path] = url
+        for (const [path, url] of entries) next[path] = url  // record null too → no retry loop
         return next
       })
     })()
     return () => { cancelled = true }
   }, [attachments, previews])
 
-  async function uploadFile(file) {
-    if (!file) return
-    if (file.size === 0) { showToast(`${file.name || 'File'} is empty`, 'error'); return }
-    if (file.size > MAX_FILE_SIZE) { showToast(`${file.name || 'File'} exceeds 10 MB limit`, 'error'); return }
-    if (isBlockedImageType(file)) { showToast('SVG images are not allowed', 'error'); return }
-    if (!projectId || !entityId) return
+  async function uploadOne(file) {
+    if (!file) return null
+    if (file.size === 0) { showToast(`${file.name || 'File'} is empty`, 'error'); return null }
+    if (file.size > MAX_FILE_SIZE) { showToast(`${file.name || 'File'} exceeds 10 MB limit`, 'error'); return null }
+    if (isBlockedImageType(file)) { showToast('SVG images are not allowed', 'error'); return null }
+    if (!projectId || !entityId) return null
 
     const tempId = crypto.randomUUID()
     const safeName = sanitizeFilename(file.name)
@@ -87,24 +90,29 @@ export default function ProjectAttachments({
       .upload(storagePath, file, { contentType: file.type || undefined })
 
     setUploading(prev => prev.filter(u => u.id !== tempId))
-    if (error) { showToast('Upload failed', 'error'); return }
+    if (error) { showToast('Upload failed', 'error'); return null }
 
-    onChange?.([
-      ...attachments,
-      {
-        storage_path: storagePath,
-        file_name: safeName,
-        mime_type: file.type || 'application/octet-stream',
-        size: file.size,
-      },
-    ])
+    return {
+      storage_path: storagePath,
+      file_name: safeName,
+      mime_type: file.type || 'application/octet-stream',
+      size: file.size,
+    }
   }
 
-  function handlePickerChange(e) {
-    const files = e.target.files
-    if (!files) return
-    for (const file of files) uploadFile(file)
+  // Upload all picked files, then commit them in a SINGLE onChange. Calling
+  // onChange per-file would build each payload from the same stale `attachments`
+  // closure → last-writer-wins → all but one file dropped from the row.
+  async function handlePickerChange(e) {
+    const files = Array.from(e.target.files || [])
     e.target.value = ''
+    if (!files.length) return
+    const added = []
+    for (const file of files) {
+      const meta = await uploadOne(file)
+      if (meta) added.push(meta)
+    }
+    if (added.length) onChange?.([...attachments, ...added])
   }
 
   async function openAttachment(att) {
@@ -118,7 +126,7 @@ export default function ProjectAttachments({
   function handleRemove(index) {
     const att = attachments[index]
     if (!att) return
-    supabase.storage.from(BUCKET).remove([att.storage_path]).then(() => {}) // best-effort
+    supabase.storage.from(BUCKET).remove([att.storage_path]).then(() => {}).catch(() => {}) // best-effort
     onChange?.(attachments.filter((_, i) => i !== index))
   }
 
@@ -135,7 +143,9 @@ export default function ProjectAttachments({
                   className="block w-14 h-14 rounded-lg overflow-hidden border border-slate-200 dark:border-dark-border bg-slate-50 dark:bg-dark-bg/50">
                   {previews[att.storage_path]
                     ? <img src={previews[att.storage_path]} alt={att.file_name} className="w-full h-full object-cover" />
-                    : <span className="w-full h-full grid place-items-center"><Loader2 size={14} className="animate-spin text-brand-500" /></span>}
+                    : (att.storage_path in previews
+                        ? <span className="w-full h-full grid place-items-center text-slate-400" title="Preview unavailable"><ImageOff size={14} /></span>
+                        : <span className="w-full h-full grid place-items-center"><Loader2 size={14} className="animate-spin text-brand-500" /></span>)}
                 </button>
                 {!disabled && (
                   <button type="button" onClick={() => handleRemove(i)} aria-label={`Remove ${att.file_name}`}

@@ -44,7 +44,7 @@ export default function RequestEditModal({ request, requests, onClose, onPromote
     setBusy(true); await deleteRequest(request.id); onClose()
   }
 
-  const canPromote = request.status !== 'Promoted'
+  const canPromote = request.status !== 'Promoted' && request.status !== 'Rejected'
 
   return (
     <ModalWrapper isOpen onClose={onClose}>
