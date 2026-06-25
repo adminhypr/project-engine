@@ -575,7 +575,10 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
       >
         <span className="w-8 h-0.5 rounded-full bg-slate-300 dark:bg-slate-600 group-hover:bg-slate-400 dark:group-hover:bg-slate-500" />
       </div>
-      <div className="relative p-2 pt-0 flex items-end gap-2">
+      {/* Composer body: full-width textarea on its own row so it never gets
+          squeezed by the action buttons (the cramped-sliver bug in the narrow
+          floating widget). Actions live on a row beneath it, Send pushed right. */}
+      <div className="relative p-2 pt-0">
         {mentionQuery && mentionCandidates.length > 0 && (
           <MentionPopover
             people={mentionCandidates}
@@ -585,70 +588,6 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
           />
         )}
         <input ref={fileInputRef} type="file" multiple hidden onChange={handlePickFiles} />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={busy || disabled}
-          className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40"
-          aria-label="Attach a file or image"
-          title="Attach a file or image (drag & drop or paste too)"
-        >
-          <Paperclip className="w-4 h-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowToolbar(v => !v)}
-          aria-label="Formatting"
-          aria-pressed={showToolbar}
-          title="Show formatting toolbar"
-          className={`w-9 h-9 shrink-0 rounded-full ${mobileHide} items-center justify-center hover:bg-slate-100 dark:hover:bg-dark-hover ${showToolbar ? 'text-brand-600 dark:text-brand-400 bg-slate-100 dark:bg-dark-hover' : 'text-slate-400 hover:text-brand-600 dark:hover:text-brand-400'}`}
-        >
-          <Type className="w-4 h-4" />
-        </button>
-        <EmojiPicker
-          open={emojiOpen}
-          onClose={() => setOpenPopover(null)}
-          onPick={insertEmoji}
-        />
-        <button
-          type="button"
-          onClick={() => setOpenPopover(p => (p === 'emoji' ? null : 'emoji'))}
-          disabled={busy || disabled}
-          aria-label="Insert emoji"
-          aria-pressed={emojiOpen}
-          title="Insert emoji"
-          className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40 ${emojiOpen ? 'text-brand-600 dark:text-brand-400 bg-slate-100 dark:bg-dark-hover' : 'text-slate-400 hover:text-brand-600 dark:hover:text-brand-400'}`}
-        >
-          <Smile className="w-4 h-4" />
-        </button>
-        <button
-          type="button"
-          // Don't steal the textarea selection before insertMentionTrigger reads it.
-          onMouseDown={e => e.preventDefault()}
-          onClick={insertMentionTrigger}
-          disabled={busy || disabled}
-          aria-label="Mention someone"
-          title="Mention someone"
-          className={`w-9 h-9 shrink-0 rounded-full ${mobileHide} items-center justify-center text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40`}
-        >
-          <AtSign className="w-4 h-4" />
-        </button>
-        {giphyEnabled && (
-          <>
-            <GifPicker open={gifOpen} onClose={() => setOpenPopover(null)} onSelect={handleGifSelect} />
-            <button
-              type="button"
-              onClick={() => setOpenPopover(p => (p === 'gif' ? null : 'gif'))}
-              disabled={busy || disabled}
-              aria-label="Send a GIF"
-              aria-pressed={gifOpen}
-              title="Send a GIF"
-              className={`w-9 h-9 shrink-0 rounded-full ${mobileHide} items-center justify-center hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40 ${gifOpen ? 'text-brand-600 dark:text-brand-400 bg-slate-100 dark:bg-dark-hover' : 'text-slate-400 hover:text-brand-600 dark:hover:text-brand-400'}`}
-            >
-              <Film className="w-4 h-4" />
-            </button>
-          </>
-        )}
         <textarea
           ref={textareaRef}
           value={value}
@@ -661,20 +600,86 @@ export default function ChatComposer({ conversationId, onSend, onTyping, disable
           placeholder={replyTarget ? `Reply to ${replyTarget.authorName}…` : placeholder}
           rows={1}
           style={{ height: textareaHeight }}
-          className="flex-1 resize-none rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-dark-border px-3 py-2 text-base md:text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+          className="w-full resize-none rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-dark-border px-3 py-2 text-base md:text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
         />
-        <button
-          type="button"
-          onClick={submit}
-          disabled={sendDisabled}
-          style={sendDisabled ? undefined : { backgroundColor: 'var(--chat-accent, #6366f1)' }}
-          className={`w-9 h-9 rounded-full text-white flex items-center justify-center ${
-            sendDisabled ? 'bg-slate-300 cursor-not-allowed' : 'hover:brightness-110'
-          }`}
-          aria-label={busy ? 'Sending…' : 'Send'}
-        >
-          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-        </button>
+        <div className="flex items-center gap-0.5 mt-1.5">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={busy || disabled}
+            className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40"
+            aria-label="Attach a file or image"
+            title="Attach a file or image (drag & drop or paste too)"
+          >
+            <Paperclip className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowToolbar(v => !v)}
+            aria-label="Formatting"
+            aria-pressed={showToolbar}
+            title="Show formatting toolbar"
+            className={`w-9 h-9 shrink-0 rounded-full ${mobileHide} items-center justify-center hover:bg-slate-100 dark:hover:bg-dark-hover ${showToolbar ? 'text-brand-600 dark:text-brand-400 bg-slate-100 dark:bg-dark-hover' : 'text-slate-400 hover:text-brand-600 dark:hover:text-brand-400'}`}
+          >
+            <Type className="w-4 h-4" />
+          </button>
+          <EmojiPicker
+            open={emojiOpen}
+            onClose={() => setOpenPopover(null)}
+            onPick={insertEmoji}
+          />
+          <button
+            type="button"
+            onClick={() => setOpenPopover(p => (p === 'emoji' ? null : 'emoji'))}
+            disabled={busy || disabled}
+            aria-label="Insert emoji"
+            aria-pressed={emojiOpen}
+            title="Insert emoji"
+            className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40 ${emojiOpen ? 'text-brand-600 dark:text-brand-400 bg-slate-100 dark:bg-dark-hover' : 'text-slate-400 hover:text-brand-600 dark:hover:text-brand-400'}`}
+          >
+            <Smile className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            // Don't steal the textarea selection before insertMentionTrigger reads it.
+            onMouseDown={e => e.preventDefault()}
+            onClick={insertMentionTrigger}
+            disabled={busy || disabled}
+            aria-label="Mention someone"
+            title="Mention someone"
+            className={`w-9 h-9 shrink-0 rounded-full ${mobileHide} items-center justify-center text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40`}
+          >
+            <AtSign className="w-4 h-4" />
+          </button>
+          {giphyEnabled && (
+            <>
+              <GifPicker open={gifOpen} onClose={() => setOpenPopover(null)} onSelect={handleGifSelect} />
+              <button
+                type="button"
+                onClick={() => setOpenPopover(p => (p === 'gif' ? null : 'gif'))}
+                disabled={busy || disabled}
+                aria-label="Send a GIF"
+                aria-pressed={gifOpen}
+                title="Send a GIF"
+                className={`w-9 h-9 shrink-0 rounded-full ${mobileHide} items-center justify-center hover:bg-slate-100 dark:hover:bg-dark-hover disabled:opacity-40 ${gifOpen ? 'text-brand-600 dark:text-brand-400 bg-slate-100 dark:bg-dark-hover' : 'text-slate-400 hover:text-brand-600 dark:hover:text-brand-400'}`}
+              >
+                <Film className="w-4 h-4" />
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={submit}
+            disabled={sendDisabled}
+            style={sendDisabled ? undefined : { backgroundColor: 'var(--chat-accent, #6366f1)' }}
+            className={`ml-auto w-9 h-9 shrink-0 rounded-full text-white flex items-center justify-center ${
+              sendDisabled ? 'bg-slate-300 cursor-not-allowed' : 'hover:brightness-110'
+            }`}
+            aria-label={busy ? 'Sending…' : 'Send'}
+          >
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          </button>
+        </div>
       </div>
     </div>
   )
