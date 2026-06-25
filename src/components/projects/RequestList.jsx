@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, ArrowUpRight } from 'lucide-react'
+import { Plus, ArrowUpRight, AlignLeft } from 'lucide-react'
 import { groupRequestsByStatus, REQUEST_STATUSES } from '../../lib/projectBoard'
 
 const STATUS_STYLES = {
@@ -10,8 +10,8 @@ const STATUS_STYLES = {
   'Promoted':     'text-emerald-600 dark:text-emerald-300',
 }
 
-export default function RequestList({ requests, firstColumnId }) {
-  const { requests: list, addRequest, setStatus, promote } = requests
+export default function RequestList({ requests, onPromote, onOpenRequest }) {
+  const { requests: list, addRequest, setStatus } = requests
   const [title, setTitle] = useState('')
   const groups = groupRequestsByStatus(list)
 
@@ -32,13 +32,17 @@ export default function RequestList({ requests, firstColumnId }) {
             {group.status} <span className="text-slate-300 dark:text-slate-600">({group.requests.length})</span>
           </p>
           {group.requests.map(r => (
-            <div key={r.id} className="px-4 py-2.5 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-dark-hover">
+            <div key={r.id} className="px-4 py-2.5 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-dark-hover cursor-pointer" onClick={() => onOpenRequest(r)}>
               <span className="flex-1 min-w-0">
-                <span className="block text-sm text-slate-800 dark:text-slate-100 truncate">{r.title}</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-sm text-slate-800 dark:text-slate-100 truncate">{r.title}</span>
+                  {r.description && <AlignLeft size={12} className="text-slate-400 shrink-0" title="Has notes" />}
+                </span>
                 {r.requester?.full_name && <span className="block text-[11px] text-slate-400">by {r.requester.full_name}</span>}
               </span>
               <select
                 value={r.status}
+                onClick={e => e.stopPropagation()}
                 onChange={e => setStatus(r.id, e.target.value)}
                 disabled={r.status === 'Promoted'}
                 className="form-input text-[11px] py-1 px-1.5 w-auto shrink-0"
@@ -47,7 +51,7 @@ export default function RequestList({ requests, firstColumnId }) {
               </select>
               {r.status !== 'Promoted' && r.status !== 'Rejected' && (
                 <button
-                  onClick={() => promote(r, { columnId: firstColumnId })}
+                  onClick={(e) => { e.stopPropagation(); onPromote(r) }}
                   className="btn-ghost text-[11px] px-2 py-1 flex items-center gap-1 shrink-0"
                   title="Promote to a feature"
                 >

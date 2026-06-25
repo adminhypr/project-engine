@@ -10,6 +10,7 @@ import { LoadingScreen, EmptyState } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
 import { usePageTitle } from '../hooks/usePageTitle'
 import TaskDetailPanel from '../components/tasks/TaskDetailPanel'
+import RequestEditModal from '../components/projects/RequestEditModal'
 import FeatureList from '../components/projects/FeatureList'
 import FeatureBoard from '../components/projects/FeatureBoard'
 import RequestList from '../components/projects/RequestList'
@@ -44,6 +45,13 @@ export default function ProjectDetailPage() {
   // back in.
   const [activeTaskId, setActiveTaskId] = useState(null)
   const activeTask = activeTaskId ? (tasks.find(t => t.id === activeTaskId) ?? null) : null
+
+  // Request edit modal (add notes / status) + promote-to-feature flow.
+  const [editingRequest, setEditingRequest] = useState(null)
+  async function handlePromote(request) {
+    const task = await requests.promote(request, { columnId: columns[0]?.id || null })
+    if (task) { setEditingRequest(null); setActiveTaskId(task.id) }  // open the new feature's setup panel on the right
+  }
 
   const isAdmin = project?.my_role === 'owner' || project?.my_role === 'admin'
   const overall = useMemo(
@@ -143,12 +151,21 @@ export default function ProjectDetailPage() {
           <section>
             <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide mb-3">Feature Requests</h2>
             {view === 'board' ? (
-              <RequestBoard requests={requests} firstColumnId={firstColumnId} />
+              <RequestBoard requests={requests} onPromote={handlePromote} onOpenRequest={setEditingRequest} />
             ) : (
-              <RequestList requests={requests} firstColumnId={firstColumnId} />
+              <RequestList requests={requests} onPromote={handlePromote} onOpenRequest={setEditingRequest} />
             )}
           </section>
         </div>
+
+        {editingRequest && (
+          <RequestEditModal
+            request={editingRequest}
+            requests={requests}
+            onClose={() => setEditingRequest(null)}
+            onPromote={handlePromote}
+          />
+        )}
 
         {activeTask && (
           <TaskDetailPanel

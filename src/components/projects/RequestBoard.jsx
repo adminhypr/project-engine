@@ -3,7 +3,7 @@ import {
   DndContext, DragOverlay, useDraggable, useDroppable,
   PointerSensor, TouchSensor, useSensor, useSensors, pointerWithin,
 } from '@dnd-kit/core'
-import { Plus, ArrowUpRight } from 'lucide-react'
+import { Plus, ArrowUpRight, AlignLeft } from 'lucide-react'
 import { groupRequestsByStatus } from '../../lib/projectBoard'
 
 const CANVAS = 'rounded-xl bg-gradient-to-br from-slate-500/10 to-slate-600/10 dark:from-white/[0.04] dark:to-white/[0.02] p-3'
@@ -12,9 +12,12 @@ const CANVAS = 'rounded-xl bg-gradient-to-br from-slate-500/10 to-slate-600/10 d
 function RequestBody({ request, onPromote, grabbing }) {
   const canPromote = request.status !== 'Promoted' && request.status !== 'Rejected'
   return (
-    <div className={`bg-white dark:bg-[#22272b] rounded-lg border border-slate-200/80 dark:border-white/5 shadow-[0_1px_1px_rgba(9,30,66,0.13)] p-2.5 ${grabbing ? 'cursor-grabbing rotate-2 ring-2 ring-brand-400/70 shadow-elevated' : 'cursor-grab'}`}>
+    <div className={`bg-white dark:bg-[#22272b] rounded-lg border border-slate-200/80 dark:border-white/5 shadow-[0_1px_1px_rgba(9,30,66,0.13)] p-2.5 ${grabbing ? 'cursor-grabbing rotate-2 ring-2 ring-brand-400/70 shadow-elevated' : 'cursor-grab hover:border-brand-400 dark:hover:border-brand-500/60'} transition-colors`}>
       <p className="text-[13px] leading-snug text-slate-800 dark:text-slate-100">{request.title}</p>
-      {request.requester?.full_name && <p className="text-[11px] text-slate-400 mt-1">by {request.requester.full_name}</p>}
+      <div className="flex items-center gap-2 mt-1">
+        {request.requester?.full_name && <p className="text-[11px] text-slate-400">by {request.requester.full_name}</p>}
+        {request.description && <AlignLeft size={12} className="text-slate-400" title="Has notes" />}
+      </div>
       {canPromote && onPromote && (
         <button
           onClick={(e) => { e.stopPropagation(); onPromote(request) }}
@@ -28,12 +31,11 @@ function RequestBody({ request, onPromote, grabbing }) {
   )
 }
 
-function RequestCard({ request, onPromote }) {
-  // No transform on the source — the DragOverlay renders the moving copy, so
-  // the source just dims in place (otherwise it gets clipped by the canvas).
+function RequestCard({ request, onPromote, onOpen }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: request.id })
   return (
-    <div ref={setNodeRef} style={{ opacity: isDragging ? 0.4 : 1 }} {...attributes} {...listeners}>
+    <div ref={setNodeRef} style={{ opacity: isDragging ? 0.4 : 1 }} {...attributes} {...listeners}
+      onClick={() => onOpen(request)}>
       <RequestBody request={request} onPromote={onPromote} />
     </div>
   )
@@ -53,8 +55,8 @@ function StatusColumn({ status, requests, children }) {
   )
 }
 
-export default function RequestBoard({ requests, firstColumnId }) {
-  const { requests: list, addRequest, setStatus, promote } = requests
+export default function RequestBoard({ requests, onPromote, onOpenRequest }) {
+  const { requests: list, addRequest, setStatus } = requests
   const groups = groupRequestsByStatus(list)
   const [adding, setAdding] = useState(false)
   const [title, setTitle] = useState('')
@@ -109,7 +111,7 @@ export default function RequestBoard({ requests, firstColumnId }) {
             {groups.map(group => (
               <StatusColumn key={group.status} status={group.status} requests={group.requests}>
                 {group.requests.map(r => (
-                  <RequestCard key={r.id} request={r} onPromote={(req) => promote(req, { columnId: firstColumnId })} />
+                  <RequestCard key={r.id} request={r} onPromote={onPromote} onOpen={onOpenRequest} />
                 ))}
               </StatusColumn>
             ))}
