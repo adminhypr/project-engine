@@ -6,6 +6,10 @@ import {
   groupFeaturesByColumn,
   groupRequestsByStatus,
   REQUEST_STATUSES,
+  BUG_STATUSES,
+  BUG_SEVERITIES,
+  severityToUrgency,
+  groupBugsByStatus,
 } from '../projectBoard'
 
 describe('fractionalPos', () => {
@@ -109,5 +113,37 @@ describe('groupRequestsByStatus', () => {
     const result = groupRequestsByStatus(null)
     expect(result.map(g => g.status)).toEqual(REQUEST_STATUSES)
     expect(result.every(g => g.requests.length === 0)).toBe(true)
+  })
+})
+
+describe('severityToUrgency', () => {
+  it('maps each severity to a task urgency', () => {
+    expect(severityToUrgency('Critical')).toBe('Urgent')
+    expect(severityToUrgency('High')).toBe('High')
+    expect(severityToUrgency('Medium')).toBe('Med')
+    expect(severityToUrgency('Low')).toBe('Low')
+  })
+  it('falls back to Med for unknown/empty severity', () => {
+    expect(severityToUrgency(undefined)).toBe('Med')
+    expect(severityToUrgency('Nonsense')).toBe('Med')
+  })
+})
+
+describe('groupBugsByStatus', () => {
+  it('returns all 4 statuses in board order, each sorted by pos', () => {
+    const bugs = [
+      { id: 'a', status: 'Reported', pos: 2000 },
+      { id: 'b', status: 'Reported', pos: 1000 },
+      { id: 'c', status: 'Confirmed', pos: 1000 },
+      { id: 'd', status: 'Promoted', pos: 1000 },
+    ]
+    const groups = groupBugsByStatus(bugs)
+    expect(groups.map(g => g.status)).toEqual(BUG_STATUSES)
+    expect(groups[0].bugs.map(b => b.id)).toEqual(['b', 'a']) // Reported, sorted by pos
+    expect(groups[1].bugs.map(b => b.id)).toEqual(['c'])      // Confirmed
+    expect(groups.find(g => g.status === "Won't Fix").bugs).toEqual([]) // empty kept
+  })
+  it('handles null/empty input', () => {
+    expect(groupBugsByStatus(null).every(g => g.bugs.length === 0)).toBe(true)
   })
 })

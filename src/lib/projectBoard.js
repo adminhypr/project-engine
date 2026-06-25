@@ -77,3 +77,29 @@ export function groupRequestsByStatus(requests) {
       .sort((a, b) => (a?.pos ?? 0) - (b?.pos ?? 0)),
   }))
 }
+
+// Canonical bug statuses, in board (left→right) order. Terminal: Won't Fix /
+// Promoted (the fixing lifecycle lives on the promoted task, not the bug).
+export const BUG_STATUSES = ['Reported', 'Confirmed', "Won't Fix", 'Promoted']
+
+// Severity levels, highest→lowest.
+export const BUG_SEVERITIES = ['Critical', 'High', 'Medium', 'Low']
+
+// Map a bug severity to the urgency of the task it promotes into. tasks.urgency
+// allows 'Urgent' since migration 087.
+const SEV_TO_URGENCY = { Critical: 'Urgent', High: 'High', Medium: 'Med', Low: 'Low' }
+export function severityToUrgency(sev) {
+  return SEV_TO_URGENCY[sev] || 'Med'
+}
+
+// Bucket bugs into the 4 canonical statuses (always all 4, in order), each
+// sorted by `pos`. Mirrors groupRequestsByStatus.
+export function groupBugsByStatus(bugs) {
+  const list = bugs || []
+  return BUG_STATUSES.map(status => ({
+    status,
+    bugs: list
+      .filter(b => b?.status === status)
+      .sort((a, b) => (a?.pos ?? 0) - (b?.pos ?? 0)),
+  }))
+}

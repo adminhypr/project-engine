@@ -15,6 +15,10 @@ import FeatureList from '../components/projects/FeatureList'
 import FeatureBoard from '../components/projects/FeatureBoard'
 import RequestList from '../components/projects/RequestList'
 import RequestBoard from '../components/projects/RequestBoard'
+import { useBugs } from '../hooks/useBugs'
+import BugList from '../components/projects/BugList'
+import BugBoard from '../components/projects/BugBoard'
+import BugEditModal from '../components/projects/BugEditModal'
 
 const VIEW_KEY = 'pe-project-view'
 
@@ -35,6 +39,7 @@ export default function ProjectDetailPage() {
   const { columns, loading: columnsLoading, addColumn, updateColumn, deleteColumn } = useProjectColumns(projectId)
   const { features, addFeature, moveFeature } = useProjectFeatures(projectId)
   const requests = useFeatureRequests(projectId)
+  const bugs = useBugs(projectId)
   const { tasks, refetch: refetchTasks } = useTasks()
 
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'board')
@@ -51,6 +56,13 @@ export default function ProjectDetailPage() {
   async function handlePromote(request) {
     const task = await requests.promote(request, { columnId: columns[0]?.id || null })
     if (task) { setEditingRequest(null); setActiveTaskId(task.id) }  // open the new feature's setup panel on the right
+  }
+
+  // Bug edit modal + promote-to-fix-task flow.
+  const [editingBug, setEditingBug] = useState(null)
+  async function handlePromoteBug(bug) {
+    const task = await bugs.promote(bug, { columnId: columns[0]?.id || null })
+    if (task) { setEditingBug(null); setActiveTaskId(task.id) }
   }
 
   const isAdmin = project?.my_role === 'owner' || project?.my_role === 'admin'
@@ -156,6 +168,16 @@ export default function ProjectDetailPage() {
               <RequestList requests={requests} onPromote={handlePromote} onOpenRequest={setEditingRequest} />
             )}
           </section>
+
+          {/* Bugs */}
+          <section>
+            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide mb-3">Bugs</h2>
+            {view === 'board' ? (
+              <BugBoard bugs={bugs} onPromote={handlePromoteBug} onOpenBug={setEditingBug} />
+            ) : (
+              <BugList bugs={bugs} onPromote={handlePromoteBug} onOpenBug={setEditingBug} />
+            )}
+          </section>
         </div>
 
         {editingRequest && (
@@ -164,6 +186,15 @@ export default function ProjectDetailPage() {
             requests={requests}
             onClose={() => setEditingRequest(null)}
             onPromote={handlePromote}
+          />
+        )}
+
+        {editingBug && (
+          <BugEditModal
+            bug={editingBug}
+            bugs={bugs}
+            onClose={() => setEditingBug(null)}
+            onPromote={handlePromoteBug}
           />
         )}
 
