@@ -5,7 +5,6 @@ import {
 } from '@dnd-kit/core'
 import { Plus } from 'lucide-react'
 import { groupFeaturesByColumn, fractionalPos } from '../../lib/projectBoard'
-import { showToast } from '../ui/index'
 import FeatureColumn from './FeatureColumn'
 import FeatureCard from './FeatureCard'
 
@@ -16,6 +15,10 @@ function collisionDetection(args) {
   if (inter.length) return inter
   return closestCorners(args)
 }
+
+// The board "canvas" — a soft colored backdrop so the gray lists + white cards
+// layer on top the way they do in Trello.
+const CANVAS = 'rounded-xl bg-gradient-to-br from-brand-500/10 to-brand-600/10 dark:from-brand-500/[0.06] dark:to-brand-700/[0.06] p-3'
 
 export default function FeatureBoard({
   columns, columnsLoading, features, isAdmin,
@@ -47,8 +50,6 @@ export default function FeatureBoard({
     if (!over || over.id === active.id) return
     const toCol = findColumnFor(over.id)
     if (!toCol) return
-
-    // Target column cards, excluding the dragged one, ordered by project_pos.
     const targetCards = (cardsByCol.get(toCol) || []).filter(c => c.id !== active.id)
     let toIndex = targetCards.length
     if (over.id !== `col:${toCol}`) {
@@ -57,18 +58,19 @@ export default function FeatureBoard({
     }
     const before = targetCards[toIndex - 1]?.project_pos ?? null
     const after = targetCards[toIndex]?.project_pos ?? null
-    const newPos = fractionalPos(before, after)
-    await onMoveFeature(active.id, toCol, newPos)
+    await onMoveFeature(active.id, toCol, fractionalPos(before, after))
   }
 
-  if (columnsLoading) return <div className="p-4 text-sm text-slate-400">Loading board…</div>
+  if (columnsLoading) return <div className={CANVAS}><div className="text-sm text-slate-500 px-2 py-6">Loading board…</div></div>
 
   if (columns.length === 0) {
     return (
-      <div className="p-4 text-sm text-slate-500 dark:text-slate-400">
-        {isAdmin
-          ? <>No lists yet. <AddColumnInline onAdd={onAddColumn} trigger="link" /></>
-          : <>This board has no lists yet.</>}
+      <div className={CANVAS}>
+        <div className="text-sm text-slate-600 dark:text-slate-300 px-1 py-2">
+          {isAdmin
+            ? <>No lists yet. <button onClick={() => onAddColumn({ name: 'Backlog' })} className="text-brand-600 dark:text-brand-300 font-medium hover:underline">Add the first list</button>.</>
+            : <>This board has no lists yet.</>}
+        </div>
       </div>
     )
   }
@@ -81,29 +83,31 @@ export default function FeatureBoard({
       onDragCancel={() => setActiveId(null)}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-3 overflow-x-auto pb-2 group">
-        {columns.map(col => (
-          <FeatureColumn
-            key={col.id}
-            column={col}
-            cards={cardsByCol.get(col.id) || []}
-            isAdmin={isAdmin}
-            activeId={activeId}
-            onOpenFeature={onOpenFeature}
-            onAddFeature={onAddFeature}
-            onUpdateColumn={onUpdateColumn}
-            onDeleteColumn={async (c) => {
-              if (!confirm(`Delete list "${c.name}"? Features in it become un-listed (still tasks).`)) return
-              await onDeleteColumn(c.id)
-            }}
-          />
-        ))}
-        {isAdmin && <AddColumnInline onAdd={onAddColumn} />}
+      <div className={`${CANVAS} overflow-x-auto`}>
+        <div className="flex gap-3 items-start min-h-[120px]">
+          {columns.map(col => (
+            <FeatureColumn
+              key={col.id}
+              column={col}
+              cards={cardsByCol.get(col.id) || []}
+              isAdmin={isAdmin}
+              activeId={activeId}
+              onOpenFeature={onOpenFeature}
+              onAddFeature={onAddFeature}
+              onUpdateColumn={onUpdateColumn}
+              onDeleteColumn={async (c) => {
+                if (!confirm(`Delete list "${c.name}"? Features in it become un-listed (still tasks).`)) return
+                await onDeleteColumn(c.id)
+              }}
+            />
+          ))}
+          {isAdmin && <AddColumnInline onAdd={onAddColumn} />}
+        </div>
       </div>
 
-      <DragOverlay dropAnimation={{ duration: 220, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
+      <DragOverlay dropAnimation={{ duration: 200, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
         {activeFeature ? (
-          <div className="rotate-2 scale-[1.03] shadow-elevated rounded-xl ring-2 ring-brand-400/60 cursor-grabbing" style={{ width: 240 }}>
+          <div className="rotate-3 shadow-elevated" style={{ width: 256 }}>
             <FeatureCard feature={activeFeature} />
           </div>
         ) : null}
@@ -112,33 +116,27 @@ export default function FeatureBoard({
   )
 }
 
-function AddColumnInline({ onAdd, trigger = 'column' }) {
+function AddColumnInline({ onAdd }) {
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
-  const submit = async () => {
-    if (name.trim()) await onAdd({ name: name.trim() })
-    setName(''); setAdding(false)
-  }
-  if (trigger === 'link') {
-    return <button onClick={() => onAdd({ name: 'Backlog' })} className="text-brand-500 hover:underline">Add the first list</button>
-  }
+  const submit = async () => { if (name.trim()) await onAdd({ name: name.trim() }); setName(''); setAdding(false) }
   if (!adding) {
     return (
       <button onClick={() => setAdding(true)}
-        className="min-w-[200px] h-9 flex items-center gap-1.5 px-3 text-xs text-slate-500 hover:text-brand-500 rounded-xl border border-dashed border-slate-300 dark:border-slate-600 self-start">
-        <Plus size={13} /> Add a list
+        className="w-[272px] shrink-0 flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-medium text-slate-600 dark:text-slate-300 rounded-xl bg-white/50 hover:bg-white/80 dark:bg-white/[0.04] dark:hover:bg-white/[0.08] transition-colors">
+        <Plus size={15} /> Add a list
       </button>
     )
   }
   return (
-    <div className="min-w-[220px] self-start">
+    <div className="w-[272px] shrink-0 rounded-xl bg-slate-100 dark:bg-[#1d2127] shadow-sm p-2">
       <input
         autoFocus value={name}
         onChange={e => setName(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { setName(''); setAdding(false) } }}
         onBlur={submit}
-        placeholder="List name"
-        className="form-input text-sm w-full"
+        placeholder="Enter list name…"
+        className="w-full text-[13px] rounded-lg border border-slate-300 dark:border-dark-border bg-white dark:bg-[#22272b] p-2 focus:outline-none focus:ring-2 focus:ring-brand-400/50"
       />
     </div>
   )
