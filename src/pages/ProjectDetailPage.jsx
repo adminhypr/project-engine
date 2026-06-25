@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { List, Columns3, ArrowLeft, Users as UsersIcon } from 'lucide-react'
+import { List, Columns3, ArrowLeft, Users as UsersIcon, Upload } from 'lucide-react'
 import { useProjects, useProjectMembers } from '../hooks/useProjects'
 import { useAuth } from '../hooks/useAuth'
 import { useTasks } from '../hooks/useTasks'
@@ -23,6 +23,7 @@ import BugList from '../components/projects/BugList'
 import BugBoard from '../components/projects/BugBoard'
 import BugEditModal from '../components/projects/BugEditModal'
 import ProjectMembersModal from '../components/projects/ProjectMembersModal'
+import ImportQAModal from '../components/projects/ImportQAModal'
 
 const VIEW_KEY = 'pe-project-view'
 
@@ -50,6 +51,7 @@ export default function ProjectDetailPage() {
   const { tasks, refetch: refetchTasks } = useTasks()
   const currentUserId = profile?.id || null
   const [showMembers, setShowMembers] = useState(false)
+  const [showImport, setShowImport] = useState(false)
 
   // Features filter (Mine / Urgency / Due). Applies to the Features board + list
   // only — Requests/Bugs are status backlogs without these fields.
@@ -147,7 +149,18 @@ export default function ProjectDetailPage() {
                 {project.target_date && <span>Due {new Date(project.target_date).toLocaleDateString()}</span>}
               </div>
             </div>
-            {viewToggle}
+            <div className="flex items-center gap-2">
+              {isAdmin && (
+                <button
+                  onClick={() => setShowImport(true)}
+                  className="btn text-xs px-2.5 py-1.5 inline-flex items-center gap-1.5"
+                  title="Bulk-import a QA / backlog list (JSON)"
+                >
+                  <Upload size={13} /> Import
+                </button>
+              )}
+              {viewToggle}
+            </div>
           </div>
         </div>
 
@@ -227,6 +240,15 @@ export default function ProjectDetailPage() {
             currentUserId={currentUserId}
             onClose={() => setEditingBug(null)}
             onPromote={handlePromoteBug}
+          />
+        )}
+
+        {showImport && (
+          <ImportQAModal
+            project={project}
+            requests={requests}
+            bugs={bugs}
+            onClose={() => setShowImport(false)}
           />
         )}
 

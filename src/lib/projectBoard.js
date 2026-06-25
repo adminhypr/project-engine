@@ -134,6 +134,20 @@ function parseDueLocal(s) {
   return new Date(s)  // full timestamp — leave as-is
 }
 
+// Map one raw QA-import item to a target lane + status, or null if it has no
+// title. Bugs → the Bug lane (Done = Confirmed, else Reported). Everything else
+// (Missing Feature / Enhancement / unknown) → a Feature Request (Done =
+// Promoted, else Requested). Title/description are trimmed; description '' → null.
+export function mapQAItem(raw) {
+  const title = (raw?.taskname || '').trim()
+  if (!title) return null
+  const description = (raw?.description || '').trim() || null
+  const isBug = (raw?.type || '').trim().toLowerCase() === 'bug'
+  const isDone = (raw?.status || '').trim().toLowerCase() === 'done'
+  if (isBug) return { lane: 'bug', title, description, status: isDone ? 'Confirmed' : 'Reported' }
+  return { lane: 'request', title, description, status: isDone ? 'Promoted' : 'Requested' }
+}
+
 // Quick-glance roll-up for the top of a project page. Summarizes all three
 // lanes (Features / Requests / Bugs) into a handful of counts. `now` is
 // injectable for deterministic tests. Overdue mirrors filterFeatures exactly
