@@ -86,3 +86,32 @@ create policy "feature_requests_update" on public.feature_requests
 
 create policy "feature_requests_delete" on public.feature_requests
   for delete using (public.is_project_member(project_id));
+
+-- Integrity guard: feature_requests_update lets any member edit the row, so a
+-- member could otherwise point promoted_task_id at an arbitrary task. Require
+-- it to reference a task that actually belongs to THIS project (the promote
+-- flow always sets it to the freshly-created feature, so this is transparent
+-- for the happy path and only blocks spoofed/foreign links).
+create or replace function public.guard_feature_request_promotion()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.promoted_task_id is not null then
+    if not exists (
+      select 1 from public.tasks
+       where id = new.promoted_task_id and project_id = new.project_id
+    ) then
+      raise exception 'feature_requests: promoted_task_id must reference a task in this project'
+        using errcode = '23514';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger guard_feature_request_promotion_trg
+  before insert or update on public.feature_requests
+  for each row execute function public.guard_feature_request_promotion();

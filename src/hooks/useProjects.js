@@ -43,6 +43,15 @@ export function useProjects() {
       showToast(error?.message || 'Failed to create project', 'error')
       return null
     }
+    // Seed a starter board so the project is immediately usable (the creator is
+    // now owner via the RPC, so project_columns INSERT RLS allows this). Two
+    // lists map to a task status so dragging there syncs the feature's status.
+    const { error: colErr } = await supabase.from('project_columns').insert([
+      { project_id: data.id, name: 'Backlog',     pos: 1000, maps_to_status: null },
+      { project_id: data.id, name: 'In Progress', pos: 2000, maps_to_status: 'In Progress' },
+      { project_id: data.id, name: 'Done',        pos: 3000, maps_to_status: 'Done' },
+    ])
+    if (colErr) console.warn('seed project columns failed:', colErr.message)
     await fetchProjects()
     showToast('Project created')
     return data

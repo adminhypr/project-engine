@@ -70,6 +70,7 @@ export default function TaskDetailPanel({ task, tasks = [], onClose, onUpdated }
   // Tag this task to a project (turns it into a Feature) or untag it. Placing
   // it in the project's first list keeps it visible on the board.
   async function handleSetProject(projectId) {
+    if (projectId === (task.project_id || null)) return  // no-op: same project
     if (!projectId) {
       await updateTask(task.id, { project_id: null, project_column_id: null, project_pos: null })
     } else {
