@@ -14,7 +14,41 @@ import {
   hasActiveFeatureFilter,
   EMPTY_FEATURE_FILTERS,
   projectStats,
+  mapQAItem,
 } from '../projectBoard'
+
+describe('mapQAItem', () => {
+  it('routes a pending Bug to the bug lane as Reported', () => {
+    expect(mapQAItem({ taskname: 'QA-01 [Dash]', description: 'broke', type: 'Bug', status: 'Pending' }))
+      .toEqual({ lane: 'bug', title: 'QA-01 [Dash]', description: 'broke', status: 'Reported' })
+  })
+  it('routes a done Bug to the bug lane as Confirmed', () => {
+    expect(mapQAItem({ taskname: 'QA-26', description: 'fixed', type: 'Bug', status: 'Done' }).status).toBe('Confirmed')
+  })
+  it('routes a pending Missing Feature to a request as Requested', () => {
+    const m = mapQAItem({ taskname: 'QA-02', description: 'add edit', type: 'Missing Feature', status: 'Pending' })
+    expect(m.lane).toBe('request'); expect(m.status).toBe('Requested')
+  })
+  it('routes a done Enhancement to a request as Promoted', () => {
+    const m = mapQAItem({ taskname: 'QA-21', type: 'Enhancement', status: 'Done' })
+    expect(m.lane).toBe('request'); expect(m.status).toBe('Promoted')
+  })
+  it('treats an unknown type as a request', () => {
+    expect(mapQAItem({ taskname: 'x', type: 'Whatever', status: 'Pending' }).lane).toBe('request')
+  })
+  it('is case/space tolerant on type and status', () => {
+    expect(mapQAItem({ taskname: 'x', type: '  bug ', status: '  DONE ' }))
+      .toEqual({ lane: 'bug', title: 'x', description: null, status: 'Confirmed' })
+  })
+  it('returns null when there is no title', () => {
+    expect(mapQAItem({ taskname: '   ', type: 'Bug', status: 'Pending' })).toBe(null)
+    expect(mapQAItem(null)).toBe(null)
+  })
+  it('trims title and empties description to null', () => {
+    expect(mapQAItem({ taskname: '  T  ', description: '   ', type: 'Bug' }))
+      .toEqual({ lane: 'bug', title: 'T', description: null, status: 'Reported' })
+  })
+})
 
 describe('fractionalPos', () => {
   it('returns the midpoint between two positions', () => {
