@@ -18,6 +18,8 @@ const AdminOverviewPage  = lazy(() => import('./pages/AdminOverviewPage'))
 const ReportsPage        = lazy(() => import('./pages/reports/ReportsPage'))
 const SettingsPage       = lazy(() => import('./pages/SettingsPage'))
 const HubPage            = lazy(() => import('./pages/HubPage'))
+const ProjectsPage       = lazy(() => import('./pages/ProjectsPage'))
+const ProjectDetailPage  = lazy(() => import('./pages/ProjectDetailPage'))
 const HubTodosPage       = lazy(() => import('./pages/HubTodosPage'))
 const ToDoPage           = lazy(() => import('./pages/ToDoPage'))
 const ChatPage           = lazy(() => import('./pages/ChatPage'))
@@ -118,6 +120,8 @@ function AppRoutes() {
                   <Route path="/hub"        element={<HubPage />} />
                   <Route path="/hub/:hubId" element={<HubPage />} />
                   <Route path="/hub/:hubId/todos/*" element={<HubTodosPage />} />
+                  <Route path="/projects"             element={<InternalOnly><ProjectsPage /></InternalOnly>} />
+                  <Route path="/projects/:projectId"  element={<InternalOnly><ProjectDetailPage /></InternalOnly>} />
                   <Route path="/team"     element={<InternalOnly><TeamViewPage /></InternalOnly>} />
                   <Route path="/admin"    element={<InternalOnly><Profiler id="AdminOverviewPage" onRender={logRender}><AdminOverviewPage /></Profiler></InternalOnly>} />
                   <Route path="/reports"  element={<InternalOnly><ReportsPage /></InternalOnly>} />

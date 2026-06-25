@@ -7,7 +7,7 @@ import { signOut } from '../../lib/auth'
 import {
   CheckSquare, Plus, Users, LayoutDashboard, Boxes,
   BarChart2, Settings, LogOut, Menu, X, ChevronRight, Moon, Sun,
-  ListChecks, MessageCircle
+  ListChecks, MessageCircle, KanbanSquare
 } from 'lucide-react'
 import { useTheme } from '../../hooks/useTheme'
 import { useTotalUnread } from '../../hooks/useTotalUnread'
@@ -39,6 +39,7 @@ export default function Layout({ children }) {
         { to: '/assign',   icon: Plus,            label: 'Assign a Task',   show: true },
         { to: '/chat',     icon: MessageCircle,   label: 'Chat',            show: true, count: totalUnread },
         { to: '/hub',      icon: Boxes,           label: 'Project Hub',     show: true, badge: 'BETA' },
+        { to: '/projects', icon: KanbanSquare,    label: 'Projects',        show: true, badge: 'BETA' },
         { to: '/team',     icon: Users,           label: 'Team View',       show: isManager },
         { to: '/admin',    icon: LayoutDashboard, label: 'Admin Overview',  show: isAdmin },
         { to: '/reports',  icon: BarChart2,       label: 'Reports',         show: isManager },
