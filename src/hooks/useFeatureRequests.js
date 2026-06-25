@@ -65,10 +65,10 @@ export function useFeatureRequests(projectId) {
   // Promote: create a Feature (task) from the request, assigned to the promoter,
   // into the given column; then mark the request Promoted + link it. Two awaited
   // steps — reuses assignTask rather than re-implementing task_id/triggers in SQL.
-  const promote = useCallback(async (request, { columnId = null } = {}) => {
+  const promote = useCallback(async (request, { columnId = null, assigneeId = null } = {}) => {
     if (!request || !profile?.id) return null
     const res = await assignTask({
-      assigneeIds: [profile.id],
+      assigneeIds: [assigneeId || profile.id],
       title: request.title,
       notes: request.description || null,
       allProfiles: profiles,

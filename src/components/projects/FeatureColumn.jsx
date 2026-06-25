@@ -4,6 +4,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-
 import { CSS } from '@dnd-kit/utilities'
 import { Plus, MoreHorizontal, Pencil, Trash2, Check } from 'lucide-react'
 import FeatureCard from './FeatureCard'
+import AssigneeSelect from './AssigneeSelect'
 
 const STATUS_OPTIONS = ['Not Started', 'In Progress', 'Blocked', 'Done']
 
@@ -76,17 +77,27 @@ function ColumnMenu({ column, onUpdateColumn, onDeleteColumn, onStartRename }) {
 export default function FeatureColumn({
   column, cards, isAdmin, activeId,
   onOpenFeature, onAddFeature, onUpdateColumn, onDeleteColumn,
+  members = [], currentUserId = null,
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `col:${column.id}` })
   const [adding, setAdding] = useState(false)
   const [title, setTitle] = useState('')
+  const [assigneeId, setAssigneeId] = useState(currentUserId)
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState(column.name)
-  const addSubmitted = useRef(false)
   const renameSubmitted = useRef(false)
   useEffect(() => { setDraft(column.name) }, [column.name])
 
   const cardIds = cards.map(c => c.id)
+
+  // Add a card. Stays open after adding (Enter or the Add button) so several
+  // cards can be jotted in a row; Cancel/Escape closes. (No onBlur-submit — it
+  // fought the assignee picker by closing the form when you clicked it.)
+  const submitAdd = async () => {
+    if (!title.trim()) return
+    await onAddFeature({ title: title.trim(), columnId: column.id, assigneeId })
+    setTitle('')
+  }
 
   return (
     <div
@@ -130,18 +141,22 @@ export default function FeatureColumn({
 
       {/* Footer add */}
       {adding ? (
-        <div className="p-2">
+        <div className="p-2 space-y-2">
           <textarea
             autoFocus value={title} rows={2}
             onChange={e => setTitle(e.target.value)}
             onKeyDown={async e => {
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (title.trim()) { addSubmitted.current = true; await onAddFeature({ title: title.trim(), columnId: column.id }); setTitle('') } }
-              if (e.key === 'Escape') { addSubmitted.current = true; setTitle(''); setAdding(false) }
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); await submitAdd() }
+              if (e.key === 'Escape') { setTitle(''); setAdding(false) }
             }}
-            onBlur={() => { if (addSubmitted.current) { addSubmitted.current = false; return } if (title.trim()) onAddFeature({ title: title.trim(), columnId: column.id }); setTitle(''); setAdding(false) }}
             placeholder="Enter a title…"
             className="w-full text-[13px] rounded-lg border border-slate-300 dark:border-dark-border bg-white dark:bg-[#22272b] p-2 resize-none focus:outline-none focus:ring-2 focus:ring-brand-400/50"
           />
+          <div className="flex items-center gap-2">
+            <AssigneeSelect members={members} value={assigneeId} onChange={setAssigneeId} className="flex-1 min-w-0 text-[12px] py-1 px-1.5" />
+            <button type="button" onClick={submitAdd} className="btn-primary text-xs px-3 py-1 shrink-0">Add</button>
+            <button type="button" onClick={() => { setTitle(''); setAdding(false) }} className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 px-1 shrink-0">Cancel</button>
+          </div>
         </div>
       ) : (
         <button type="button" onClick={() => setAdding(true)}
