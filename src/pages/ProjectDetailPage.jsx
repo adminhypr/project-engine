@@ -20,6 +20,7 @@ import { useBugs } from '../hooks/useBugs'
 import BugList from '../components/projects/BugList'
 import BugBoard from '../components/projects/BugBoard'
 import BugEditModal from '../components/projects/BugEditModal'
+import ProjectMembersModal from '../components/projects/ProjectMembersModal'
 
 const VIEW_KEY = 'pe-project-view'
 
@@ -42,9 +43,11 @@ export default function ProjectDetailPage() {
   const { features, addFeature, moveFeature } = useProjectFeatures(projectId)
   const requests = useFeatureRequests(projectId)
   const bugs = useBugs(projectId)
-  const { members } = useProjectMembers(projectId)
+  const projectMembers = useProjectMembers(projectId)
+  const members = projectMembers.members
   const { tasks, refetch: refetchTasks } = useTasks()
   const currentUserId = profile?.id || null
+  const [showMembers, setShowMembers] = useState(false)
 
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'board')
   const switchView = (v) => { setView(v); localStorage.setItem(VIEW_KEY, v) }
@@ -128,7 +131,9 @@ export default function ProjectDetailPage() {
               </div>
               <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400">
                 <span>{features.length} feature{features.length !== 1 ? 's' : ''} · {overall}% complete</span>
-                <span className="inline-flex items-center gap-1"><UsersIcon size={12} /> {project.member_count}</span>
+                <button onClick={() => setShowMembers(true)} className="inline-flex items-center gap-1 hover:text-brand-500 transition-colors" title="Manage members">
+                  <UsersIcon size={12} /> {members.length || project.member_count} member{(members.length || project.member_count) !== 1 ? 's' : ''}
+                </button>
                 {project.target_date && <span>Due {new Date(project.target_date).toLocaleDateString()}</span>}
               </div>
             </div>
@@ -207,6 +212,15 @@ export default function ProjectDetailPage() {
             currentUserId={currentUserId}
             onClose={() => setEditingBug(null)}
             onPromote={handlePromoteBug}
+          />
+        )}
+
+        {showMembers && (
+          <ProjectMembersModal
+            projectMembers={projectMembers}
+            isAdmin={isAdmin}
+            currentUserId={currentUserId}
+            onClose={() => setShowMembers(false)}
           />
         )}
 
