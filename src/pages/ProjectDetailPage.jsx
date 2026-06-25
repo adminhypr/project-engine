@@ -152,8 +152,9 @@ export default function ProjectDetailPage() {
         </div>
 
         <div className="p-4 sm:p-6 space-y-8">
-          {/* Quick-glance roll-up across all three lanes */}
-          <ProjectStats features={features} requests={requests} bugs={bugs} />
+          {/* Quick-glance roll-up across all three lanes. requests/bugs are
+              hook objects ({ requests/bugs: [...], ... }) — pass the arrays. */}
+          <ProjectStats features={features} requests={requests.requests} bugs={bugs.bugs} />
 
           {/* Features */}
           <section>
