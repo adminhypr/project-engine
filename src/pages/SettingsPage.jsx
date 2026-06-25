@@ -15,7 +15,7 @@ import { usePageTitle } from '../hooks/usePageTitle'
 
 export default function SettingsPage() {
   usePageTitle('Settings')
-  const { profile, isAdmin, isExternal } = useAuth()
+  const { profile, isAdmin, isManager, isExternal } = useAuth()
   const [profiles, setProfiles] = useState([])
   const [teams,    setTeams]    = useState([])
   const [loading,  setLoading]  = useState(true)
@@ -242,7 +242,7 @@ export default function SettingsPage() {
       <div>
         <PageHeader
           title="Settings"
-          subtitle={isAdmin ? 'Manage users, teams, and roles' : `${unassignedCount} user${unassignedCount !== 1 ? 's' : ''} need${unassignedCount === 1 ? 's' : ''} team assignment`}
+          subtitle={isAdmin ? 'Manage users, teams, and roles' : isManager ? `${unassignedCount} user${unassignedCount !== 1 ? 's' : ''} need${unassignedCount === 1 ? 's' : ''} team assignment` : 'Manage your account'}
         />
 
         <div className="p-4 sm:p-6 space-y-6 max-w-7xl">
@@ -389,8 +389,8 @@ export default function SettingsPage() {
             </motion.div>
           )}
 
-          {/* Invite User — hidden for external account types (Agent/Client) */}
-          {!isExternal && (
+          {/* Invite User — manager/admin only, hidden for external account types (Agent/Client) */}
+          {isManager && !isExternal && (
           <motion.div
             className="card"
             initial={{ opacity: 0, y: 12 }}
@@ -448,8 +448,8 @@ export default function SettingsPage() {
           </motion.div>
           )}
 
-          {/* Users — hidden for external account types (Agent/Client) */}
-          {!isExternal && (
+          {/* Users — manager/admin only, hidden for external account types (Agent/Client) */}
+          {isManager && !isExternal && (
           <motion.div
             className="card"
             initial={{ opacity: 0, y: 12 }}
