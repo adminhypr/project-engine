@@ -555,7 +555,7 @@ export function useTaskActions() {
   const { profile } = useAuth()
 
   async function assignTask(payload) {
-    const { assigneeIds, assigneeId, title, urgency, dueDate, whoTo, notes, icon, allProfiles, overrideAssignerId, teamId, parentTaskId } = payload
+    const { assigneeIds, assigneeId, title, urgency, dueDate, whoTo, notes, icon, allProfiles, overrideAssignerId, teamId, parentTaskId, projectId, projectColumnId, projectPos } = payload
 
     // Support both single assigneeId (legacy) and multiple assigneeIds
     const ids = assigneeIds?.length ? assigneeIds : [assigneeId]
@@ -585,6 +585,9 @@ export function useTaskActions() {
       date_assigned:   new Date().toISOString(),
       status:          'Not Started',
       parent_task_id:  parentTaskId || null,
+      project_id:        projectId || null,
+      project_column_id: projectColumnId || null,
+      project_pos:       projectPos ?? null,
     }).select().single()
 
     if (error) return { ok: false, msg: error.message }
