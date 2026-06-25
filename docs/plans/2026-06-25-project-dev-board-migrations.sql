@@ -233,7 +233,7 @@ begin
   end if;
   select project_id into v_project_id from public.tasks where id = p_task;
   if v_project_id is null then
-    raise exception 'move_feature: task % is not a project feature' using errcode = '22023';
+    raise exception 'move_feature: task % is not a project feature', p_task using errcode = '22023';
   end if;
   if not public.is_project_member(v_project_id) then
     raise exception 'move_feature: not a member of this project' using errcode = '42501';
