@@ -5,6 +5,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { Plus, MoreHorizontal, Pencil, Trash2, Check } from 'lucide-react'
 import FeatureCard from './FeatureCard'
 import AssigneeSelect from './AssigneeSelect'
+import { COLUMN_CAP, ShowMoreRow } from './CappedList'
 
 const STATUS_OPTIONS = ['Not Started', 'In Progress', 'Blocked', 'Done']
 
@@ -85,10 +86,15 @@ export default function FeatureColumn({
   const [assigneeId, setAssigneeId] = useState(currentUserId)
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState(column.name)
+  const [expanded, setExpanded] = useState(false)
   const renameSubmitted = useRef(false)
   useEffect(() => { setDraft(column.name) }, [column.name])
 
-  const cardIds = cards.map(c => c.id)
+  // Cap a long column to COLUMN_CAP cards. The SortableContext only knows the
+  // visible cards, so a drop while collapsed orders among those — fine; expand
+  // to reorder precisely against the full set.
+  const visible = expanded ? cards : cards.slice(0, COLUMN_CAP)
+  const cardIds = visible.map(c => c.id)
 
   // Add a card. Stays open after adding (Enter or the Add button) so several
   // cards can be jotted in a row; Cancel/Escape closes. (No onBlur-submit — it
@@ -135,9 +141,14 @@ export default function FeatureColumn({
           (matches the working Card Table board). */}
       <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
         <div className="space-y-2 px-2 pb-1 min-h-[8px]">
-          {cards.map(c => <SortableFeature key={c.id} feature={c} onOpen={onOpenFeature} />)}
+          {visible.map(c => <SortableFeature key={c.id} feature={c} onOpen={onOpenFeature} />)}
         </div>
       </SortableContext>
+      {cards.length > COLUMN_CAP && (
+        <div className="px-2 pb-1">
+          <ShowMoreRow expanded={expanded} total={cards.length} onToggle={() => setExpanded(v => !v)} />
+        </div>
+      )}
 
       {/* Footer add */}
       {adding ? (

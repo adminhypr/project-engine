@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Plus, ArrowUpRight, AlignLeft } from 'lucide-react'
 import { groupBugsByStatus, BUG_STATUSES, BUG_SEVERITIES } from '../../lib/projectBoard'
+import { CappedList } from './CappedList'
 
 const STATUS_STYLES = {
   'Reported':   'text-slate-500',
@@ -47,7 +48,7 @@ export default function BugList({ bugs, onPromote, onOpenBug }) {
           <p className={`px-4 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide ${STATUS_STYLES[group.status]}`}>
             {group.status} <span className="text-slate-300 dark:text-slate-600">({group.bugs.length})</span>
           </p>
-          {group.bugs.map(b => (
+          <CappedList items={group.bugs} buttonClassName="border-t border-slate-50 dark:border-dark-border/50">{b => (
             <div key={b.id} className="px-4 py-2.5 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-dark-hover cursor-pointer" onClick={() => onOpenBug(b)}>
               <SeverityChip severity={b.severity} />
               <span className="flex-1 min-w-0">
@@ -76,7 +77,7 @@ export default function BugList({ bugs, onPromote, onOpenBug }) {
                 </button>
               )}
             </div>
-          ))}
+          )}</CappedList>
         </div>
       ))}
 

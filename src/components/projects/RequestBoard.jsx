@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, Children } from 'react'
 import {
   DndContext, DragOverlay, useDraggable, useDroppable,
   PointerSensor, TouchSensor, useSensor, useSensors, pointerWithin,
 } from '@dnd-kit/core'
 import { Plus, ArrowUpRight, AlignLeft } from 'lucide-react'
 import { groupRequestsByStatus } from '../../lib/projectBoard'
+import { COLUMN_CAP, ShowMoreRow } from './CappedList'
 
 const CANVAS = 'rounded-xl bg-gradient-to-br from-slate-500/10 to-slate-600/10 dark:from-white/[0.04] dark:to-white/[0.02] p-3'
 
@@ -43,6 +44,9 @@ function RequestCard({ request, onPromote, onOpen }) {
 
 function StatusColumn({ status, requests, children }) {
   const { setNodeRef, isOver } = useDroppable({ id: `status:${status}` })
+  const [expanded, setExpanded] = useState(false)
+  const kids = Children.toArray(children)
+  const shown = expanded ? kids : kids.slice(0, COLUMN_CAP)
   return (
     <div ref={setNodeRef}
       className={`flex flex-col w-[240px] shrink-0 rounded-xl bg-slate-100 dark:bg-[#1d2127] shadow-sm transition-shadow ${isOver ? 'ring-2 ring-brand-400/70' : ''}`}>
@@ -50,7 +54,12 @@ function StatusColumn({ status, requests, children }) {
         <span className="text-[13px] font-semibold text-slate-700 dark:text-slate-200">{status}</span>
         <span className="text-xs text-slate-400 bg-black/[0.04] dark:bg-white/[0.06] rounded-full px-1.5 leading-5">{requests.length}</span>
       </div>
-      <div className="space-y-2 px-2 pb-2 min-h-[8px]">{children}</div>
+      <div className="space-y-2 px-2 pb-1 min-h-[8px]">{shown}</div>
+      {kids.length > COLUMN_CAP && (
+        <div className="px-2 pb-2">
+          <ShowMoreRow expanded={expanded} total={kids.length} onToggle={() => setExpanded(v => !v)} />
+        </div>
+      )}
     </div>
   )
 }

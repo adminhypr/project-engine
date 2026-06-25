@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react'
 import { featureProgress } from '../../lib/projectBoard'
 import { ProgressBar } from './FeatureCard'
 import AssigneeSelect from './AssigneeSelect'
+import { CappedList } from './CappedList'
 
 const STATUS_STYLES = {
   'Not Started': 'bg-slate-100 text-slate-600 dark:bg-dark-border dark:text-slate-300',
@@ -27,7 +28,7 @@ export default function FeatureList({ features, firstColumnId, onAddFeature, onO
       {sorted.length === 0 && (
         <p className="px-4 py-6 text-sm text-slate-400 text-center">No features yet. Add the first one below.</p>
       )}
-      {sorted.map(f => {
+      <CappedList items={sorted}>{f => {
         const { pct } = featureProgress(f)
         const due = f.due_date ? new Date(f.due_date) : null
         const overdue = due && f.status !== 'Done' && due < new Date()
@@ -44,7 +45,7 @@ export default function FeatureList({ features, firstColumnId, onAddFeature, onO
             </span>
           </button>
         )
-      })}
+      }}</CappedList>
 
       <div className="px-4 py-2.5 flex items-center gap-2">
         <Plus size={14} className="text-slate-400" />
