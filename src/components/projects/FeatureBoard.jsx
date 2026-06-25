@@ -107,7 +107,7 @@ export default function FeatureBoard({
 
       <DragOverlay dropAnimation={{ duration: 200, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
         {activeFeature ? (
-          <div className="rotate-3 shadow-elevated" style={{ width: 256 }}>
+          <div className="rotate-3 rounded-lg ring-2 ring-brand-400/70 shadow-elevated cursor-grabbing" style={{ width: 256 }}>
             <FeatureCard feature={activeFeature} />
           </div>
         ) : null}

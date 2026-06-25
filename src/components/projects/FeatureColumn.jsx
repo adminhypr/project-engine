@@ -14,8 +14,11 @@ function SortableFeature({ feature, onOpen }) {
   })
   const style = { transform: CSS.Transform.toString(transform), transition }
   if (isDragging) {
+    // While dragging, the floating card is the DragOverlay (in FeatureBoard).
+    // The source stays put as a stable dashed gap — NO transform here, or it
+    // would fly around with the drag delta and get clipped.
     return (
-      <div ref={setNodeRef} style={style} aria-hidden
+      <div ref={setNodeRef} style={{ transition }} aria-hidden
         className="rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 bg-black/[0.03] dark:bg-white/[0.03]">
         <div className="invisible"><FeatureCard feature={feature} /></div>
       </div>
@@ -88,7 +91,7 @@ export default function FeatureColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col w-[272px] shrink-0 max-h-full rounded-xl bg-slate-100 dark:bg-[#1d2127] shadow-sm transition-shadow ${
+      className={`flex flex-col w-[272px] shrink-0 rounded-xl bg-slate-100 dark:bg-[#1d2127] shadow-sm transition-shadow ${
         isOver ? 'ring-2 ring-brand-400/70' : ''
       }`}
     >
@@ -116,9 +119,11 @@ export default function FeatureColumn({
         )}
       </div>
 
-      {/* Cards (scrollable) */}
+      {/* Cards — no internal overflow/scroll: a scroll container clips the
+          dragged card mid-drag. The column grows and the page scrolls instead
+          (matches the working Card Table board). */}
       <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
-        <div className="flex-1 overflow-y-auto space-y-2 px-2 pb-1 min-h-[8px]">
+        <div className="space-y-2 px-2 pb-1 min-h-[8px]">
           {cards.map(c => <SortableFeature key={c.id} feature={c} onOpen={onOpenFeature} />)}
         </div>
       </SortableContext>

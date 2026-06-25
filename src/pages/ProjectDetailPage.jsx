@@ -2,12 +2,14 @@ import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { List, Columns3, ArrowLeft, Users as UsersIcon } from 'lucide-react'
 import { useProjects } from '../hooks/useProjects'
+import { useTasks } from '../hooks/useTasks'
 import { useProjectColumns, useProjectFeatures } from '../hooks/useProjectBoard'
 import { useFeatureRequests } from '../hooks/useFeatureRequests'
 import { projectProgress, featureProgress } from '../lib/projectBoard'
 import { LoadingScreen, EmptyState } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
 import { usePageTitle } from '../hooks/usePageTitle'
+import TaskDetailPanel from '../components/tasks/TaskDetailPanel'
 import FeatureList from '../components/projects/FeatureList'
 import FeatureBoard from '../components/projects/FeatureBoard'
 import RequestList from '../components/projects/RequestList'
@@ -32,9 +34,16 @@ export default function ProjectDetailPage() {
   const { columns, loading: columnsLoading, addColumn, updateColumn, deleteColumn } = useProjectColumns(projectId)
   const { features, addFeature, moveFeature } = useProjectFeatures(projectId)
   const requests = useFeatureRequests(projectId)
+  const { tasks, refetch: refetchTasks } = useTasks()
 
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'board')
   const switchView = (v) => { setView(v); localStorage.setItem(VIEW_KEY, v) }
+
+  // Open a feature's detail panel INLINE on this page (do not navigate to My
+  // Tasks). activeTask is read live from the tasks context so panel edits flow
+  // back in.
+  const [activeTaskId, setActiveTaskId] = useState(null)
+  const activeTask = activeTaskId ? (tasks.find(t => t.id === activeTaskId) ?? null) : null
 
   const isAdmin = project?.my_role === 'owner' || project?.my_role === 'admin'
   const overall = useMemo(
@@ -118,14 +127,14 @@ export default function ProjectDetailPage() {
                 onAddColumn={addColumn}
                 onUpdateColumn={updateColumn}
                 onDeleteColumn={deleteColumn}
-                onOpenFeature={(t) => navigate(`/my-tasks?task=${t.id}`)}
+                onOpenFeature={(t) => setActiveTaskId(t.id)}
               />
             ) : (
               <FeatureList
                 features={features}
                 firstColumnId={firstColumnId}
                 onAddFeature={addFeature}
-                onOpenFeature={(t) => navigate(`/my-tasks?task=${t.id}`)}
+                onOpenFeature={(t) => setActiveTaskId(t.id)}
               />
             )}
           </section>
@@ -140,6 +149,15 @@ export default function ProjectDetailPage() {
             )}
           </section>
         </div>
+
+        {activeTask && (
+          <TaskDetailPanel
+            task={activeTask}
+            tasks={tasks}
+            onClose={() => setActiveTaskId(null)}
+            onUpdated={() => { refetchTasks(true); setActiveTaskId(null) }}
+          />
+        )}
       </div>
     </PageTransition>
   )
