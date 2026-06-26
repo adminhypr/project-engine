@@ -43,7 +43,7 @@ export default function ProjectDetailPage() {
   usePageTitle(project?.name || 'Project')
 
   const { columns, loading: columnsLoading, addColumn, updateColumn, deleteColumn } = useProjectColumns(projectId)
-  const { features, addFeature, moveFeature } = useProjectFeatures(projectId)
+  const { features, addFeature, moveFeature, refetch: refetchFeatures } = useProjectFeatures(projectId)
   const requests = useFeatureRequests(projectId)
   const bugs = useBugs(projectId)
   const projectMembers = useProjectMembers(projectId)
@@ -246,8 +246,11 @@ export default function ProjectDetailPage() {
         {showImport && (
           <ImportQAModal
             project={project}
+            columns={columns}
+            features={features}
             requests={requests}
             bugs={bugs}
+            onFeaturesRefetch={refetchFeatures}
             onClose={() => setShowImport(false)}
           />
         )}

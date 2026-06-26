@@ -153,17 +153,27 @@ function parseDueLocal(s) {
 }
 
 // Map one raw QA-import item to a target lane + status, or null if it has no
-// title. Bugs → the Bug lane (Done = Confirmed, else Reported). Everything else
-// (Missing Feature / Enhancement / unknown) → a Feature Request (Done =
-// Promoted, else Requested). Title/description are trimmed; description '' → null.
+// title.
+//
+//   status = "Done"  → lane 'feature'  : a REAL completed Feature task (lands as
+//                       a card in the project's Done column). Applies to BOTH
+//                       bugs and features — "we already shipped/fixed this".
+//   open  Bug         → lane 'bug'      : a lightweight Bug-lane row (Reported).
+//   open  anything    → lane 'request'  : a lightweight Feature-Request (Requested).
+//
+// `wasBug` is preserved on the 'feature' lane purely for reporting/preview.
+// Title/description are trimmed; description '' → null.
 export function mapQAItem(raw) {
   const title = (raw?.taskname || '').trim()
   if (!title) return null
   const description = (raw?.description || '').trim() || null
   const isBug = (raw?.type || '').trim().toLowerCase() === 'bug'
   const isDone = (raw?.status || '').trim().toLowerCase() === 'done'
-  if (isBug) return { lane: 'bug', title, description, status: isDone ? 'Confirmed' : 'Reported' }
-  return { lane: 'request', title, description, status: isDone ? 'Promoted' : 'Requested' }
+  // Completed items (bugs OR features) become real Done Feature tasks on the board.
+  if (isDone) return { lane: 'feature', title, description, status: 'Done', wasBug: isBug }
+  // Still-open items stay lightweight in their backlog lane.
+  if (isBug) return { lane: 'bug', title, description, status: 'Reported' }
+  return { lane: 'request', title, description, status: 'Requested' }
 }
 
 // Quick-glance roll-up for the top of a project page. Summarizes all three
