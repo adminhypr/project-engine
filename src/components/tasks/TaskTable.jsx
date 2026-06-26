@@ -6,7 +6,7 @@ import { MessageSquare, MessagesSquare, Check, X, Calendar, Clock, User, Chevron
 import { TaskIcon } from '../ui/TaskIconPicker'
 import { completionProgress } from '../../lib/perAssigneeCompletion'
 import { truncateParentLabel } from '../../lib/subtasks'
-import DataTable, { Avatar } from '../projects/DataTable'
+import DataTable, { Avatar, StatusPill, GROUP_COLORS } from '../projects/DataTable'
 import { FEATURE_STATUSES } from '../../lib/projectBoard'
 
 const PRIORITY_INDICATOR = {
@@ -30,6 +30,7 @@ export default function TaskTable({
   onAccept, onDecline, showAcceptanceActions = false,
   selectable = false, selectedIds, onSelectionChange,
   groupByStatus = false,
+  tableStyle = false,
 }) {
   if (!tasks.length) return (
     <div className="text-center py-16 text-slate-400 dark:text-slate-500 text-sm">No tasks match your filters.</div>
@@ -40,11 +41,12 @@ export default function TaskTable({
   // slice, we just show the generic "↳ parent" pill without title.)
   const titleById = new Map(tasks.map(t => [t.id, t.title]))
 
-  // ── monday.com-style grouped table (My Tasks + Admin Overview) ──────────────
-  // Opt-in via `groupByStatus` so the legacy card rows below — and Team View,
-  // which does its own grouping — stay untouched. Status becomes the group, so
-  // there's no Status column; every other interaction is preserved.
-  if (groupByStatus) {
+  // ── monday.com-style table (shared renderers for both modes) ────────────────
+  // `groupByStatus` (My Tasks / Admin Overview): collapsible status groups, no
+  // Status column. `tableStyle` (Team View): a flat monday table with a Status
+  // column + per-row status accent, so the page keeps its own team/manager
+  // grouping (no double-grouping). Every interaction is preserved in both.
+  if (groupByStatus || tableStyle) {
     const ownerOf = (t) => (showAssignedTo ? t.assignee : t.assigner) || t.assigner || t.assignee
 
     const renderTaskCell = (t) => {
@@ -102,57 +104,94 @@ export default function TaskTable({
       )
     }
 
+    // Shared column pieces. groupByStatus omits Status (it's the group);
+    // tableStyle includes it.
+    const selCol = selectable && {
+      key: 'sel', header: '', width: '32px', align: 'center',
+      render: (t) => (
+        <input
+          type="checkbox"
+          checked={!!selectedIds?.has(t.id)}
+          onClick={e => e.stopPropagation()}
+          onChange={e => onSelectionChange?.(t.id, e.target.checked)}
+          className="rounded border-slate-300 dark:border-dark-border text-brand-500 focus:ring-brand-500"
+        />
+      ),
+    }
+    const taskCol = { key: 'task', header: 'Task', width: 'minmax(240px,1fr)', render: renderTaskCell }
+    const ownerCol = {
+      key: 'owner', header: 'Owner', width: '70px', align: 'center',
+      render: (t) => {
+        const extra = showAssignedTo && t.assignees?.length > 1 ? t.assignees.length - 1 : 0
+        return (
+          <span className="inline-flex items-center">
+            <Avatar profile={ownerOf(t)} />
+            {extra > 0 && <span className="ml-1 text-[10px] font-semibold text-brand-600 dark:text-brand-300">+{extra}</span>}
+          </span>
+        )
+      },
+    }
+    const statusCol = {
+      key: 'status', header: 'Status', width: '132px',
+      render: (t) => <StatusPill label={t.status || 'Not Started'} color={STATUS_COLOR[t.status] || 'slate'} />,
+    }
+    const priorityCol = { key: 'priority', header: 'Priority', width: '136px', render: (t) => <PriorityBadge priority={t.priority} /> }
+    const urgencyCol = { key: 'urgency', header: 'Urgency', width: '88px', render: (t) => <UrgencyBadge urgency={t.urgency} /> }
+    const dueCol = {
+      key: 'due', header: 'Due', width: '96px', align: 'right',
+      render: (t) => t.due_date
+        ? <span className="text-xs text-slate-500 dark:text-slate-400">{formatDateShort(t.due_date)}</span>
+        : <span className="text-xs text-slate-300 dark:text-slate-600">—</span>,
+    }
+    const actCol = showAcceptanceActions && {
+      key: 'act', header: '', width: '84px', align: 'right',
+      render: (t) => t.acceptance_status === 'Pending' ? (
+        <span className="inline-flex gap-1" onClick={e => e.stopPropagation()}>
+          <button onClick={() => onAccept?.(t)} title="Accept" className="p-1.5 rounded-lg bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 dark:text-emerald-400 transition-colors"><Check size={13} /></button>
+          <button onClick={() => onDecline?.(t)} title="Decline" className="p-1.5 rounded-lg bg-red-500/15 text-red-700 hover:bg-red-500/25 dark:text-red-400 transition-colors"><X size={13} /></button>
+        </span>
+      ) : <span className="text-[11px] text-slate-300 dark:text-slate-600">—</span>,
+    }
+
+    // Flat monday table (Team View) — keeps the page's own team/manager
+    // grouping; Status is a column and the left accent is keyed per row.
+    if (tableStyle) {
+      const columns = [selCol, taskCol, ownerCol, statusCol, priorityCol, urgencyCol, dueCol, actCol].filter(Boolean)
+      const template = columns.map(c => c.width || 'minmax(0,1fr)').join(' ')
+      const alignCls = (a) => (a === 'right' ? 'justify-end text-right' : a === 'center' ? 'justify-center' : '')
+      return (
+        <div className="card overflow-hidden p-0">
+          <div className="overflow-x-auto">
+            <div className="min-w-[680px]">
+              {tasks.map(t => {
+                const accent = (GROUP_COLORS[STATUS_COLOR[t.status]] || GROUP_COLORS.slate).bar
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => onRowClick?.(t)}
+                    className={`grid items-center gap-3 px-3 py-2 border-l-[3px] ${accent} border-t border-slate-50 dark:border-white/[0.04] first:border-t-0 cursor-pointer hover:bg-slate-50 dark:hover:bg-dark-hover transition-colors`}
+                    style={{ gridTemplateColumns: template }}
+                  >
+                    {columns.map(col => (
+                      <div key={col.key} className={`min-w-0 flex items-center ${alignCls(col.align)}`}>{col.render(t)}</div>
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    // Status-grouped table (My Tasks / Admin Overview).
     const groups = FEATURE_STATUSES.map(status => ({
       key: status,
       label: status,
       color: STATUS_COLOR[status] || 'slate',
       items: tasks.filter(t => (FEATURE_STATUSES.includes(t.status) ? t.status : 'Not Started') === status),
     }))
-
-    const columns = [
-      selectable && {
-        key: 'sel', header: '', width: '32px', align: 'center',
-        render: (t) => (
-          <input
-            type="checkbox"
-            checked={!!selectedIds?.has(t.id)}
-            onClick={e => e.stopPropagation()}
-            onChange={e => onSelectionChange?.(t.id, e.target.checked)}
-            className="rounded border-slate-300 dark:border-dark-border text-brand-500 focus:ring-brand-500"
-          />
-        ),
-      },
-      { key: 'task', header: 'Task', width: 'minmax(240px,1fr)', render: renderTaskCell },
-      {
-        key: 'owner', header: 'Owner', width: '70px', align: 'center',
-        render: (t) => {
-          const extra = showAssignedTo && t.assignees?.length > 1 ? t.assignees.length - 1 : 0
-          return (
-            <span className="inline-flex items-center">
-              <Avatar profile={ownerOf(t)} />
-              {extra > 0 && <span className="ml-1 text-[10px] font-semibold text-brand-600 dark:text-brand-300">+{extra}</span>}
-            </span>
-          )
-        },
-      },
-      { key: 'priority', header: 'Priority', width: '136px', render: (t) => <PriorityBadge priority={t.priority} /> },
-      { key: 'urgency', header: 'Urgency', width: '88px', render: (t) => <UrgencyBadge urgency={t.urgency} /> },
-      {
-        key: 'due', header: 'Due', width: '96px', align: 'right',
-        render: (t) => t.due_date
-          ? <span className="text-xs text-slate-500 dark:text-slate-400">{formatDateShort(t.due_date)}</span>
-          : <span className="text-xs text-slate-300 dark:text-slate-600">—</span>,
-      },
-      showAcceptanceActions && {
-        key: 'act', header: '', width: '84px', align: 'right',
-        render: (t) => t.acceptance_status === 'Pending' ? (
-          <span className="inline-flex gap-1" onClick={e => e.stopPropagation()}>
-            <button onClick={() => onAccept?.(t)} title="Accept" className="p-1.5 rounded-lg bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 dark:text-emerald-400 transition-colors"><Check size={13} /></button>
-            <button onClick={() => onDecline?.(t)} title="Decline" className="p-1.5 rounded-lg bg-red-500/15 text-red-700 hover:bg-red-500/25 dark:text-red-400 transition-colors"><X size={13} /></button>
-          </span>
-        ) : <span className="text-[11px] text-slate-300 dark:text-slate-600">—</span>,
-      },
-    ].filter(Boolean)
+    const columns = [selCol, taskCol, ownerCol, priorityCol, urgencyCol, dueCol, actCol].filter(Boolean)
 
     return (
       <DataTable
