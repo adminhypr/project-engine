@@ -142,7 +142,9 @@ Deno.serve(async (req) => {
           .select('id, task_id, title, status, urgency, due_date, notes, assigned_to, assigned_by, project_id, project_column_id')
           .eq('id', tid).maybeSingle()
         const { data: assignees } = await admin.from('task_assignees')
-          .select('profile_id, is_primary, completed_at, profile:profiles(full_name)').eq('task_id', tid)
+          // task_assignees has TWO FKs to profiles (profile_id + completed_by);
+          // the embed must name the FK or PostgREST returns null (ambiguous).
+          .select('profile_id, is_primary, completed_at, profile:profiles!task_assignees_profile_id_fkey(full_name)').eq('task_id', tid)
         const { data: comments } = await admin.from('comments')
           .select('id, content, created_at, author:profiles(full_name)').eq('task_id', tid).order('created_at')
         return json({ task, assignees: assignees || [], comments: comments || [] }, 200, cors)
