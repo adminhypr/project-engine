@@ -66,6 +66,24 @@ export function groupFeaturesByColumn(features, columns) {
   }))
 }
 
+// Canonical Feature (task) statuses, in lifecycle order. Used by the list
+// view's monday-style status grouping (the board groups by column instead).
+export const FEATURE_STATUSES = ['Not Started', 'In Progress', 'Blocked', 'Done']
+
+// Bucket features into the 4 canonical statuses (always all 4, in order), each
+// sorted by `project_pos`. A feature with an unrecognized/null status falls
+// into 'Not Started' so it's never silently dropped. Mirrors
+// groupRequestsByStatus but keyed on `status` instead of a board column.
+export function groupFeaturesByStatus(features) {
+  const list = features || []
+  return FEATURE_STATUSES.map(status => ({
+    status,
+    features: list
+      .filter(f => (FEATURE_STATUSES.includes(f?.status) ? f.status : 'Not Started') === status)
+      .sort(byPos),
+  }))
+}
+
 // Bucket feature requests into the 5 canonical statuses (always all 5, in
 // order), each sorted by `pos`.
 export function groupRequestsByStatus(requests) {
