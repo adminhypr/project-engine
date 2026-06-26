@@ -53,19 +53,33 @@ The `hypr` CLI is just a convenience wrapper over these same calls — optional,
 | GET | `/` | — | `{ ok, me:{id,full_name,email,role}, endpoints[] }` — who the key belongs to |
 | GET | `/projects` | — | `{ projects:[{id,name,status,target_date,role}] }` — your projects |
 | GET | `/projects/:id/tasks` | — | `{ tasks:[{id,task_id,title,status,urgency,due_date,assigned_to,project_column_id,project_pos}] }` |
+| **POST** | `/projects/:id/tasks` | `{title*, notes?, urgency?, due_date?, status?, column_id?, assignee_id?}` | `{ task:{id,task_id,title,status} }` (201) — creates a **Feature card** |
 | GET | `/projects/:id/requests` | — | `{ requests:[{id,title,status,description}] }` |
+| **POST** | `/projects/:id/requests` | `{title*, description?}` | `{ request:{id,title,status,description} }` (201) |
 | GET | `/projects/:id/bugs` | — | `{ bugs:[{id,title,status,severity,description}] }` |
+| **POST** | `/projects/:id/bugs` | `{title*, description?, severity?}` | `{ bug:{id,title,status,severity,description} }` (201) |
 | GET | `/tasks/:id` | — | `{ task, assignees:[{profile_id,is_primary,completed_at,profile:{full_name}}], comments:[{id,content,created_at,author:{full_name}}] }` |
 | PATCH | `/tasks/:id` | `{status?,urgency?,due_date?}` | `{ task:{id,task_id,title,status} }` |
+| **POST** | `/tasks/:id/subtasks` | `{title*, notes?, urgency?, due_date?, assignee_id?}` | `{ subtask:{id,task_id,title,status} }` (201) — single-level child |
 | GET | `/tasks/:id/comments` | — | `{ comments:[…] }` |
 | POST | `/tasks/:id/comments` | `{content}` | `{ comment:{id,content,created_at} }` (201) |
 | POST | `/tasks/:id/claim` | — | `{ ok, claimed }` or `{ ok, already }` — self-assign |
 
+`*` = required. Unknown body keys are ignored.
+
+**Create-endpoint behaviour**
+- **`POST /projects/:id/tasks`** — creates a real Feature task (a board card).
+  - **Column:** explicit `column_id` wins; otherwise the column whose status mapping matches `status`; otherwise the project's *Not Started* (Backlog) column; otherwise the first column.
+  - **`status`** defaults to `Not Started` (or, if you pass a `column_id`, the column's mapped status). Passing `status:"Done"` creates a completed card already marked done.
+  - **`assignee_id`** defaults to **you** (the key owner). If provided, it must be a member of the project.
+- **`POST /tasks/:id/subtasks`** — adds a child task under an existing feature. Single-level only (you can't subtask a subtask → `400`). Subtasks don't appear as their own board card; they live under the parent.
+- All created rows are owned by you (`requester_id` / `reporter_id` / `assigned_by`).
+
 **Enums**
 - Task `status`: `Not Started` · `In Progress` · `Blocked` · `Done`
-- Task `urgency`: `Low` · `Med` · `High` (`Urgent` allowed on some tasks)
-- Request `status`: `Requested` · `Under Review` · `Planned` · `Rejected` · `Promoted`
-- Bug `status`: `Reported` · `Confirmed` · `Won't Fix` · `Promoted`; `severity`: `Critical` · `High` · `Medium` · `Low`
+- Task `urgency`: `Low` · `Med` · `High` · `Urgent` (default `Med`)
+- Request `status`: `Requested` · `Under Review` · `Planned` · `Rejected` · `Promoted` (created as `Requested`)
+- Bug `status`: `Reported` · `Confirmed` · `Won't Fix` · `Promoted` (created as `Reported`); `severity`: `Critical` · `High` · `Medium` · `Low` (default `Medium`)
 
 ## Errors
 JSON `{ "error": "…" }` with status: `401` invalid/missing/revoked key · `403` not a member of the project · `404` unknown task/route · `400` bad input.
@@ -82,6 +96,25 @@ PID=7202d183-b94d-46bd-a745-769264235883
 curl -s $H $BASE/projects/$PID/tasks                # feature tasks
 curl -s $H $BASE/projects/$PID/bugs                 # bugs
 curl -s $H $BASE/tasks/T-AB12C3                      # task detail + comments
+
+# create a feature (defaults to Backlog / Not Started, assigned to you)
+curl -s $H -X POST $BASE/projects/$PID/tasks \
+  -H content-type:application/json \
+  -d '{"title":"Wire up CSV export","notes":"papaparse","urgency":"High"}'
+
+# create an already-done feature (lands in the Done column)
+curl -s $H -X POST $BASE/projects/$PID/tasks \
+  -H content-type:application/json -d '{"title":"Tenant profile edit","status":"Done"}'
+
+# create a feature request / a bug
+curl -s $H -X POST $BASE/projects/$PID/requests \
+  -H content-type:application/json -d '{"title":"Bulk archive","description":"select-all → archive"}'
+curl -s $H -X POST $BASE/projects/$PID/bugs \
+  -H content-type:application/json -d '{"title":"Login 500","description":"empty password","severity":"High"}'
+
+# add a subtask under a feature
+curl -s $H -X POST $BASE/tasks/T-AB12C3/subtasks \
+  -H content-type:application/json -d '{"title":"Write the migration"}'
 
 # move a task to In Progress
 curl -s $H -X PATCH $BASE/tasks/T-AB12C3 \
@@ -111,4 +144,6 @@ hypr <cmd> --json               # raw JSON
 Config in `~/.config/hypr/config.json`; override with `HYPR_API_KEY` / `HYPR_API_URL`.
 
 ## What the API does NOT do
-Scoped to project work only. It cannot: create/delete projects, manage members, manage users/teams/roles, access Chat/Hubs/DMs, or touch projects you're not a member of. There is no admin surface here by design.
+Scoped to project work only. You can create and work **tasks / requests / bugs / subtasks** inside your projects, but it **cannot**: create/delete projects, delete tasks, manage members, manage users/teams/roles, access Chat/Hubs/DMs, or touch projects you're not a member of. There is no admin surface here by design.
+
+> The `hypr` CLI wrapper doesn't expose the create endpoints yet — use `curl` (above) for creates for now; read/update/comment/claim are wired in the CLI.
