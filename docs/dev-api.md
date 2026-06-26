@@ -66,6 +66,7 @@ The `hypr` CLI is just a convenience wrapper over these same calls — optional,
 | POST | `/tasks/:id/claim` | — | `{ ok, claimed }` or `{ ok, already }` — self-assign |
 | POST | `/tasks/:id/archive` | — | `{ ok, archived }` — **personal** archive (hides from your lists; non-destructive) |
 | POST | `/tasks/:id/unarchive` | — | `{ ok, unarchived }` — undo a personal archive |
+| POST | `/conversations/:id/messages` | `{content*}` | `{ message:{id,created_at} }` (201) — post a chat / Campfire message |
 | ~~DELETE~~ | *(any path)* | — | **`405` — not supported.** This API can archive, never hard-delete. |
 
 `*` = required. Unknown body keys are ignored.
@@ -79,6 +80,26 @@ The `hypr` CLI is just a convenience wrapper over these same calls — optional,
   - **`assignee_id`** defaults to **you** (the key owner). If provided, it must be a member of the project.
 - **`POST /tasks/:id/subtasks`** — adds a child task under an existing feature. Single-level only (you can't subtask a subtask → `400`). Subtasks don't appear as their own board card; they live under the parent.
 - All created rows are owned by you (`requester_id` / `reporter_id` / `assigned_by`).
+
+## Posting to chat / Campfire
+`POST /conversations/:id/messages` posts a message **as you** (the key owner) into a conversation you belong to — a hub **Campfire**, a group, or a DM.
+
+- **Conversation id** = the UUID in the app URL: `…/chat/<conversation-id>`.
+- **Membership-gated.** Campfires (`kind=hub`) require you to be a member of that hub; groups/DMs require you to be a participant. Otherwise `403`.
+- **Formatting.** `content` supports the app's markdown subset, so updates render nicely:
+  - `**bold**`, `*italic*`, `~~strike~~`, `` `inline code` ``
+  - `[label](https://url)` links + bare URLs (auto-linked)
+  - `- ` / `* ` bullet lists, `1. ` numbered lists
+  - `> ` blockquotes, fenced ``` code blocks
+  - `@mentions` (chips) and emoji 🎉
+  - Newlines are preserved. **Note:** `#` headings are *not* supported — use `**bold**` for headers.
+
+```bash
+CID=63c82e17-d07f-4234-a920-f37fc365c590     # from the /chat/<id> URL
+curl -s $H -X POST $BASE/conversations/$CID/messages \
+  -H content-type:application/json \
+  -d '{"content":"**Deploy done** ✅\n- API live\n- `dev-api` updated"}'
+```
 
 **Enums**
 - Task `status`: `Not Started` · `In Progress` · `Blocked` · `Done`
@@ -149,6 +170,6 @@ hypr <cmd> --json               # raw JSON
 Config in `~/.config/hypr/config.json`; override with `HYPR_API_KEY` / `HYPR_API_URL`.
 
 ## What the API does NOT do
-Scoped to project work only. You can create and work **tasks / requests / bugs / subtasks** inside your projects, but it **cannot**: **delete anything** (archive only — see above), create/delete projects, manage members, manage users/teams/roles, access Chat/Hubs/DMs, or touch projects you're not a member of. There is no admin surface here by design.
+Scoped to project work only. You can create and work **tasks / requests / bugs / subtasks** inside your projects, and **post messages** to chats/Campfires you belong to, but it **cannot**: **delete anything** (archive only — see above), read message history / DMs, create/delete projects, manage members, manage users/teams/roles, or touch projects/conversations you're not a member of. There is no admin surface here by design.
 
 > The `hypr` CLI wrapper doesn't expose the create endpoints yet — use `curl` (above) for creates for now; read/update/comment/claim are wired in the CLI.

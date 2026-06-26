@@ -183,7 +183,7 @@ Deno.serve(async (req) => {
     // GET /  → who am I + quick help
     if (seg.length === 0) {
       const { data: me } = await admin.from('profiles').select('id, full_name, email, role').eq('id', dev).maybeSingle()
-      return json({ ok: true, me, endpoints: ['GET /projects', 'GET /projects/:id/{tasks|requests|bugs}', 'POST /projects/:id/{tasks|requests|bugs}', 'GET /tasks/:id', 'PATCH /tasks/:id', 'POST /tasks/:id/comments', 'POST /tasks/:id/claim', 'POST /tasks/:id/subtasks', 'POST /tasks/:id/{archive|unarchive}'], note: 'No delete — archive only.' }, 200, cors)
+      return json({ ok: true, me, endpoints: ['GET /projects', 'GET /projects/:id/{tasks|requests|bugs}', 'POST /projects/:id/{tasks|requests|bugs}', 'GET /tasks/:id', 'PATCH /tasks/:id', 'POST /tasks/:id/comments', 'POST /tasks/:id/claim', 'POST /tasks/:id/subtasks', 'POST /tasks/:id/{archive|unarchive}', 'POST /conversations/:id/messages'], note: 'No delete — archive only.' }, 200, cors)
     }
 
     // GET /projects → projects the dev belongs to (+ role + counts)
@@ -395,6 +395,42 @@ Deno.serve(async (req) => {
         if (res.error) return json({ error: res.error }, 400, cors)
         return json({ subtask: res.task }, 201, cors)
       }
+    }
+
+    // POST /conversations/:id/messages  → post a chat message as the key owner.
+    // Gated by membership: hub campfires require hub membership; group/DM/task
+    // conversations require being a participant. Content supports the app's
+    // markdown subset (**bold**, lists, links, `code`, > quotes, @mentions).
+    if (seg[0] === 'conversations' && seg.length === 3 && seg[2] === 'messages' && m === 'POST') {
+      const cid = seg[1]
+      const { data: convo } = await admin.from('conversations').select('id, kind, hub_id').eq('id', cid).maybeSingle()
+      if (!convo) return json({ error: 'Conversation not found' }, 404, cors)
+
+      let allowed = false
+      if (convo.kind === 'hub' && convo.hub_id) {
+        const { data: hm } = await admin.from('hub_members').select('hub_id').eq('hub_id', convo.hub_id).eq('profile_id', dev).maybeSingle()
+        allowed = !!hm
+      } else {
+        const { data: cp } = await admin.from('conversation_participants').select('conversation_id').eq('conversation_id', cid).eq('user_id', dev).maybeSingle()
+        allowed = !!cp
+      }
+      if (!allowed) return json({ error: 'You are not a member of this conversation' }, 403, cors)
+
+      const body = await req.json().catch(() => ({}))
+      const content = (body.content || '').trim()
+      if (!content) return json({ error: 'content required' }, 400, cors)
+
+      const { data, error } = await admin.from('dm_messages').insert({
+        conversation_id: cid,
+        author_id: dev,
+        kind: 'user',
+        content,
+        mentions: [],
+        inline_images: [],
+        attachments: [],
+      }).select('id, created_at').single()
+      if (error) return json({ error: error.message }, 400, cors)
+      return json({ message: data }, 201, cors)
     }
 
     return json({ error: 'Unknown route' }, 404, cors)
