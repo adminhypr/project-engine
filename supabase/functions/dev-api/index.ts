@@ -57,11 +57,97 @@ async function isMember(dev: string, projectId: string): Promise<boolean> {
 }
 
 // Resolve a task identifier that may be a uuid OR a human task_id ("T-AB12C3").
-// task_id is globally unique (migration 001). Returns { id, project_id } | null.
-async function resolveTask(ident: string): Promise<{ id: string; project_id: string | null } | null> {
+// task_id is globally unique (migration 001). Returns the row | null.
+async function resolveTask(ident: string): Promise<{ id: string; project_id: string | null; parent_task_id: string | null } | null> {
   const col = /^[0-9a-fA-F-]{36}$/.test(ident) ? 'id' : 'task_id'
-  const { data } = await admin.from('tasks').select('id, project_id').eq(col, ident).maybeSingle()
+  const { data } = await admin.from('tasks').select('id, project_id, parent_task_id').eq(col, ident).maybeSingle()
   return data ?? null
+}
+
+const TASK_STATUSES = ['Not Started', 'In Progress', 'Blocked', 'Done']
+const TASK_URGENCIES = ['Low', 'Med', 'High', 'Urgent']
+const BUG_SEVERITIES = ['Critical', 'High', 'Medium', 'Low']
+const POS_STEP = 1000
+
+// Mint a human task_id ("T-XXXXXX", 6 base36 chars) mixing time + randomness so
+// concurrent creates don't collide. Mirrors src/lib/helpers.js generateTaskId
+// shape (T- + 6 upper base36) but with entropy added.
+function mintTaskId(): string {
+  const s = (Date.now().toString(36) + Math.random().toString(36).slice(2)).toUpperCase()
+  return 'T-' + s.slice(-6)
+}
+
+// Insert a task + its primary-assignee junction row, retrying the unique
+// task_id on the rare 23505 collision. `markDone` seeds the assignee as already
+// completed so the migration-044 aggregate keeps a Done task closed instead of
+// reopening it. Returns { task } | { error }.
+async function insertTask(opts: {
+  dev: string
+  title: string
+  notes: string | null
+  urgency: string
+  dueDate: string | null
+  status: string
+  projectId: string | null
+  columnId: string | null
+  pos: number | null
+  parentTaskId: string | null
+  assignedTo: string
+  teamId: string | null
+  markDone: boolean
+}): Promise<{ task?: Record<string, unknown>; error?: string }> {
+  const nowIso = new Date().toISOString()
+  let lastErr = 'insert failed'
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const { data, error } = await admin.from('tasks').insert({
+      task_id:           mintTaskId(),
+      assigned_to:       opts.assignedTo,
+      assigned_by:       opts.dev,
+      assignment_type:   opts.assignedTo === opts.dev ? 'Self' : 'Peer',
+      team_id:           opts.teamId,
+      title:             opts.title,
+      urgency:           opts.urgency,
+      due_date:          opts.dueDate,
+      notes:             opts.notes,
+      date_assigned:     nowIso,
+      status:            opts.status,
+      parent_task_id:    opts.parentTaskId,
+      project_id:        opts.projectId,
+      project_column_id: opts.columnId,
+      project_pos:       opts.pos,
+    }).select('id, task_id, title, status').single()
+    if (!error) {
+      const assignee: Record<string, unknown> = { task_id: data.id, profile_id: opts.assignedTo, is_primary: true }
+      if (opts.markDone) { assignee.completed_at = nowIso; assignee.completed_by = opts.assignedTo }
+      const { error: aErr } = await admin.from('task_assignees').insert(assignee)
+      if (aErr) return { error: aErr.message }
+      return { task: data }
+    }
+    lastErr = error.message
+    if (error.code !== '23505') break  // only retry on unique-violation (task_id race)
+  }
+  return { error: lastErr }
+}
+
+// Next bottom-of-column position for a new card in a column.
+async function nextPos(columnId: string | null): Promise<number> {
+  if (!columnId) return POS_STEP
+  const { data } = await admin.from('tasks').select('project_pos').eq('project_column_id', columnId)
+  const max = (data || []).reduce((mx, r) => Math.max(mx, Number(r.project_pos) || 0), 0)
+  return max + POS_STEP
+}
+
+// Next bottom position for a lightweight lane (feature_requests / bugs).
+async function nextLanePos(table: string, projectId: string): Promise<number> {
+  const { data } = await admin.from(table).select('pos').eq('project_id', projectId)
+  const max = (data || []).reduce((mx, r) => Math.max(mx, Number(r.pos) || 0), 0)
+  return max + POS_STEP
+}
+
+// The team_id to stamp on a created task (the assignee's primary team).
+async function teamOf(profileId: string): Promise<string | null> {
+  const { data } = await admin.from('profiles').select('team_id').eq('id', profileId).maybeSingle()
+  return data?.team_id ?? null
 }
 
 Deno.serve(async (req) => {
@@ -90,7 +176,7 @@ Deno.serve(async (req) => {
     // GET /  → who am I + quick help
     if (seg.length === 0) {
       const { data: me } = await admin.from('profiles').select('id, full_name, email, role').eq('id', dev).maybeSingle()
-      return json({ ok: true, me, endpoints: ['GET /projects', 'GET /projects/:id/{tasks|requests|bugs}', 'GET /tasks/:id', 'PATCH /tasks/:id', 'POST /tasks/:id/comments', 'POST /tasks/:id/claim'] }, 200, cors)
+      return json({ ok: true, me, endpoints: ['GET /projects', 'GET /projects/:id/{tasks|requests|bugs}', 'POST /projects/:id/{tasks|requests|bugs}', 'GET /tasks/:id', 'PATCH /tasks/:id', 'POST /tasks/:id/comments', 'POST /tasks/:id/claim', 'POST /tasks/:id/subtasks'] }, 200, cors)
     }
 
     // GET /projects → projects the dev belongs to (+ role + counts)
@@ -127,12 +213,81 @@ Deno.serve(async (req) => {
       return json({ error: 'Unknown lane' }, 404, cors)
     }
 
+    // POST /projects/:id/{tasks|requests|bugs}  → create in a lane
+    if (seg[0] === 'projects' && seg.length === 3 && m === 'POST') {
+      const [, pid, lane] = seg
+      if (!(await isMember(dev, pid))) return json({ error: 'Not a member of this project' }, 403, cors)
+      const body = await req.json().catch(() => ({}))
+      const title = (body.title || '').trim()
+      if (!title) return json({ error: 'title required' }, 400, cors)
+      const description = (body.description || body.notes || '').trim() || null
+
+      // Create a real Feature task (board card).
+      if (lane === 'tasks') {
+        const { data: cols } = await admin.from('project_columns')
+          .select('id, maps_to_status, pos').eq('project_id', pid).order('pos')
+        const columns = cols || []
+        let status: string = TASK_STATUSES.includes(body.status) ? body.status : ''
+        let columnId: string | null = null
+        if (typeof body.column_id === 'string') {
+          const c = columns.find((x) => x.id === body.column_id)
+          if (!c) return json({ error: 'column_id is not a column of this project' }, 400, cors)
+          columnId = c.id
+          if (!status) status = TASK_STATUSES.includes(c.maps_to_status) ? c.maps_to_status : 'Not Started'
+        } else {
+          if (!status) status = 'Not Started'
+          columnId = columns.find((c) => c.maps_to_status === status)?.id
+            ?? columns.find((c) => c.maps_to_status === 'Not Started')?.id
+            ?? columns[0]?.id ?? null
+        }
+        const urgency = TASK_URGENCIES.includes(body.urgency) ? body.urgency : 'Med'
+        let assignedTo = dev
+        if (typeof body.assignee_id === 'string' && body.assignee_id) {
+          if (!(await isMember(body.assignee_id, pid))) return json({ error: 'assignee_id is not a member of this project' }, 400, cors)
+          assignedTo = body.assignee_id
+        }
+        const res = await insertTask({
+          dev, title, notes: description, urgency, dueDate: body.due_date || null, status,
+          projectId: pid, columnId, pos: await nextPos(columnId), parentTaskId: null,
+          assignedTo, teamId: await teamOf(assignedTo), markDone: status === 'Done',
+        })
+        if (res.error) return json({ error: res.error }, 400, cors)
+        return json({ task: res.task }, 201, cors)
+      }
+
+      // Create a lightweight Feature Request.
+      if (lane === 'requests') {
+        const { data, error } = await admin.from('feature_requests')
+          .insert({ project_id: pid, title, description, requester_id: dev, status: 'Requested', pos: await nextLanePos('feature_requests', pid) })
+          .select('id, title, status, description').single()
+        if (error) return json({ error: error.message }, 400, cors)
+        return json({ request: data }, 201, cors)
+      }
+
+      // Create a lightweight Bug.
+      if (lane === 'bugs') {
+        const severity = BUG_SEVERITIES.includes(body.severity) ? body.severity : 'Medium'
+        const { data, error } = await admin.from('bugs')
+          .insert({ project_id: pid, title, description, reporter_id: dev, severity, status: 'Reported', pos: await nextLanePos('bugs', pid) })
+          .select('id, title, status, severity, description').single()
+        if (error) return json({ error: error.message }, 400, cors)
+        return json({ bug: data }, 201, cors)
+      }
+      return json({ error: 'Unknown lane' }, 404, cors)
+    }
+
     // /tasks/:id …  (:id may be a uuid or a human task_id like "T-AB12C3")
     if (seg[0] === 'tasks' && seg.length >= 2) {
       const resolved = await resolveTask(seg[1])
       if (!resolved) return json({ error: 'Task not found' }, 404, cors)
       const tid = resolved.id
-      const pid = resolved.project_id
+      // Subtasks don't carry project_id (they mirror the app's assignTask path);
+      // fall back to the parent's project for the membership check.
+      let pid = resolved.project_id
+      if (!pid && resolved.parent_task_id) {
+        const { data: parent } = await admin.from('tasks').select('project_id').eq('id', resolved.parent_task_id).maybeSingle()
+        pid = parent?.project_id ?? null
+      }
       if (!pid) return json({ error: 'Task is not part of a project' }, 403, cors)
       if (!(await isMember(dev, pid))) return json({ error: 'Not a member of this task\'s project' }, 403, cors)
 
@@ -190,6 +345,30 @@ Deno.serve(async (req) => {
         const { error } = await admin.from('task_assignees').insert({ task_id: tid, profile_id: dev, is_primary: false })
         if (error) return json({ error: error.message }, 400, cors)
         return json({ ok: true, claimed: true }, 201, cors)
+      }
+
+      // POST /tasks/:id/subtasks  → create a child task (single-level only).
+      if (seg.length === 3 && seg[2] === 'subtasks' && m === 'POST') {
+        if (resolved.parent_task_id) return json({ error: 'Cannot add a subtask to a subtask (single-level only)' }, 400, cors)
+        const body = await req.json().catch(() => ({}))
+        const title = (body.title || '').trim()
+        if (!title) return json({ error: 'title required' }, 400, cors)
+        const notes = (body.notes || body.description || '').trim() || null
+        const urgency = TASK_URGENCIES.includes(body.urgency) ? body.urgency : 'Med'
+        let assignedTo = dev
+        if (typeof body.assignee_id === 'string' && body.assignee_id) {
+          if (!(await isMember(body.assignee_id, pid))) return json({ error: 'assignee_id is not a member of this project' }, 400, cors)
+          assignedTo = body.assignee_id
+        }
+        // Mirror the app: subtasks carry parent_task_id but no project_id/column,
+        // so they stay off the board and inherit via the parent.
+        const res = await insertTask({
+          dev, title, notes, urgency, dueDate: body.due_date || null, status: 'Not Started',
+          projectId: null, columnId: null, pos: null, parentTaskId: tid,
+          assignedTo, teamId: await teamOf(assignedTo), markDone: false,
+        })
+        if (res.error) return json({ error: res.error }, 400, cors)
+        return json({ subtask: res.task }, 201, cors)
       }
     }
 
