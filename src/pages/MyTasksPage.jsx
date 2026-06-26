@@ -518,6 +518,7 @@ export default function MyTasksPage() {
                     selectable
                     selectedIds={selectedIds}
                     onSelectionChange={handleSelectionChange}
+                    groupByStatus
                   />
               }
             </div>

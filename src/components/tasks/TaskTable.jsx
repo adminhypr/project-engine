@@ -6,6 +6,8 @@ import { MessageSquare, MessagesSquare, Check, X, Calendar, Clock, User, Chevron
 import { TaskIcon } from '../ui/TaskIconPicker'
 import { completionProgress } from '../../lib/perAssigneeCompletion'
 import { truncateParentLabel } from '../../lib/subtasks'
+import DataTable, { Avatar } from '../projects/DataTable'
+import { FEATURE_STATUSES } from '../../lib/projectBoard'
 
 const PRIORITY_INDICATOR = {
   red:    'bg-red-500',
@@ -15,10 +17,19 @@ const PRIORITY_INDICATOR = {
   none:   'bg-slate-300 dark:bg-slate-600',
 }
 
+// Task status → monday group color (matches the Dev Board list view).
+const STATUS_COLOR = {
+  'Not Started': 'slate',
+  'In Progress': 'blue',
+  'Blocked':     'red',
+  'Done':        'emerald',
+}
+
 export default function TaskTable({
   tasks, onRowClick, showAssignedTo = false, showAssignedBy = true,
   onAccept, onDecline, showAcceptanceActions = false,
-  selectable = false, selectedIds, onSelectionChange
+  selectable = false, selectedIds, onSelectionChange,
+  groupByStatus = false,
 }) {
   if (!tasks.length) return (
     <div className="text-center py-16 text-slate-400 dark:text-slate-500 text-sm">No tasks match your filters.</div>
@@ -28,6 +39,131 @@ export default function TaskTable({
   // happens to be in the same list. (When the parent isn't in the visible
   // slice, we just show the generic "↳ parent" pill without title.)
   const titleById = new Map(tasks.map(t => [t.id, t.title]))
+
+  // ── monday.com-style grouped table (My Tasks + Admin Overview) ──────────────
+  // Opt-in via `groupByStatus` so the legacy card rows below — and Team View,
+  // which does its own grouping — stay untouched. Status becomes the group, so
+  // there's no Status column; every other interaction is preserved.
+  if (groupByStatus) {
+    const ownerOf = (t) => (showAssignedTo ? t.assignee : t.assigner) || t.assigner || t.assignee
+
+    const renderTaskCell = (t) => {
+      const isPending = t.acceptance_status === 'Pending'
+      const isDeclined = t.acceptance_status === 'Declined'
+      const progress = completionProgress(t.task_assignees ?? t.assignees)
+      const showProgressChip = progress.total >= 2
+      const progressComplete = progress.done === progress.total
+      const sub = []
+      if (t.who_due_to) sub.push(`For: ${t.who_due_to}`)
+      if (t.team?.name) sub.push(t.team.name)
+      if (showAssignedBy && showAssignedTo && t.assigner?.full_name) sub.push(`by ${t.assigner.full_name}`)
+      return (
+        <span className="block w-full min-w-0">
+          <span className="flex items-center gap-1.5 flex-wrap">
+            {t.icon && <TaskIcon name={t.icon} size={14} className="text-brand-500 dark:text-brand-400 shrink-0" />}
+            <span className="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">{t.title}</span>
+            {t.parent_task_id && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('open-task', { detail: { taskId: t.parent_task_id } })) }}
+                className="shrink-0 badge bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-dark-hover dark:text-slate-300 text-[10px] inline-flex items-center transition-colors"
+                title={`Parent: ${titleById.get(t.parent_task_id) || 'Open parent'}`}
+                aria-label="Open parent task"
+              >
+                ↳ {truncateParentLabel(titleById.get(t.parent_task_id) || 'parent', 16)}
+              </button>
+            )}
+            {t.subtask_count > 0 && (
+              <span className="shrink-0 badge bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-[10px] inline-flex items-center gap-1" title={`${t.open_subtask_count} of ${t.subtask_count} sub-tasks open`}>
+                <GitBranch size={10} aria-hidden="true" />{t.subtask_count - t.open_subtask_count}/{t.subtask_count}
+              </span>
+            )}
+            {t.recurrence_id && <Repeat size={11} className="shrink-0 text-purple-500 dark:text-purple-400" aria-label="Recurring task" />}
+            {isPending && <span className="shrink-0 badge bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 text-[10px]">Pending</span>}
+            {isDeclined && <span className="shrink-0 badge bg-red-500/15 text-red-700 dark:text-red-400 text-[10px]">Declined</span>}
+            {showProgressChip && (
+              <span className={`shrink-0 badge text-[10px] ${progressComplete ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-slate-500/15 text-slate-700 dark:text-slate-300'}`} title={`${progress.done} of ${progress.total} assignees completed`}>
+                {progress.done}/{progress.total}
+              </span>
+            )}
+            {t.unread_chat_count > 0 && (
+              <span className="shrink-0 inline-flex items-center text-indigo-500 dark:text-indigo-400" title={`${t.unread_chat_count} unread chat messages`}>
+                <MessagesSquare size={12} aria-hidden="true" />
+              </span>
+            )}
+            {t.comment_count > 0 && (
+              <span className="shrink-0 inline-flex items-center gap-0.5 text-slate-400 dark:text-slate-500 text-[11px]">
+                <MessageSquare size={11} />{t.comment_count}
+              </span>
+            )}
+          </span>
+          {sub.length > 0 && <span className="block text-[11px] text-slate-400 truncate mt-0.5">{sub.join(' · ')}</span>}
+        </span>
+      )
+    }
+
+    const groups = FEATURE_STATUSES.map(status => ({
+      key: status,
+      label: status,
+      color: STATUS_COLOR[status] || 'slate',
+      items: tasks.filter(t => (FEATURE_STATUSES.includes(t.status) ? t.status : 'Not Started') === status),
+    }))
+
+    const columns = [
+      selectable && {
+        key: 'sel', header: '', width: '32px', align: 'center',
+        render: (t) => (
+          <input
+            type="checkbox"
+            checked={!!selectedIds?.has(t.id)}
+            onClick={e => e.stopPropagation()}
+            onChange={e => onSelectionChange?.(t.id, e.target.checked)}
+            className="rounded border-slate-300 dark:border-dark-border text-brand-500 focus:ring-brand-500"
+          />
+        ),
+      },
+      { key: 'task', header: 'Task', width: 'minmax(240px,1fr)', render: renderTaskCell },
+      {
+        key: 'owner', header: 'Owner', width: '70px', align: 'center',
+        render: (t) => {
+          const extra = showAssignedTo && t.assignees?.length > 1 ? t.assignees.length - 1 : 0
+          return (
+            <span className="inline-flex items-center">
+              <Avatar profile={ownerOf(t)} />
+              {extra > 0 && <span className="ml-1 text-[10px] font-semibold text-brand-600 dark:text-brand-300">+{extra}</span>}
+            </span>
+          )
+        },
+      },
+      { key: 'priority', header: 'Priority', width: '136px', render: (t) => <PriorityBadge priority={t.priority} /> },
+      { key: 'urgency', header: 'Urgency', width: '88px', render: (t) => <UrgencyBadge urgency={t.urgency} /> },
+      {
+        key: 'due', header: 'Due', width: '96px', align: 'right',
+        render: (t) => t.due_date
+          ? <span className="text-xs text-slate-500 dark:text-slate-400">{formatDateShort(t.due_date)}</span>
+          : <span className="text-xs text-slate-300 dark:text-slate-600">—</span>,
+      },
+      showAcceptanceActions && {
+        key: 'act', header: '', width: '84px', align: 'right',
+        render: (t) => t.acceptance_status === 'Pending' ? (
+          <span className="inline-flex gap-1" onClick={e => e.stopPropagation()}>
+            <button onClick={() => onAccept?.(t)} title="Accept" className="p-1.5 rounded-lg bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 dark:text-emerald-400 transition-colors"><Check size={13} /></button>
+            <button onClick={() => onDecline?.(t)} title="Decline" className="p-1.5 rounded-lg bg-red-500/15 text-red-700 hover:bg-red-500/25 dark:text-red-400 transition-colors"><X size={13} /></button>
+          </span>
+        ) : <span className="text-[11px] text-slate-300 dark:text-slate-600">—</span>,
+      },
+    ].filter(Boolean)
+
+    return (
+      <DataTable
+        groups={groups}
+        columns={columns}
+        onRowClick={onRowClick}
+        getRowKey={t => t.id}
+        emptyText="No tasks match your filters."
+      />
+    )
+  }
 
   return (
     <div className="space-y-2">

@@ -376,6 +376,7 @@ export default function AdminOverviewPage() {
                     selectable
                     selectedIds={selectedIds}
                     onSelectionChange={handleSelectionChange}
+                    groupByStatus
                   />
               }
             </div>
