@@ -1,20 +1,100 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTaskActions, useProfiles } from '../hooks/useTasks'
 import { useRecurrences } from '../hooks/useRecurrences'
-import { PageHeader, showToast } from '../components/ui'
-import { AssignmentBadge } from '../components/ui'
+import { showToast } from '../components/ui'
 import { getAssignmentType } from '../lib/assignmentType'
 import { useAuth } from '../hooks/useAuth'
 import { PageTransition, SuccessBurst } from '../components/ui/animations'
-import { CheckCircle, Users, X, Repeat as RepeatIcon, Loader2 } from 'lucide-react'
+import { CheckCircle, Users, X, Repeat as RepeatIcon, Loader2, Search } from 'lucide-react'
 import { computeNextRun, formatCountdown } from '../lib/recurrence'
 import TaskIconPicker from '../components/ui/TaskIconPicker'
 import { FilePickerInput, hasOversizedFiles } from '../components/ui/FileAttachment'
 import { useAttachments } from '../hooks/useAttachments'
 import { parsePrefillParams } from '../lib/dmPrefillUrl'
 import { usePageTitle } from '../hooks/usePageTitle'
+import { Avatar } from '../components/projects/DataTable'
+import './assignTaskVibe.css'
+
+// Solid Vibe label chip for the four assignment types (replaces the coral
+// AssignmentBadge on this monday-themed page; same labels/semantics).
+const ASSIGN_COLORS = { Superior: '#5559df', Peer: '#00c875', CrossTeam: '#fdab3d', Upward: '#a25ddc' }
+function VibeAssignmentBadge({ type }) {
+  return <span className="vibe-label-chip" style={{ background: ASSIGN_COLORS[type] || '#c3c6d4' }}>{type}</span>
+}
+
+function teamLabel(p) {
+  if (p.all_teams?.length > 1) return p.all_teams.map(t => t.name).join(', ')
+  return p.teams?.name || p.all_teams?.[0]?.name || 'No team'
+}
+
+// monday-style People picker: avatar chips + a searchable avatar dropdown.
+// Pure presentation over the page's existing add/remove handlers.
+function PersonPicker({ profiles, selectedIds, onAdd, onRemove, error }) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDocClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [open])
+
+  const selected = selectedIds.map(id => profiles.find(p => p.id === id)).filter(Boolean)
+  const available = profiles.filter(p =>
+    !selectedIds.includes(p.id) && (p.full_name || '').toLowerCase().includes(q.toLowerCase()),
+  )
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <div
+        className={`vibe-input ${error ? 'vibe-input--error' : ''}`}
+        style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', cursor: 'text', minHeight: 42, padding: '6px 10px' }}
+        onClick={() => setOpen(true)}
+      >
+        {selected.map((p, i) => (
+          <span key={p.id} className={`vibe-chip ${i === 0 ? 'vibe-chip--primary' : ''}`}>
+            <Avatar profile={p} size={20} />
+            {p.full_name}
+            {i === 0 && <span style={{ fontSize: 10, opacity: 0.6 }}>primary</span>}
+            <button type="button" onClick={(e) => { e.stopPropagation(); onRemove(p.id) }} aria-label={`Remove ${p.full_name}`}>
+              <X size={12} />
+            </button>
+          </span>
+        ))}
+        <span className="vibe-help" style={{ padding: '2px 4px' }}>{selected.length ? '+ Add person' : '— Add person —'}</span>
+      </div>
+
+      {open && (
+        <div className="vibe-popover" style={{ position: 'absolute', zIndex: 30, top: 'calc(100% + 4px)', left: 0, right: 0, maxHeight: 280, overflowY: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderBottom: '1px solid var(--v-border)', position: 'sticky', top: 0, background: 'var(--v-surface)' }}>
+            <Search size={14} color="#676879" />
+            <input
+              autoFocus
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              placeholder="Search names…"
+              style={{ border: 0, outline: 'none', flex: 1, fontSize: 13, fontFamily: 'inherit', color: '#323338', background: 'transparent' }}
+            />
+          </div>
+          {available.length === 0 && <div className="vibe-help" style={{ padding: 12 }}>No people found.</div>}
+          {available.map(p => (
+            <button type="button" key={p.id} className="vibe-option" onClick={() => { onAdd(p.id); setQ('') }}>
+              <Avatar profile={p} size={28} />
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: 'block', fontWeight: 600 }}>{p.full_name}</span>
+                <span className="vibe-help" style={{ display: 'block' }}>{teamLabel(p)}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function AssignTaskPage() {
   usePageTitle('Assign a Task')
@@ -164,14 +244,6 @@ export default function AssignTaskPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repeat, startAt, customEvery, customUnit])
 
-  // Format team display in dropdowns
-  function formatTeamNames(p) {
-    if (p.all_teams?.length > 1) {
-      return p.all_teams.map(t => t.name).join(', ')
-    }
-    return p.teams?.name || p.all_teams?.[0]?.name || 'No team'
-  }
-
   // One-off path validates the dueDate field. Recurring path uses startAt
   // instead and validates that the start is at least 1 minute in the future.
   function validate() {
@@ -258,31 +330,39 @@ export default function AssignTaskPage() {
     }
   }
 
+  function clearForm() {
+    setForm({ assigneeIds: [], title: '', urgency: 'Med', dueDate: '', whoTo: '', notes: '', icon: '' })
+    setPendingFiles([])
+    setSelectedTeamId('')
+  }
+
   if (result) return (
     <PageTransition>
-      <div>
-        <PageHeader title="Assign a Task" />
+      <div className="vibe-scope vibe-page">
+        <div className="vibe-header px-4 sm:px-6 pt-5 pb-4">
+          <h1 className="text-xl">Assign a Task</h1>
+        </div>
         <div className="p-4 sm:p-6 max-w-lg">
           <SuccessBurst trigger={result.taskId}>
-            <div className="card text-center py-10">
+            <div className="vibe-card text-center py-10 px-6">
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: 'spring', stiffness: 300, damping: 20 }}
               >
-                <CheckCircle size={48} className="text-emerald-500 mx-auto mb-4" />
+                <CheckCircle size={48} style={{ color: '#00c875' }} className="mx-auto mb-4" />
               </motion.div>
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Task Assigned!</h3>
-              <p className="text-slate-500 dark:text-slate-400 text-sm mb-3">
+              <h3 className="text-lg font-semibold mb-2" style={{ color: '#323338' }}>Task Assigned!</h3>
+              <p className="text-sm mb-3" style={{ color: '#676879' }}>
                 Task <span className="font-mono font-semibold">{result.taskId}</span> has been assigned.
               </p>
               <div className="flex items-center justify-center gap-2 mb-6">
-                <span className="text-sm text-slate-500">Assignment type:</span>
-                <AssignmentBadge type={result.assignmentType} />
+                <span className="text-sm" style={{ color: '#676879' }}>Assignment type:</span>
+                <VibeAssignmentBadge type={result.assignmentType} />
               </div>
               <div className="flex gap-3 justify-center">
-                <button className="btn-primary" onClick={() => setResult(null)}>Assign Another</button>
-                <button className="btn-secondary" onClick={() => navigate('/my-tasks')}>View My Tasks</button>
+                <button className="vibe-btn vibe-btn-primary" onClick={() => setResult(null)}>Assign Another</button>
+                <button className="vibe-btn vibe-btn-secondary" onClick={() => navigate('/my-tasks')}>View My Tasks</button>
               </div>
             </div>
           </SuccessBurst>
@@ -293,68 +373,41 @@ export default function AssignTaskPage() {
 
   return (
     <PageTransition>
-      <div>
-        <PageHeader title="Assign a Task" subtitle="Assign a task to anyone in your organization" />
+      <div className="vibe-scope vibe-page">
+        <div className="vibe-header px-4 sm:px-6 pt-5 pb-4">
+          <h1 className="text-xl">Assign a Task</h1>
+          <p className="text-sm mt-0.5" style={{ color: '#676879' }}>Assign a task to anyone in your organization</p>
+        </div>
 
         <div className="p-4 sm:p-6 max-w-2xl">
-          <div className="card">
+          <div className="vibe-card p-5 sm:p-6">
             <form onSubmit={handleSubmit} className="space-y-5">
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="form-label">Assign To *</label>
-                  <select
-                    value=""
-                    onChange={e => handleAddAssignee(e.target.value)}
-                    className={`form-input ${errors.assignees ? 'border-red-400 dark:border-red-500' : ''}`}
-                    aria-required="true"
-                    aria-invalid={!!errors.assignees}
-                  >
-                    <option value="">— Add person —</option>
-                    {profiles.filter(p => !form.assigneeIds.includes(p.id)).map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.full_name} ({formatTeamNames(p)})
-                      </option>
-                    ))}
-                  </select>
-                  {errors.assignees && <p className="text-xs text-red-500 mt-1">{errors.assignees}</p>}
-                  {form.assigneeIds.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {form.assigneeIds.map((id, i) => {
-                        const p = profiles.find(pr => pr.id === id)
-                        return (
-                          <span
-                            key={id}
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium
-                              ${i === 0
-                                ? 'bg-brand-50 text-brand-700 border border-brand-200 dark:bg-brand-500/15 dark:text-brand-300 dark:border-brand-500/30'
-                                : 'bg-slate-100 text-slate-600 border border-slate-200 dark:bg-dark-hover dark:text-slate-300 dark:border-dark-border'
-                              }`}
-                          >
-                            {p?.full_name || 'Unknown'}
-                            {i === 0 && <span className="text-[10px] opacity-60 ml-0.5">primary</span>}
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveAssignee(id)}
-                              className="text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 ml-0.5"
-                            >
-                              <X size={12} />
-                            </button>
-                          </span>
-                        )
-                      })}
-                    </div>
-                  )}
+                  <label className="vibe-label">Assign To *</label>
+                  <PersonPicker
+                    profiles={profiles}
+                    selectedIds={form.assigneeIds}
+                    onAdd={handleAddAssignee}
+                    onRemove={handleRemoveAssignee}
+                    error={!!errors.assignees}
+                  />
+                  {errors.assignees && <p className="vibe-error">{errors.assignees}</p>}
                   {previewType && (
-                    <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-                      Assignment type: <AssignmentBadge type={previewType} />
+                    <div className="mt-1.5 flex items-center gap-1.5 text-xs" style={{ color: '#676879' }}>
+                      Assignment type: <VibeAssignmentBadge type={previewType} />
                     </div>
                   )}
                 </div>
 
                 <div>
-                  <label className="form-label">Urgency</label>
-                  <select value={form.urgency} onChange={e => set('urgency', e.target.value)} className="form-input">
+                  <label className="vibe-label">Urgency</label>
+                  <select
+                    value={form.urgency}
+                    onChange={e => set('urgency', e.target.value)}
+                    className={`vibe-input vibe-input--${form.urgency.toLowerCase()}`}
+                  >
                     <option>Med</option>
                     <option>High</option>
                     <option>Low</option>
@@ -371,8 +424,8 @@ export default function AssignTaskPage() {
                     exit={{ opacity: 0, height: 0 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <label className="form-label flex items-center gap-1.5">
-                      <Users size={14} className="text-brand-500" />
+                    <label className="vibe-label flex items-center gap-1.5">
+                      <Users size={14} style={{ color: '#0073ea' }} />
                       Which team is this task for?
                     </label>
                     <div className="flex flex-wrap gap-2">
@@ -381,16 +434,10 @@ export default function AssignTaskPage() {
                           key={t.id}
                           type="button"
                           onClick={() => setSelectedTeamId(t.id)}
-                          className={`px-3 py-1.5 rounded-xl text-sm font-medium border transition-all duration-150
-                            ${selectedTeamId === t.id
-                              ? 'bg-brand-50 text-brand-700 border-brand-200 ring-1 ring-brand-300 dark:bg-brand-500/15 dark:text-brand-300 dark:border-brand-500/30 dark:ring-brand-500/40'
-                              : 'bg-white text-slate-600 border-slate-200 hover:border-brand-200 hover:text-brand-600 dark:bg-dark-surface dark:text-slate-300 dark:border-dark-border dark:hover:border-brand-500/30'
-                            }`}
+                          className={`vibe-seg ${selectedTeamId === t.id ? 'vibe-seg--active' : ''}`}
                         >
                           {t.name}
-                          {t.is_primary && (
-                            <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500">primary</span>
-                          )}
+                          {t.is_primary && <span style={{ marginLeft: 6, fontSize: 11, color: '#9699a6' }}>primary</span>}
                         </button>
                       ))}
                     </div>
@@ -401,21 +448,21 @@ export default function AssignTaskPage() {
               {/* Admin-only: Assigned By override */}
               {isAdmin && (
                 <div>
-                  <label className="form-label">Assigned By (override)</label>
+                  <label className="vibe-label">Assigned By (override)</label>
                   <select
                     value={overrideAssignerId}
                     onChange={e => setOverrideAssignerId(e.target.value)}
-                    className="form-input"
+                    className="vibe-input"
                   >
                     <option value="">— {profile?.full_name} (you) —</option>
                     {profiles.filter(p => p.id !== profile?.id).map(p => (
                       <option key={p.id} value={p.id}>
-                        {p.full_name} ({formatTeamNames(p)})
+                        {p.full_name} ({teamLabel(p)})
                       </option>
                     ))}
                   </select>
                   {overrideAssignerId && (
-                    <p className="text-xs text-brand-500 mt-1">
+                    <p className="text-xs mt-1" style={{ color: '#0073ea' }}>
                       Task will be recorded as assigned by {profiles.find(p => p.id === overrideAssignerId)?.full_name}
                     </p>
                   )}
@@ -423,53 +470,53 @@ export default function AssignTaskPage() {
               )}
 
               <div>
-                <label className="form-label">Task Description *</label>
+                <label className="vibe-label">Task Description *</label>
                 <textarea
                   value={form.title}
                   onChange={e => set('title', e.target.value)}
                   placeholder="Describe what needs to be done..."
                   rows={3}
-                  className={`form-input resize-none ${errors.title ? 'border-red-400 dark:border-red-500' : ''}`}
+                  className={`vibe-input ${errors.title ? 'vibe-input--error' : ''}`}
                   aria-required="true"
                   aria-invalid={!!errors.title}
                 />
-                {errors.title && <p className="text-xs text-red-500 mt-1">{errors.title}</p>}
+                {errors.title && <p className="vibe-error">{errors.title}</p>}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {repeat === 'none' ? (
                   <div>
-                    <label className="form-label">Due Date (optional)</label>
+                    <label className="vibe-label">Due Date (optional)</label>
                     <input
                       type="datetime-local"
                       value={form.dueDate}
                       onChange={e => set('dueDate', e.target.value)}
                       min={new Date().toISOString().slice(0, 16)}
-                      className={`form-input ${errors.dueDate ? 'border-red-400 dark:border-red-500' : ''}`}
+                      className={`vibe-input ${errors.dueDate ? 'vibe-input--error' : ''}`}
                       aria-invalid={!!errors.dueDate}
                     />
-                    {errors.dueDate && <p className="text-xs text-red-500 mt-1">{errors.dueDate}</p>}
+                    {errors.dueDate && <p className="vibe-error">{errors.dueDate}</p>}
                   </div>
                 ) : (
                   <div>
-                    <label className="form-label">Due in (hours after spawn)</label>
+                    <label className="vibe-label">Due in (hours after spawn)</label>
                     <input
                       type="number"
                       min={0}
                       value={dueOffsetHours}
                       onChange={e => setDueOffsetHours(parseInt(e.target.value, 10) || 0)}
-                      className="form-input"
+                      className="vibe-input"
                     />
                   </div>
                 )}
                 <div>
-                  <label className="form-label">Who It's For (optional)</label>
+                  <label className="vibe-label">Who It's For (optional)</label>
                   <input
                     type="text"
                     value={form.whoTo}
                     onChange={e => set('whoTo', e.target.value)}
                     placeholder="Client, project, department..."
-                    className="form-input"
+                    className="vibe-input"
                   />
                 </div>
               </div>
@@ -477,13 +524,13 @@ export default function AssignTaskPage() {
               {/* Repeat — leave at "Don't repeat" for one-off tasks. */}
               <div className="space-y-3">
                 <div>
-                  <label className="form-label flex items-center gap-1.5">
-                    <RepeatIcon size={13} className="text-slate-400" /> Repeat
+                  <label className="vibe-label flex items-center gap-1.5">
+                    <RepeatIcon size={13} style={{ color: '#676879' }} /> Repeat
                   </label>
                   <select
                     value={repeat}
                     onChange={e => setRepeat(e.target.value)}
-                    className="form-input"
+                    className="vibe-input"
                   >
                     <option value="none">Don't repeat</option>
                     <option value="daily">Daily</option>
@@ -498,21 +545,21 @@ export default function AssignTaskPage() {
                 {repeat === 'custom' && (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="form-label">Every</label>
+                      <label className="vibe-label">Every</label>
                       <input
                         type="number"
                         min={1}
                         value={customEvery}
                         onChange={e => setCustomEvery(parseInt(e.target.value, 10) || 1)}
-                        className="form-input"
+                        className="vibe-input"
                       />
                     </div>
                     <div>
-                      <label className="form-label">Unit</label>
+                      <label className="vibe-label">Unit</label>
                       <select
                         value={customUnit}
                         onChange={e => setCustomUnit(e.target.value)}
-                        className="form-input"
+                        className="vibe-input"
                       >
                         <option value="day">day(s)</option>
                         <option value="week">week(s)</option>
@@ -524,17 +571,17 @@ export default function AssignTaskPage() {
 
                 {repeat !== 'none' && (
                   <div>
-                    <label className="form-label">Start (ET)</label>
+                    <label className="vibe-label">Start (ET)</label>
                     <input
                       type="datetime-local"
                       value={startAt}
                       onChange={e => { setStartAt(e.target.value); setErrors(er => (er.startAt ? { ...er, startAt: undefined } : er)) }}
-                      className={`form-input ${errors.startAt ? 'border-red-400 dark:border-red-500' : ''}`}
+                      className={`vibe-input ${errors.startAt ? 'vibe-input--error' : ''}`}
                       aria-invalid={!!errors.startAt}
                     />
-                    {errors.startAt && <p className="text-xs text-red-500 mt-1">{errors.startAt}</p>}
+                    {errors.startAt && <p className="vibe-error">{errors.startAt}</p>}
                     {recurrencePreview?.next && (
-                      <p className="text-xs text-brand-700 dark:text-brand-300 mt-1.5">
+                      <p className="text-xs mt-1.5" style={{ color: '#0073ea' }}>
                         <strong>First spawn:</strong>{' '}
                         {recurrencePreview.next.toLocaleString()} ({formatCountdown(recurrencePreview.next)})
                       </p>
@@ -544,25 +591,25 @@ export default function AssignTaskPage() {
               </div>
 
               <div>
-                <label className="form-label">Notes (optional)</label>
+                <label className="vibe-label">Notes (optional)</label>
                 <textarea
                   value={form.notes}
                   onChange={e => set('notes', e.target.value)}
                   placeholder="Extra context, links, instructions..."
                   rows={3}
-                  className="form-input resize-none"
+                  className="vibe-input"
                 />
               </div>
 
               <div>
-                <label className="form-label">Attachments (optional)</label>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mb-1">Max 5 MB per file. For larger files, upload to Google Drive and paste the link in Notes.</p>
+                <label className="vibe-label">Attachments (optional)</label>
+                <p className="vibe-help mb-1">Max 5 MB per file. For larger files, upload to Google Drive and paste the link in Notes.</p>
                 <FilePickerInput files={pendingFiles} onChange={files => { setPendingFiles(files); setErrors(er => (er.files ? { ...er, files: undefined } : er)) }} />
-                {errors.files && <p className="text-xs text-red-500 mt-1">{errors.files}</p>}
+                {errors.files && <p className="vibe-error">{errors.files}</p>}
               </div>
 
               <div>
-                <label className="form-label">Task Icon (optional)</label>
+                <label className="vibe-label">Task Icon (optional)</label>
                 <TaskIconPicker value={form.icon} onChange={v => set('icon', v)} />
               </div>
 
@@ -570,20 +617,16 @@ export default function AssignTaskPage() {
                 <motion.button
                   type="submit"
                   disabled={submitting || hasOversizedFiles(pendingFiles)}
-                  className="btn-primary flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="vibe-btn vibe-btn-primary"
                   whileTap={{ scale: 0.97 }}
                 >
                   {submitting && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
                   {submitting ? 'Assigning…' : 'Assign Task →'}
                 </motion.button>
-                <button type="button" className="btn-secondary" onClick={() => {
-                  setForm({ assigneeIds: [], title: '', urgency: 'Med', dueDate: '', whoTo: '', notes: '', icon: '' })
-                  setPendingFiles([])
-                  setSelectedTeamId('')
-                }}>
+                <button type="button" className="vibe-btn vibe-btn-secondary" onClick={clearForm}>
                   Clear
                 </button>
-                <p className="text-xs text-slate-400 dark:text-slate-500 ml-2">
+                <p className="vibe-help ml-2">
                   Assigned by field is auto-filled from your login
                 </p>
               </div>
@@ -592,8 +635,8 @@ export default function AssignTaskPage() {
           </div>
 
           {/* Type legend */}
-          <div className="mt-4 p-4 bg-white dark:bg-dark-card rounded-2xl border border-slate-200 dark:border-dark-border text-sm">
-            <p className="font-semibold text-slate-600 dark:text-slate-300 mb-2 text-xs uppercase tracking-wider">Assignment Type Guide</p>
+          <div className="vibe-card mt-4 p-4 text-sm">
+            <p className="font-semibold mb-2 text-xs uppercase tracking-wider" style={{ color: '#676879' }}>Assignment Type Guide</p>
             <div className="flex flex-wrap gap-3">
               {[
                 ['Superior',  'Your manager/admin assigned this to you'],
@@ -602,8 +645,8 @@ export default function AssignTaskPage() {
                 ['Upward',    'Assigned to someone above your rank'],
               ].map(([type, desc]) => (
                 <div key={type} className="flex items-center gap-2">
-                  <AssignmentBadge type={type} />
-                  <span className="text-xs text-slate-500 dark:text-slate-400">{desc}</span>
+                  <VibeAssignmentBadge type={type} />
+                  <span className="text-xs" style={{ color: '#676879' }}>{desc}</span>
                 </div>
               ))}
             </div>

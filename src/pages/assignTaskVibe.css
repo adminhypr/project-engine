@@ -1,0 +1,118 @@
+/*
+ * monday.com "Vibe" theme — SCOPED to the Assign-a-Task page only.
+ * Every rule lives under `.vibe-scope`, and colors are hard Vibe token values
+ * (not Tailwind theme vars), so this never leaks into the app's coral theme.
+ * Token source: github.com/mondaycom/vibe packages/style light-theme.scss.
+ */
+@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap');
+
+.vibe-scope {
+  --v-primary: #0073ea;
+  --v-primary-hover: #0060b9;
+  --v-primary-tint: #e6f1fd;
+  --v-primary-selected: #cce5ff;
+  --v-text: #323338;
+  --v-text-2: #676879;
+  --v-bg: #f6f7fb;
+  --v-surface: #ffffff;
+  --v-border: #d0d4e4;
+  --v-border-strong: #c3c6d4;
+  --v-green: #00c875;
+  --v-orange: #fdab3d;
+  --v-red: #df2f4a;
+  --v-purple: #a25ddc;
+  --v-indigo: #5559df;
+
+  font-family: 'Figtree', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: var(--v-text);
+}
+
+.vibe-page { background: var(--v-bg); min-height: 100%; }
+
+.vibe-header { background: var(--v-surface); border-bottom: 1px solid var(--v-border); }
+.vibe-header h1 { color: var(--v-text); font-weight: 700; }
+
+.vibe-card {
+  background: var(--v-surface);
+  border: 1px solid var(--v-border);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.vibe-label { display: block; font-size: 13px; font-weight: 600; color: var(--v-text); margin-bottom: 6px; }
+
+.vibe-input {
+  width: 100%;
+  padding: 9px 12px;
+  background: var(--v-surface);
+  border: 1px solid var(--v-border-strong);
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--v-text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.vibe-input::placeholder { color: var(--v-text-2); }
+.vibe-input:focus { outline: none; border-color: var(--v-primary); box-shadow: 0 0 0 3px rgba(0, 115, 234, 0.18); }
+.vibe-input--error { border-color: var(--v-red); }
+textarea.vibe-input { resize: none; }
+
+/* Urgency = monday status-style tinted select */
+.vibe-input--med  { background: #fff4e5; border-color: #fdd9a8; color: #b26b00; font-weight: 600; }
+.vibe-input--high { background: #fce9ec; border-color: #f3b5be; color: #c32b41; font-weight: 600; }
+.vibe-input--low  { background: #e3f8ee; border-color: #a9e7cb; color: #067a48; font-weight: 600; }
+
+.vibe-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 18px; border-radius: 8px;
+  font-size: 14px; font-weight: 600; font-family: inherit;
+  cursor: pointer; border: 1px solid transparent;
+  transition: background 0.15s, box-shadow 0.15s, opacity 0.15s;
+}
+.vibe-btn-primary { background: var(--v-primary); color: #fff; }
+.vibe-btn-primary:hover { background: var(--v-primary-hover); }
+.vibe-btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+.vibe-btn-secondary { background: var(--v-surface); color: var(--v-text); border-color: var(--v-border-strong); }
+.vibe-btn-secondary:hover { background: #f5f6f8; }
+
+.vibe-error { font-size: 12px; color: var(--v-red); margin-top: 4px; }
+.vibe-help  { font-size: 12px; color: var(--v-text-2); }
+
+/* Person chips */
+.vibe-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 8px 3px 4px; border-radius: 999px;
+  font-size: 12px; font-weight: 600;
+  background: #f5f6f8; border: 1px solid var(--v-border); color: var(--v-text);
+}
+.vibe-chip--primary { background: var(--v-primary-tint); border-color: var(--v-primary-selected); }
+.vibe-chip button { color: var(--v-text-2); display: inline-flex; }
+.vibe-chip button:hover { color: var(--v-red); }
+
+/* Solid label chip (assignment types) */
+.vibe-label-chip {
+  display: inline-flex; align-items: center;
+  padding: 3px 10px; border-radius: 6px;
+  font-size: 11px; font-weight: 700; color: #fff; white-space: nowrap;
+}
+
+/* Searchable person popover */
+.vibe-popover {
+  background: var(--v-surface); border: 1px solid var(--v-border);
+  border-radius: 10px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+.vibe-option {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 10px; font-size: 13px; color: var(--v-text);
+  cursor: pointer; background: transparent; border: 0; text-align: left;
+}
+.vibe-option:hover { background: var(--v-primary-tint); }
+
+/* Segmented team buttons */
+.vibe-seg {
+  padding: 6px 14px; border-radius: 8px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--v-border-strong); background: var(--v-surface); color: var(--v-text-2);
+  transition: all 0.15s;
+}
+.vibe-seg--active { background: var(--v-primary-tint); border-color: var(--v-primary); color: var(--v-primary); }
