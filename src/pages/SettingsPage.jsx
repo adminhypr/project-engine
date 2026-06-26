@@ -10,6 +10,7 @@ import AvatarCard from '../components/settings/AvatarCard'
 import DisplayNameCard from '../components/settings/DisplayNameCard'
 import NotificationSoundCard from '../components/settings/NotificationSoundCard'
 import EmailDigestCard from '../components/settings/EmailDigestCard'
+import ApiKeysCard from '../components/settings/ApiKeysCard'
 import { setPendingInvite, getPendingInvite, clearPendingInvite } from '../lib/pendingInvites'
 import { usePageTitle } from '../hooks/usePageTitle'
 
@@ -252,6 +253,7 @@ export default function SettingsPage() {
           <NotificationSoundCard />
 
           <EmailDigestCard />
+          <ApiKeysCard />
 
           {/* Teams — admin only */}
           {isAdmin && (

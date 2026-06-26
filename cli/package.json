@@ -1,0 +1,16 @@
+{
+  "name": "@hypr/cli",
+  "version": "0.1.0",
+  "description": "hypr — work your Dev Projects tasks from the terminal",
+  "type": "module",
+  "bin": {
+    "hypr": "./hypr.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "hypr.mjs",
+    "README.md"
+  ]
+}
