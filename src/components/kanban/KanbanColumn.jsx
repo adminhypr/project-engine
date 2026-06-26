@@ -70,6 +70,7 @@ export default function KanbanColumn({
           className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer"
           title="Collapse column"
         >
+          <span className={`w-2 h-2 rounded-full shrink-0 ${colStyle.bg}`} />
           <h3 className={`text-sm font-semibold ${colStyle.text}`}>{status}</h3>
         </button>
 

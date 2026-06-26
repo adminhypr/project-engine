@@ -419,6 +419,7 @@ export default function TeamViewPage() {
                                   selectable={isAdmin}
                                   selectedIds={selectedIds}
                                   onSelectionChange={handleSelectionChange}
+                                  tableStyle
                                 />
                               </div>
                             ))
@@ -430,6 +431,7 @@ export default function TeamViewPage() {
                               selectable={isAdmin}
                               selectedIds={selectedIds}
                               onSelectionChange={handleSelectionChange}
+                              tableStyle
                             />
                         }
                       </div>

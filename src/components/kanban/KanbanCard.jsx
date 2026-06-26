@@ -6,12 +6,13 @@ import { showToast } from '../ui'
 import CardActionMenu from './CardActionMenu'
 import { Calendar, MessageSquare, GripVertical } from 'lucide-react'
 
-const PRIORITY_INDICATOR = {
-  red:    'bg-red-500',
-  orange: 'bg-orange-500',
-  yellow: 'bg-yellow-400',
-  green:  'bg-emerald-500',
-  none:   'bg-slate-300 dark:bg-slate-600',
+// Left accent keyed to status — matches the monday-style list view and the
+// card's own column color.
+const STATUS_BAR = {
+  'Not Started': 'bg-slate-400',
+  'In Progress': 'bg-blue-500',
+  'Blocked':     'bg-red-500',
+  'Done':        'bg-emerald-500',
 }
 
 const URGENCY_CYCLE = { High: 'Med', Med: 'Low', Low: 'High' }
@@ -78,8 +79,8 @@ export default function KanbanCard({ task, onClick, isDragOverlay = false, onUpd
       {...attributes}
       {...listeners}
     >
-      {/* Priority indicator bar */}
-      <div className={`absolute left-0 top-2.5 bottom-2.5 w-1 rounded-full ${PRIORITY_INDICATOR[task.priority] || PRIORITY_INDICATOR.none}`} />
+      {/* Status accent bar (matches the card's column + the list view) */}
+      <div className={`absolute left-0 top-2 bottom-2 w-1 rounded-full ${STATUS_BAR[task.status] || 'bg-slate-300 dark:bg-slate-600'}`} />
 
       <div className="pl-5 pr-3 py-3">
         {/* Title row */}
