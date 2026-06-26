@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { useTasks, useTaskActions, useProfiles } from './useTasks'
+import { useAttachments } from './useAttachments'
 import { showToast } from '../components/ui/index'
 
 const POS_STEP = 1000
@@ -13,6 +14,7 @@ export function useFeatureRequests(projectId) {
   const { refetch: refetchTasks } = useTasks()
   const { assignTask } = useTaskActions()
   const { profiles } = useProfiles()
+  const { copyProjectAttachmentsToTask } = useAttachments()
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -77,6 +79,11 @@ export function useFeatureRequests(projectId) {
       projectPos: POS_STEP,
     })
     if (!res?.ok) { showToast(res?.msg || 'Failed to promote request', 'error'); return null }
+    // Carry the request's attached images/files onto the new task.
+    if (request.attachments?.length) {
+      const copy = await copyProjectAttachmentsToTask(res.task.id, request.attachments)
+      if (!copy.ok) showToast('Promoted, but some attachments did not carry over', 'error')
+    }
     const { error } = await supabase.from('feature_requests')
       .update({ status: 'Promoted', promoted_task_id: res.task.id })
       .eq('id', request.id)
@@ -85,7 +92,7 @@ export function useFeatureRequests(projectId) {
     await refetchTasks(true)
     showToast('Promoted to a feature')
     return res.task
-  }, [profile?.id, profiles, assignTask, fetchRequests, refetchTasks])
+  }, [profile?.id, profiles, assignTask, copyProjectAttachmentsToTask, fetchRequests, refetchTasks])
 
   return { requests, loading, addRequest, setStatus, updateRequest, deleteRequest, promote, refetch: fetchRequests }
 }
