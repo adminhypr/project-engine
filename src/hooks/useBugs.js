@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { useTasks, useTaskActions, useProfiles } from './useTasks'
+import { useAttachments } from './useAttachments'
 import { severityToUrgency } from '../lib/projectBoard'
 import { showToast } from '../components/ui/index'
 
@@ -15,6 +16,7 @@ export function useBugs(projectId) {
   const { refetch: refetchTasks } = useTasks()
   const { assignTask } = useTaskActions()
   const { profiles } = useProfiles()
+  const { copyProjectAttachmentsToTask } = useAttachments()
   const [bugs, setBugs] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -80,6 +82,11 @@ export function useBugs(projectId) {
       projectPos: POS_STEP,
     })
     if (!res?.ok) { showToast(res?.msg || 'Failed to promote bug', 'error'); return null }
+    // Carry the bug's attached screenshots/files onto the new fix task.
+    if (bug.attachments?.length) {
+      const copy = await copyProjectAttachmentsToTask(res.task.id, bug.attachments)
+      if (!copy.ok) showToast('Promoted, but some attachments did not carry over', 'error')
+    }
     const { error } = await supabase.from('bugs')
       .update({ status: 'Promoted', promoted_task_id: res.task.id })
       .eq('id', bug.id)
@@ -88,7 +95,7 @@ export function useBugs(projectId) {
     await refetchTasks(true)
     showToast('Promoted to a fix task')
     return res.task
-  }, [profile?.id, profiles, assignTask, fetchBugs, refetchTasks])
+  }, [profile?.id, profiles, assignTask, copyProjectAttachmentsToTask, fetchBugs, refetchTasks])
 
   return { bugs, loading, addBug, setStatus, updateBug, deleteBug, promote, refetch: fetchBugs }
 }

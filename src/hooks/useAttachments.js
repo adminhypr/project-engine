@@ -69,6 +69,26 @@ export function useAttachments() {
     return { ok: errors.length === 0, attachments: results, errors }
   }
 
+  // Carry attachments from a promoted Feature Request / Bug onto the new task.
+  // Bug/request files live in the `project-attachments` bucket with metadata in
+  // a jsonb column ({ storage_path, file_name, mime_type, size }); task files
+  // live in `task-attachments` + the task_attachments table. The two are
+  // separate, so we download each source object and re-upload it through the
+  // normal task path (new bucket object + task_attachments row).
+  async function copyProjectAttachmentsToTask(taskId, sourceAttachments = [], sourceBucket = 'project-attachments') {
+    const files = []
+    const errors = []
+    for (const a of sourceAttachments) {
+      if (!a?.storage_path) continue
+      const { data: blob, error } = await supabase.storage.from(sourceBucket).download(a.storage_path)
+      if (error || !blob) { errors.push({ file: a.file_name, error: error?.message || 'download failed' }); continue }
+      files.push(new File([blob], a.file_name || 'file', { type: a.mime_type || blob.type || 'application/octet-stream' }))
+    }
+    if (!files.length) return { ok: errors.length === 0, attachments: [], errors }
+    const up = await uploadAttachments(taskId, files)
+    return { ok: up.ok && errors.length === 0, attachments: up.attachments, errors: [...errors, ...up.errors] }
+  }
+
   async function getTaskAttachments(taskId) {
     const { data, error } = await supabase
       .from('task_attachments')
@@ -105,5 +125,5 @@ export function useAttachments() {
     return { ok: true }
   }
 
-  return { uploadAttachments, getTaskAttachments, getAttachmentUrl, deleteAttachment }
+  return { uploadAttachments, copyProjectAttachmentsToTask, getTaskAttachments, getAttachmentUrl, deleteAttachment }
 }
