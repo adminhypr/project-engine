@@ -17,7 +17,24 @@
 // real dev token in `x-hypr-key`, so the two never collide.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeadersFor } from '../_shared/security.ts'
+
+// Inlined CORS (no local imports) so this file is self-contained and can be
+// pasted straight into the Supabase Dashboard if the CLI deploy is blocked.
+const ALLOWED_ORIGINS = [
+  'https://tasks.hyprstaffing.com',
+  'https://project-engine-six.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+]
+const VERCEL_PREVIEW_RE = /^https:\/\/project-engine-git-[\w-]+-admin-85372593s-projects\.vercel\.app$/
+function corsHeadersFor(req: Request): Record<string, string> {
+  const origin = req.headers.get('origin')
+  const allow = !origin
+    ? ALLOWED_ORIGINS[0]
+    : (ALLOWED_ORIGINS.includes(origin) || VERCEL_PREVIEW_RE.test(origin)) ? origin : ALLOWED_ORIGINS[0]
+  return { 'Access-Control-Allow-Origin': allow, 'Vary': 'Origin' }
+}
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
