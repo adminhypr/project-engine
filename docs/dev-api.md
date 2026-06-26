@@ -64,8 +64,13 @@ The `hypr` CLI is just a convenience wrapper over these same calls — optional,
 | GET | `/tasks/:id/comments` | — | `{ comments:[…] }` |
 | POST | `/tasks/:id/comments` | `{content}` | `{ comment:{id,content,created_at} }` (201) |
 | POST | `/tasks/:id/claim` | — | `{ ok, claimed }` or `{ ok, already }` — self-assign |
+| POST | `/tasks/:id/archive` | — | `{ ok, archived }` — **personal** archive (hides from your lists; non-destructive) |
+| POST | `/tasks/:id/unarchive` | — | `{ ok, unarchived }` — undo a personal archive |
+| ~~DELETE~~ | *(any path)* | — | **`405` — not supported.** This API can archive, never hard-delete. |
 
 `*` = required. Unknown body keys are ignored.
+
+> **No delete by design.** There is no endpoint that destroys a task, request, or bug — any `DELETE` request is rejected with `405`. To get something off your board, **archive** it (`POST /tasks/:id/archive`). Archive is a *personal view* hide: it removes the task from **your** lists only; collaborators still see it, and the row is never deleted (unarchive restores it). Requests/bugs aren't archivable — close them in-app with a terminal status (`Rejected` / `Won't Fix`).
 
 **Create-endpoint behaviour**
 - **`POST /projects/:id/tasks`** — creates a real Feature task (a board card).
@@ -144,6 +149,6 @@ hypr <cmd> --json               # raw JSON
 Config in `~/.config/hypr/config.json`; override with `HYPR_API_KEY` / `HYPR_API_URL`.
 
 ## What the API does NOT do
-Scoped to project work only. You can create and work **tasks / requests / bugs / subtasks** inside your projects, but it **cannot**: create/delete projects, delete tasks, manage members, manage users/teams/roles, access Chat/Hubs/DMs, or touch projects you're not a member of. There is no admin surface here by design.
+Scoped to project work only. You can create and work **tasks / requests / bugs / subtasks** inside your projects, but it **cannot**: **delete anything** (archive only — see above), create/delete projects, manage members, manage users/teams/roles, access Chat/Hubs/DMs, or touch projects you're not a member of. There is no admin surface here by design.
 
 > The `hypr` CLI wrapper doesn't expose the create endpoints yet — use `curl` (above) for creates for now; read/update/comment/claim are wired in the CLI.

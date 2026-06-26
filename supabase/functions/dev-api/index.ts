@@ -173,10 +173,17 @@ Deno.serve(async (req) => {
   const m = req.method
 
   try {
+    // Hard delete is intentionally unsupported — this API can archive, never
+    // destroy. Reject every DELETE explicitly (defense-in-depth: there are also
+    // no .delete() calls on tasks/requests/bugs anywhere below).
+    if (m === 'DELETE') {
+      return json({ error: 'Delete is not supported. Archive instead: POST /tasks/:id/archive' }, 405, cors)
+    }
+
     // GET /  → who am I + quick help
     if (seg.length === 0) {
       const { data: me } = await admin.from('profiles').select('id, full_name, email, role').eq('id', dev).maybeSingle()
-      return json({ ok: true, me, endpoints: ['GET /projects', 'GET /projects/:id/{tasks|requests|bugs}', 'POST /projects/:id/{tasks|requests|bugs}', 'GET /tasks/:id', 'PATCH /tasks/:id', 'POST /tasks/:id/comments', 'POST /tasks/:id/claim', 'POST /tasks/:id/subtasks'] }, 200, cors)
+      return json({ ok: true, me, endpoints: ['GET /projects', 'GET /projects/:id/{tasks|requests|bugs}', 'POST /projects/:id/{tasks|requests|bugs}', 'GET /tasks/:id', 'PATCH /tasks/:id', 'POST /tasks/:id/comments', 'POST /tasks/:id/claim', 'POST /tasks/:id/subtasks', 'POST /tasks/:id/{archive|unarchive}'], note: 'No delete — archive only.' }, 200, cors)
     }
 
     // GET /projects → projects the dev belongs to (+ role + counts)
@@ -345,6 +352,24 @@ Deno.serve(async (req) => {
         const { error } = await admin.from('task_assignees').insert({ task_id: tid, profile_id: dev, is_primary: false })
         if (error) return json({ error: error.message }, 400, cors)
         return json({ ok: true, claimed: true }, 201, cors)
+      }
+
+      // POST /tasks/:id/archive  → personal archive (hides it from YOUR lists
+      // only; collaborators still see it). Non-destructive, idempotent. This is
+      // the sanctioned alternative to delete.
+      if (seg.length === 3 && seg[2] === 'archive' && m === 'POST') {
+        const { error } = await admin.from('task_archives')
+          .upsert({ user_id: dev, task_id: tid }, { onConflict: 'user_id,task_id', ignoreDuplicates: true })
+        if (error) return json({ error: error.message }, 400, cors)
+        return json({ ok: true, archived: true }, 200, cors)
+      }
+
+      // POST /tasks/:id/unarchive  → undo a personal archive.
+      if (seg.length === 3 && seg[2] === 'unarchive' && m === 'POST') {
+        const { error } = await admin.from('task_archives')
+          .delete().eq('user_id', dev).eq('task_id', tid)
+        if (error) return json({ error: error.message }, 400, cors)
+        return json({ ok: true, unarchived: true }, 200, cors)
       }
 
       // POST /tasks/:id/subtasks  → create a child task (single-level only).
