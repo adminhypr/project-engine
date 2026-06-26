@@ -4,6 +4,8 @@ import {
   featureProgress,
   projectProgress,
   groupFeaturesByColumn,
+  groupFeaturesByStatus,
+  FEATURE_STATUSES,
   groupRequestsByStatus,
   REQUEST_STATUSES,
   BUG_STATUSES,
@@ -130,6 +132,29 @@ describe('groupFeaturesByColumn', () => {
   })
   it('handles empty inputs', () => {
     expect(groupFeaturesByColumn(null, null)).toEqual([])
+  })
+})
+
+describe('groupFeaturesByStatus', () => {
+  it('buckets features into the 4 canonical statuses in order, sorted by project_pos', () => {
+    const features = [
+      { id: 'f1', status: 'Done', project_pos: 2000 },
+      { id: 'f2', status: 'Not Started', project_pos: 1000 },
+      { id: 'f3', status: 'Done', project_pos: 1000 },
+    ]
+    const result = groupFeaturesByStatus(features)
+    expect(result.map(g => g.status)).toEqual(FEATURE_STATUSES)
+    expect(result.find(g => g.status === 'Done').features.map(f => f.id)).toEqual(['f3', 'f1'])
+    expect(result.find(g => g.status === 'In Progress').features).toEqual([])
+  })
+  it('folds an unknown/null status into Not Started', () => {
+    const result = groupFeaturesByStatus([{ id: 'x', status: 'Weird' }, { id: 'y' }])
+    expect(result.find(g => g.status === 'Not Started').features.map(f => f.id)).toEqual(['x', 'y'])
+  })
+  it('handles empty input', () => {
+    const result = groupFeaturesByStatus(null)
+    expect(result.map(g => g.status)).toEqual(FEATURE_STATUSES)
+    expect(result.every(g => g.features.length === 0)).toBe(true)
   })
 })
 

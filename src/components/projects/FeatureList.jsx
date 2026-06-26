@@ -1,21 +1,64 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
-import { featureProgress } from '../../lib/projectBoard'
+import { featureProgress, groupFeaturesByStatus } from '../../lib/projectBoard'
 import { ProgressBar } from './FeatureCard'
 import AssigneeSelect from './AssigneeSelect'
-import { CappedList } from './CappedList'
+import DataTable, { Avatar, StatusPill } from './DataTable'
 
-const STATUS_STYLES = {
-  'Not Started': 'bg-slate-100 text-slate-600 dark:bg-dark-border dark:text-slate-300',
-  'In Progress': 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
-  'Blocked':     'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300',
-  'Done':        'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+// Feature (task) status → monday group/pill color.
+const STATUS_COLOR = {
+  'Not Started': 'slate',
+  'In Progress': 'blue',
+  'Blocked':     'red',
+  'Done':        'emerald',
 }
+
+const COLUMNS = [
+  {
+    key: 'title', header: 'Item', width: 'minmax(220px,1fr)',
+    render: f => <span className="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">{f.title}</span>,
+  },
+  {
+    key: 'owner', header: 'Owner', width: '72px', align: 'center',
+    render: f => <Avatar profile={f.assignee} />,
+  },
+  {
+    key: 'status', header: 'Status', width: '132px',
+    render: f => <StatusPill label={f.status || 'Not Started'} color={STATUS_COLOR[f.status] || 'slate'} />,
+  },
+  {
+    key: 'progress', header: 'Progress', width: 'minmax(120px,160px)',
+    render: f => {
+      const { pct } = featureProgress(f)
+      return (
+        <span className="w-full flex items-center gap-2">
+          <span className="flex-1"><ProgressBar pct={pct} /></span>
+          <span className="text-[11px] text-slate-400 w-8 text-right shrink-0">{pct === null || pct === undefined ? '—' : `${pct}%`}</span>
+        </span>
+      )
+    },
+  },
+  {
+    key: 'due', header: 'Due', width: '92px', align: 'right',
+    render: f => {
+      const due = f.due_date ? new Date(f.due_date) : null
+      const overdue = due && f.status !== 'Done' && due < new Date()
+      return (
+        <span className={`text-xs ${overdue ? 'text-red-500 font-medium' : 'text-slate-400'}`}>
+          {due ? due.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}
+        </span>
+      )
+    },
+  },
+]
 
 export default function FeatureList({ features, firstColumnId, onAddFeature, onOpenFeature, members = [], currentUserId = null }) {
   const [title, setTitle] = useState('')
   const [assigneeId, setAssigneeId] = useState(currentUserId)
-  const sorted = [...features].sort((a, b) => (a.project_pos ?? 0) - (b.project_pos ?? 0))
+
+  const groups = groupFeaturesByStatus(features).map(g => ({
+    key: g.status, label: g.status, color: STATUS_COLOR[g.status] || 'slate', items: g.features,
+  }))
 
   const add = async () => {
     if (!title.trim()) return
@@ -23,46 +66,32 @@ export default function FeatureList({ features, firstColumnId, onAddFeature, onO
     setTitle('')
   }
 
-  return (
-    <div className="card divide-y divide-slate-100 dark:divide-dark-border">
-      {sorted.length === 0 && (
-        <p className="px-4 py-6 text-sm text-slate-400 text-center">No features yet. Add the first one below.</p>
+  const footer = (
+    <div className="px-3 py-2.5 flex items-center gap-2 border-t border-slate-100 dark:border-dark-border border-l-[3px] border-l-transparent">
+      <Plus size={14} className="text-slate-400 shrink-0" />
+      <input
+        value={title}
+        onChange={e => setTitle(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') add() }}
+        placeholder="Add a feature…"
+        className="form-input text-sm flex-1 border-0 bg-transparent focus:ring-0 px-0"
+      />
+      {title.trim() && (
+        <>
+          <AssigneeSelect members={members} value={assigneeId} onChange={setAssigneeId} className="text-[11px] py-1 px-1.5 w-auto shrink-0" />
+          <button onClick={add} className="btn-primary text-xs px-3 py-1 shrink-0">Add</button>
+        </>
       )}
-      <CappedList items={sorted}>{f => {
-        const { pct } = featureProgress(f)
-        const due = f.due_date ? new Date(f.due_date) : null
-        const overdue = due && f.status !== 'Done' && due < new Date()
-        return (
-          <button key={f.id} onClick={() => onOpenFeature(f)} className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-slate-50 dark:hover:bg-dark-hover transition-colors">
-            <span className="flex-1 min-w-0">
-              <span className="block text-sm font-medium text-slate-800 dark:text-slate-100 truncate">{f.title}</span>
-              <span className="block w-40 mt-1"><ProgressBar pct={pct} /></span>
-            </span>
-            <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0 ${STATUS_STYLES[f.status] || STATUS_STYLES['Not Started']}`}>{f.status}</span>
-            <span className="text-xs text-slate-500 dark:text-slate-400 w-24 truncate text-right shrink-0">{f.assignee?.full_name || '—'}</span>
-            <span className={`text-xs w-16 text-right shrink-0 ${overdue ? 'text-red-500 font-medium' : 'text-slate-400'}`}>
-              {due ? due.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}
-            </span>
-          </button>
-        )
-      }}</CappedList>
-
-      <div className="px-4 py-2.5 flex items-center gap-2">
-        <Plus size={14} className="text-slate-400" />
-        <input
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') add() }}
-          placeholder="Add a feature…"
-          className="form-input text-sm flex-1 border-0 bg-transparent focus:ring-0 px-0"
-        />
-        {title.trim() && (
-          <>
-            <AssigneeSelect members={members} value={assigneeId} onChange={setAssigneeId} className="text-[11px] py-1 px-1.5 w-auto shrink-0" />
-            <button onClick={add} className="btn-primary text-xs px-3 py-1">Add</button>
-          </>
-        )}
-      </div>
     </div>
+  )
+
+  return (
+    <DataTable
+      groups={groups}
+      columns={COLUMNS}
+      onRowClick={onOpenFeature}
+      footer={footer}
+      emptyText="No features yet. Add the first one below."
+    />
   )
 }
