@@ -19,6 +19,26 @@ x-hypr-key: hypr_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 - No Supabase anon key / JWT is required (the function is deployed `--no-verify-jwt`).
 - `Authorization: Bearer hypr_…` is also accepted as an alternative to `x-hypr-key`.
 
+## Quick start on a fresh session (no repo, no local setup)
+You do **NOT** need this repository, the `.env.local` file, the `cli/` folder, or any Supabase login to use the API. The only things required are:
+
+1. **The base URL** (above) — it's public and fixed.
+2. **A `hypr_` key** — generate one in the app at **Settings → API Keys** (any project member can; it's shown once).
+
+That's it. From a clean machine/session, hit the API directly with `curl` — no install, no auth dance:
+```bash
+KEY=hypr_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx          # your key
+BASE=https://urdzocyfxgyhqmoqbuvk.supabase.co/functions/v1/dev-api
+
+curl -s -H "x-hypr-key: $KEY" $BASE/                # confirms who the key belongs to
+curl -s -H "x-hypr-key: $KEY" $BASE/projects        # your projects
+```
+If `GET /` returns your name, you're in — jump to **curl examples** below for the rest.
+
+**Feeding this to an agent session:** paste (a) this doc and (b) one `hypr_` key. The agent then has everything it needs to operate the board with `curl` — no repo checkout, no service-role key, no environment files. The key alone is the credential, and it's scoped to your project memberships. (Prefer a throwaway key you revoke afterward, since it ends up in the session transcript.)
+
+The `hypr` CLI is just a convenience wrapper over these same calls — optional, and only needed if you want the nicer command UX (see the bottom of this doc).
+
 ## Permission model
 **Project membership.** If you're a member of a task's project, you can read it and work it (status, comments, claim). This is intentionally broader than the in-app per-task RLS (assignee/manager) and narrower than admin — it is exactly "the projects you're working on."
 
