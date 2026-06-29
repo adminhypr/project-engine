@@ -829,7 +829,7 @@ export default function TaskDetailPanel({ task, tasks = [], onClose, onUpdated }
               onChange={e => setNotes(e.target.value)}
               placeholder="Add or update notes..."
               rows={3}
-              className="form-input resize-none"
+              className="form-input resize-y min-h-[88px] max-h-[60vh]"
             />
           </div>
         )}
