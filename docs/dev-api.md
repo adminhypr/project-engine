@@ -59,7 +59,7 @@ The `hypr` CLI is just a convenience wrapper over these same calls — optional,
 | GET | `/projects/:id/bugs` | — | `{ bugs:[{id,title,status,severity,description}] }` |
 | **POST** | `/projects/:id/bugs` | `{title*, description?, severity?}` | `{ bug:{id,title,status,severity,description} }` (201) |
 | GET | `/tasks/:id` | — | `{ task, assignees:[{profile_id,is_primary,completed_at,profile:{full_name}}], comments:[{id,content,created_at,author:{full_name}}] }` |
-| PATCH | `/tasks/:id` | `{status?,urgency?,due_date?}` | `{ task:{id,task_id,title,status} }` — changing `status` **moves the board card** to the matching lane |
+| PATCH | `/tasks/:id` | `{status?,urgency?,due_date?,description?,title?}` | `{ task:{id,task_id,title,status,notes} }` — changing `status` **moves the board card** to the matching lane; `description` (alias `notes`) edits the card body |
 | **POST** | `/tasks/:id/subtasks` | `{title*, notes?, urgency?, due_date?, assignee_id?}` | `{ subtask:{id,task_id,title,status} }` (201) — single-level child |
 | GET | `/tasks/:id/comments` | — | `{ comments:[…] }` |
 | POST | `/tasks/:id/comments` | `{content}` | `{ comment:{id,content,created_at} }` (201) |
@@ -98,6 +98,7 @@ curl -s $H -X PATCH $BASE/tasks/T-AB12C3 -H content-type:application/json -d '{"
 Notes:
 - Lane mapping comes from each project's columns, so exact lane names vary per project (above is the common setup). If a lane has **no** status mapping, you can't reach it via the API — drag it in the app.
 - The API can't target a lane by id (`project_column_id` is ignored on PATCH) — always move by status.
+- **Editing the card description:** a Feature card's body is stored in `tasks.notes`. PATCH with `{"description":"…"}` (or `{"notes":"…"}`) to overwrite it; send `""` to clear it. You can also rename a card with `{"title":"…"}`. (Request/bug `description` is on those rows — edit those in-app for now.)
 - **Heads-up:** an already-open board won't refresh on an API/CLI change — reload the page to see the card in its new lane.
 - All created rows are owned by you (`requester_id` / `reporter_id` / `assigned_by`).
 
@@ -165,6 +166,11 @@ curl -s $H -X POST $BASE/tasks/T-AB12C3/subtasks \
 # move a task to In Progress
 curl -s $H -X PATCH $BASE/tasks/T-AB12C3 \
   -H content-type:application/json -d '{"status":"In Progress"}'
+
+# edit a card's description (and optionally rename it)
+curl -s $H -X PATCH $BASE/tasks/T-AB12C3 \
+  -H content-type:application/json \
+  -d '{"description":"Repro steps:\n1. open Contact tab\n2. no EDIT button","title":"Contact tab needs EDIT button"}'
 
 # comment
 curl -s $H -X POST $BASE/tasks/T-AB12C3/comments \

@@ -312,15 +312,22 @@ Deno.serve(async (req) => {
         return json({ task, assignees: assignees || [], comments: comments || [] }, 200, cors)
       }
 
-      // PATCH /tasks/:id  { status?, urgency?, due_date? }
+      // PATCH /tasks/:id  { status?, urgency?, due_date?, description? | notes?, title? }
+      // A Dev Projects "card" is a task row; its card description lives in tasks.notes.
       if (seg.length === 2 && m === 'PATCH') {
         const body = await req.json().catch(() => ({}))
         const patch: Record<string, unknown> = {}
         if (typeof body.status === 'string') patch.status = body.status
         if (typeof body.urgency === 'string') patch.urgency = body.urgency
         if ('due_date' in body) patch.due_date = body.due_date || null
+        if (typeof body.title === 'string' && body.title.trim()) patch.title = body.title.trim()
+        // Card/task description is stored in `notes`; accept either key.
+        if ('description' in body || 'notes' in body) {
+          const desc = (body.description ?? body.notes)
+          patch.notes = typeof desc === 'string' ? (desc.trim() || null) : null
+        }
         if (Object.keys(patch).length === 0) return json({ error: 'Nothing to update' }, 400, cors)
-        const { data, error } = await admin.from('tasks').update(patch).eq('id', tid).select('id, task_id, title, status').single()
+        const { data, error } = await admin.from('tasks').update(patch).eq('id', tid).select('id, task_id, title, status, notes').single()
         if (error) return json({ error: error.message }, 400, cors)
         return json({ task: data }, 200, cors)
       }
