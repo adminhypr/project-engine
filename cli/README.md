@@ -39,11 +39,17 @@ hypr task T-AB12C3                  # task detail + comments
 hypr task T-AB12C3 start            # set In Progress  (done|start|block|todo)
 hypr task T-AB12C3 done             # mark Done
 hypr task T-AB12C3 claim            # self-assign
+hypr task T-AB12C3 desc "new body"  # edit the card description
+hypr task T-AB12C3 desc - < notes.md  # …or read a multi-line body from stdin
+hypr task T-AB12C3 title "Rename"   # rename the card
+hypr request <uuid> desc "text"     # edit a feature request (desc|title)
+hypr bug <uuid> desc "text"         # edit a bug (desc|title|sev)
+hypr bug <uuid> sev High            # change bug severity
 hypr comment T-AB12C3 "on it"       # add a comment
 hypr <cmd> --json                   # raw JSON (pipe to jq)
 ```
 
-`<project>` matches by name (fuzzy) or id. Task ids accept the human `T-…` form or a uuid.
+`<project>` matches by name (fuzzy) or id. Task ids accept the human `T-…` form or a uuid. **Requests and bugs are keyed by uuid** — copy it from `hypr requests <project>` / `hypr bugs <project>` (the dim id next to each row). For descriptions, an empty string (`desc ""`) clears the field.
 
 ## Config / overrides
 

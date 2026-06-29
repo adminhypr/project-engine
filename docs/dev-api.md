@@ -201,6 +201,10 @@ hypr bugs <project>
 hypr task <id>                  # detail + comments
 hypr task <id> done|start|block|todo   # sets status → also moves the board lane
 hypr task <id> claim
+hypr task <id> desc "text"      # edit card description (desc - reads stdin)
+hypr task <id> title "text"     # rename the card
+hypr request <uuid> desc|title "text"  # edit a feature request
+hypr bug <uuid> desc|title|sev "text"  # edit a bug
 hypr comment <id> "message"
 hypr <cmd> --json               # raw JSON
 ```
@@ -209,4 +213,4 @@ Config in `~/.config/hypr/config.json`; override with `HYPR_API_KEY` / `HYPR_API
 ## What the API does NOT do
 Scoped to project work only. You can create and work **tasks / requests / bugs / subtasks** inside your projects, and **post messages** to chats/Campfires you belong to, but it **cannot**: **delete anything** (archive only — see above), read message history / DMs, create/delete projects, manage members, manage users/teams/roles, or touch projects/conversations you're not a member of. There is no admin surface here by design.
 
-> The `hypr` CLI wrapper doesn't expose the create endpoints yet — use `curl` (above) for creates for now; read/update/comment/claim are wired in the CLI.
+> The `hypr` CLI wrapper covers read / status-move / **description+title edits** / comment / claim. The **create** endpoints (new task/request/bug/subtask) and **chat posting** aren't wired into the CLI yet — use `curl` (above) for those.

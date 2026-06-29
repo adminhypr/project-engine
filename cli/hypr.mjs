@@ -56,6 +56,20 @@ function ask(question) {
   return new Promise((resolve) => rl.question(question, (a) => { rl.close(); resolve(a.trim()) }))
 }
 
+// Text for desc/title edits. `parts` are the trailing argv words; pass a single
+// `-` to read the whole body from stdin (handy for multi-line descriptions:
+// `hypr task T-X desc - < notes.md`). An empty result clears the field.
+function readText(parts) {
+  if (parts.length === 1 && parts[0] === '-') {
+    return new Promise((resolve) => {
+      let s = ''
+      process.stdin.setEncoding('utf8')
+      process.stdin.on('data', (d) => { s += d }).on('end', () => resolve(s.replace(/\n+$/, '')))
+    })
+  }
+  return Promise.resolve(parts.join(' '))
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────
 async function resolveProject(needle) {
   const { projects } = await api('/projects')
@@ -76,8 +90,39 @@ function printGrouped(label, items, statusKey, extra = () => '') {
     const rows = items.filter((i) => i[statusKey] === st)
     const col = STATUS_COLOR[st] || ((s) => s)
     console.log(`  ${col(st)} ${dim(`(${rows.length})`)}`)
-    for (const r of rows) console.log(`    ${extra(r)}${r.task_id ? dim(`${r.task_id}  `) : ''}${r.title}`)
+    // Show the id so rows are addressable: tasks have a short T-… id; requests/
+    // bugs are keyed by uuid, so print that (it's what `hypr request/bug` needs).
+    for (const r of rows) {
+      const idLabel = r.task_id || r.id
+      console.log(`    ${extra(r)}${idLabel ? dim(`${idLabel}  `) : ''}${r.title}`)
+    }
   }
+}
+
+// Edit a backlog request/bug via PATCH /{requests|bugs}/:id. `:id` is the uuid
+// from the list. Supports desc (alias notes), title, and — for bugs — severity.
+async function editLaneRow(lane, noun) {
+  const id = args[0], sub = args[1]
+  const usage = `Usage: hypr ${noun} <id> desc "text" | title "text"${noun === 'bug' ? ' | sev <Critical|High|Medium|Low>' : ''}\n  (id is the uuid from \`hypr ${lane}\`; use \`desc -\` to read from stdin)`
+  if (!id || !sub) { console.error(red(usage)); process.exit(1) }
+  const body = {}
+  if (sub === 'desc' || sub === 'describe' || sub === 'notes') {
+    body.description = await readText(args.slice(2))
+  } else if (sub === 'title' || sub === 'rename') {
+    const t = (await readText(args.slice(2))).trim()
+    if (!t) { console.error(red(usage)); process.exit(1) }
+    body.title = t
+  } else if (noun === 'bug' && (sub === 'sev' || sub === 'severity')) {
+    if (!args[2]) { console.error(red(usage)); process.exit(1) }
+    body.severity = args[2]
+  } else { console.error(red(usage)); process.exit(1) }
+  const res = await api(`/${lane}/${id}`, { method: 'PATCH', body })
+  const row = res.request || res.bug
+  if (jsonFlag) return out(row)
+  const field = body.severity ? `severity → ${body.severity}`
+    : body.title ? 'renamed'
+    : `description ${body.description ? 'updated' : 'cleared'}`
+  console.log(green(`✓ ${noun} ${field}`))
 }
 
 // ── commands ──────────────────────────────────────────────────────────────
@@ -143,11 +188,22 @@ const cmds = {
     if (!id) { console.error(red('Usage: hypr task <id> [done|start|block|claim]')); process.exit(1) }
 
     if (sub === 'claim') { await api(`/tasks/${id}/claim`, { method: 'POST' }); console.log(green('✓ Claimed')); return }
+    if (sub === 'desc' || sub === 'describe' || sub === 'notes') {
+      const text = await readText(args.slice(2))
+      const { task } = await api(`/tasks/${id}`, { method: 'PATCH', body: { description: text } })
+      console.log(green(`✓ ${task.task_id} description ${text ? 'updated' : 'cleared'}`)); return
+    }
+    if (sub === 'title' || sub === 'rename') {
+      const text = (await readText(args.slice(2))).trim()
+      if (!text) { console.error(red('Usage: hypr task <id> title "new title"')); process.exit(1) }
+      const { task } = await api(`/tasks/${id}`, { method: 'PATCH', body: { title: text } })
+      console.log(green(`✓ ${task.task_id} renamed`)); return
+    }
     if (sub && STATUS_ALIAS[sub]) {
       const { task } = await api(`/tasks/${id}`, { method: 'PATCH', body: { status: STATUS_ALIAS[sub] } })
       console.log(green(`✓ ${task.task_id} → ${STATUS_ALIAS[sub]}`)); return
     }
-    if (sub) { console.error(red(`Unknown action "${sub}". Try: done | start | block | todo | claim`)); process.exit(1) }
+    if (sub) { console.error(red(`Unknown action "${sub}". Try: done | start | block | todo | claim | desc | title`)); process.exit(1) }
 
     const d = await api(`/tasks/${id}`)
     if (jsonFlag) return out(d)
@@ -170,6 +226,10 @@ const cmds = {
     console.log(green('✓ Comment added'))
   },
 
+  // Edit a backlog request/bug. id is the uuid shown in `hypr requests`/`hypr bugs`.
+  async request() { await editLaneRow('requests', 'request') },
+  async bug() { await editLaneRow('bugs', 'bug') },
+
   help() {
     console.log(`${bold('hypr')} — work your Dev Projects from the terminal
 
@@ -182,6 +242,10 @@ const cmds = {
   ${bold('hypr task')} <id>              task detail + comments  (id = T-ABC123 or uuid)
   ${bold('hypr task')} <id> done|start|block|todo
   ${bold('hypr task')} <id> claim        self-assign
+  ${bold('hypr task')} <id> desc "text"  edit the card description  (desc - reads stdin)
+  ${bold('hypr task')} <id> title "text" rename the card
+  ${bold('hypr request')} <id> desc|title "text"      edit a feature request  (id = uuid)
+  ${bold('hypr bug')} <id> desc|title|sev "text"      edit a bug  (id = uuid)
   ${bold('hypr comment')} <id> "msg"     add a comment
   ${dim('--json')}                       raw JSON output
 
