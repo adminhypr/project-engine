@@ -56,8 +56,10 @@ The `hypr` CLI is just a convenience wrapper over these same calls — optional,
 | **POST** | `/projects/:id/tasks` | `{title*, notes?, urgency?, due_date?, status?, column_id?, assignee_id?}` | `{ task:{id,task_id,title,status} }` (201) — creates a **Feature card** |
 | GET | `/projects/:id/requests` | — | `{ requests:[{id,title,status,description}] }` |
 | **POST** | `/projects/:id/requests` | `{title*, description?}` | `{ request:{id,title,status,description} }` (201) |
+| PATCH | `/requests/:id` | `{description?,title?}` | `{ request:{id,title,status,description} }` — edit a request (`:id` is the uuid) |
 | GET | `/projects/:id/bugs` | — | `{ bugs:[{id,title,status,severity,description}] }` |
 | **POST** | `/projects/:id/bugs` | `{title*, description?, severity?}` | `{ bug:{id,title,status,severity,description} }` (201) |
+| PATCH | `/bugs/:id` | `{description?,title?,severity?}` | `{ bug:{id,title,status,severity,description} }` — edit a bug (`:id` is the uuid) |
 | GET | `/tasks/:id` | — | `{ task, assignees:[{profile_id,is_primary,completed_at,profile:{full_name}}], comments:[{id,content,created_at,author:{full_name}}] }` |
 | PATCH | `/tasks/:id` | `{status?,urgency?,due_date?,description?,title?}` | `{ task:{id,task_id,title,status,notes} }` — changing `status` **moves the board card** to the matching lane; `description` (alias `notes`) edits the card body |
 | **POST** | `/tasks/:id/subtasks` | `{title*, notes?, urgency?, due_date?, assignee_id?}` | `{ subtask:{id,task_id,title,status} }` (201) — single-level child |
@@ -98,7 +100,8 @@ curl -s $H -X PATCH $BASE/tasks/T-AB12C3 -H content-type:application/json -d '{"
 Notes:
 - Lane mapping comes from each project's columns, so exact lane names vary per project (above is the common setup). If a lane has **no** status mapping, you can't reach it via the API — drag it in the app.
 - The API can't target a lane by id (`project_column_id` is ignored on PATCH) — always move by status.
-- **Editing the card description:** a Feature card's body is stored in `tasks.notes`. PATCH with `{"description":"…"}` (or `{"notes":"…"}`) to overwrite it; send `""` to clear it. You can also rename a card with `{"title":"…"}`. (Request/bug `description` is on those rows — edit those in-app for now.)
+- **Editing the card description:** a Feature card's body is stored in `tasks.notes`. PATCH with `{"description":"…"}` (or `{"notes":"…"}`) to overwrite it; send `""` to clear it. You can also rename a card with `{"title":"…"}`.
+- **Editing requests / bugs:** PATCH `/requests/:id` or `/bugs/:id` with `{"description":"…"}` (alias `notes`) and/or `{"title":"…"}`; bugs also take `{"severity":"…"}`. Here `:id` is the **uuid** from the `GET /projects/:id/{requests,bugs}` list (these rows have no `T-…` short id). `""` clears the description. Status moves stay in-app (no lane mapping for these lanes).
 - **Heads-up:** an already-open board won't refresh on an API/CLI change — reload the page to see the card in its new lane.
 - All created rows are owned by you (`requester_id` / `reporter_id` / `assigned_by`).
 
@@ -171,6 +174,14 @@ curl -s $H -X PATCH $BASE/tasks/T-AB12C3 \
 curl -s $H -X PATCH $BASE/tasks/T-AB12C3 \
   -H content-type:application/json \
   -d '{"description":"Repro steps:\n1. open Contact tab\n2. no EDIT button","title":"Contact tab needs EDIT button"}'
+
+# edit a feature request's description (uuid id from the requests list)
+curl -s $H -X PATCH $BASE/requests/3f1c… \
+  -H content-type:application/json -d '{"description":"Clarified scope"}'
+
+# edit a bug's description + severity
+curl -s $H -X PATCH $BASE/bugs/9a2b… \
+  -H content-type:application/json -d '{"description":"Only on Safari","severity":"High"}'
 
 # comment
 curl -s $H -X POST $BASE/tasks/T-AB12C3/comments \

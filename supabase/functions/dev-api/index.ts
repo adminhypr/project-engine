@@ -183,7 +183,7 @@ Deno.serve(async (req) => {
     // GET /  → who am I + quick help
     if (seg.length === 0) {
       const { data: me } = await admin.from('profiles').select('id, full_name, email, role').eq('id', dev).maybeSingle()
-      return json({ ok: true, me, endpoints: ['GET /projects', 'GET /projects/:id/{tasks|requests|bugs}', 'POST /projects/:id/{tasks|requests|bugs}', 'GET /tasks/:id', 'PATCH /tasks/:id', 'POST /tasks/:id/comments', 'POST /tasks/:id/claim', 'POST /tasks/:id/subtasks', 'POST /tasks/:id/{archive|unarchive}', 'POST /conversations/:id/messages'], note: 'No delete — archive only.' }, 200, cors)
+      return json({ ok: true, me, endpoints: ['GET /projects', 'GET /projects/:id/{tasks|requests|bugs}', 'POST /projects/:id/{tasks|requests|bugs}', 'GET /tasks/:id', 'PATCH /tasks/:id', 'PATCH /requests/:id', 'PATCH /bugs/:id', 'POST /tasks/:id/comments', 'POST /tasks/:id/claim', 'POST /tasks/:id/subtasks', 'POST /tasks/:id/{archive|unarchive}', 'POST /conversations/:id/messages'], note: 'No delete — archive only.' }, 200, cors)
     }
 
     // GET /projects → projects the dev belongs to (+ role + counts)
@@ -402,6 +402,35 @@ Deno.serve(async (req) => {
         if (res.error) return json({ error: res.error }, 400, cors)
         return json({ subtask: res.task }, 201, cors)
       }
+    }
+
+    // PATCH /requests/:id  { description? | notes?, title? }
+    // PATCH /bugs/:id       { description? | notes?, title?, severity? }
+    // Lightweight backlog rows (uuid-keyed). Their card body is the `description`
+    // column (not `notes` — that's tasks). Membership = the row's project.
+    if ((seg[0] === 'requests' || seg[0] === 'bugs') && seg.length === 2 && m === 'PATCH') {
+      const isReq = seg[0] === 'requests'
+      const table = isReq ? 'feature_requests' : 'bugs'
+      const noun = isReq ? 'request' : 'bug'
+      const rid = seg[1]
+      const { data: row } = await admin.from(table).select('id, project_id').eq('id', rid).maybeSingle()
+      if (!row) return json({ error: `${noun[0].toUpperCase()}${noun.slice(1)} not found` }, 404, cors)
+      if (!(await isMember(dev, row.project_id))) return json({ error: `Not a member of this ${noun}'s project` }, 403, cors)
+
+      const body = await req.json().catch(() => ({}))
+      const patch: Record<string, unknown> = {}
+      if (typeof body.title === 'string' && body.title.trim()) patch.title = body.title.trim()
+      if ('description' in body || 'notes' in body) {
+        const desc = (body.description ?? body.notes)
+        patch.description = typeof desc === 'string' ? (desc.trim() || null) : null
+      }
+      if (!isReq && typeof body.severity === 'string' && BUG_SEVERITIES.includes(body.severity)) patch.severity = body.severity
+      if (Object.keys(patch).length === 0) return json({ error: 'Nothing to update' }, 400, cors)
+
+      const sel = isReq ? 'id, title, status, description' : 'id, title, status, severity, description'
+      const { data, error } = await admin.from(table).update(patch).eq('id', rid).select(sel).single()
+      if (error) return json({ error: error.message }, 400, cors)
+      return json(isReq ? { request: data } : { bug: data }, 200, cors)
     }
 
     // POST /conversations/:id/messages  → post a chat message as the key owner.
