@@ -54,6 +54,7 @@ The `hypr` CLI is just a convenience wrapper over these same calls — optional,
 | GET | `/projects` | — | `{ projects:[{id,name,status,target_date,role}] }` — your projects |
 | GET | `/projects/:id/tasks` | — | `{ tasks:[{id,task_id,title,status,urgency,due_date,assigned_to,project_column_id,project_pos}] }` |
 | **POST** | `/projects/:id/tasks` | `{title*, notes?, urgency?, due_date?, status?, column_id?, assignee_id?}` | `{ task:{id,task_id,title,status} }` (201) — creates a **Feature card** |
+| GET | `/projects/:id/members` | — | `{ members:[{id,full_name,email,project_role}] }` — who's assignable |
 | GET | `/projects/:id/requests` | — | `{ requests:[{id,title,status,description}] }` |
 | **POST** | `/projects/:id/requests` | `{title*, description?}` | `{ request:{id,title,status,description} }` (201) |
 | PATCH | `/requests/:id` | `{description?,title?}` | `{ request:{id,title,status,description} }` — edit a request (`:id` is the uuid) |
@@ -66,6 +67,7 @@ The `hypr` CLI is just a convenience wrapper over these same calls — optional,
 | GET | `/tasks/:id/comments` | — | `{ comments:[…] }` |
 | POST | `/tasks/:id/comments` | `{content}` | `{ comment:{id,content,created_at} }` (201) |
 | POST | `/tasks/:id/claim` | — | `{ ok, claimed }` or `{ ok, already }` — self-assign |
+| **POST** | `/tasks/:id/assign` | `{assignee*, primary?}` | `{ ok, assigned:{id,full_name,email}, already, primary }` — assign a member **by name, email, or uuid** |
 | POST | `/tasks/:id/archive` | — | `{ ok, archived }` — **personal** archive (hides from your lists; non-destructive) |
 | POST | `/tasks/:id/unarchive` | — | `{ ok, unarchived }` — undo a personal archive |
 | POST | `/conversations/:id/messages` | `{content*}` | `{ message:{id,created_at} }` (201) — post a chat / Campfire message |
@@ -102,6 +104,7 @@ Notes:
 - The API can't target a lane by id (`project_column_id` is ignored on PATCH) — always move by status.
 - **Editing the card description:** a Feature card's body is stored in `tasks.notes`. PATCH with `{"description":"…"}` (or `{"notes":"…"}`) to overwrite it; send `""` to clear it. You can also rename a card with `{"title":"…"}`.
 - **Editing requests / bugs:** PATCH `/requests/:id` or `/bugs/:id` with `{"description":"…"}` (alias `notes`) and/or `{"title":"…"}`; bugs also take `{"severity":"…"}`. Here `:id` is the **uuid** from the `GET /projects/:id/{requests,bugs}` list (these rows have no `T-…` short id). `""` clears the description. Status moves stay in-app (no lane mapping for these lanes).
+- **Assigning by name (prompt-friendly):** `POST /tasks/:id/assign {"assignee":"john"}` resolves the name against the **project's members** — a case-insensitive fragment of the full name or the email local-part (full email works too; the shared domain is ignored so `"an"` won't match everyone). One match → assigned (added to `task_assignees`; they get the normal bell/email notification). Zero or 2+ matches → `400` listing the candidates, so an LLM/CLI can retry with a tighter needle. Add `"primary": true` to also make them THE assignee (`tasks.assigned_to`). The create endpoints (`POST …/tasks`, `…/subtasks`) accept the same `assignee` name resolution. Idempotent — re-assigning an existing assignee returns `already: true`.
 - **Heads-up:** an already-open board won't refresh on an API/CLI change — reload the page to see the card in its new lane.
 - All created rows are owned by you (`requester_id` / `reporter_id` / `assigned_by`).
 
@@ -183,6 +186,19 @@ curl -s $H -X PATCH $BASE/requests/3f1c… \
 curl -s $H -X PATCH $BASE/bugs/9a2b… \
   -H content-type:application/json -d '{"description":"Only on Safari","severity":"High"}'
 
+# see who's assignable, then assign by name
+curl -s $H $BASE/projects/$PID/members
+curl -s $H -X POST $BASE/tasks/T-AB12C3/assign \
+  -H content-type:application/json -d '{"assignee":"john"}'
+
+# make someone the primary assignee
+curl -s $H -X POST $BASE/tasks/T-AB12C3/assign \
+  -H content-type:application/json -d '{"assignee":"michelle","primary":true}'
+
+# create a task already assigned to a member by name
+curl -s $H -X POST $BASE/projects/$PID/tasks \
+  -H content-type:application/json -d '{"title":"Fix login 500","assignee":"rap"}'
+
 # comment
 curl -s $H -X POST $BASE/tasks/T-AB12C3/comments \
   -H content-type:application/json -d '{"content":"on it"}'
@@ -201,6 +217,8 @@ hypr bugs <project>
 hypr task <id>                  # detail + comments
 hypr task <id> done|start|block|todo   # sets status → also moves the board lane
 hypr task <id> claim
+hypr task <id> assign <who>     # assign by name/email; add --primary to make them THE assignee
+hypr members <project>          # who's assignable
 hypr task <id> desc "text"      # edit card description (desc - reads stdin)
 hypr task <id> title "text"     # rename the card
 hypr request <uuid> desc|title "text"  # edit a feature request

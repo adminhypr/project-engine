@@ -39,6 +39,9 @@ hypr task T-AB12C3                  # task detail + comments
 hypr task T-AB12C3 start            # set In Progress  (done|start|block|todo)
 hypr task T-AB12C3 done             # mark Done
 hypr task T-AB12C3 claim            # self-assign
+hypr members PMAPMS                 # who's assignable in a project
+hypr task T-AB12C3 assign john      # assign to a member by name/email fragment
+hypr task T-AB12C3 assign michelle --primary   # …and make them THE assignee
 hypr task T-AB12C3 desc "new body"  # edit the card description
 hypr task T-AB12C3 desc - < notes.md  # …or read a multi-line body from stdin
 hypr task T-AB12C3 title "Rename"   # rename the card

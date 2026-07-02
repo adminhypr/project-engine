@@ -130,7 +130,8 @@ const STATUS_ALIAS = { done: 'Done', start: 'In Progress', progress: 'In Progres
 
 const [cmd, ...rest] = process.argv.slice(2)
 const jsonFlag = rest.includes('--json')
-const args = rest.filter((a) => a !== '--json')
+const primaryFlag = rest.includes('--primary')
+const args = rest.filter((a) => a !== '--json' && a !== '--primary')
 
 const out = (obj) => console.log(JSON.stringify(obj, null, 2))
 
@@ -181,6 +182,14 @@ const cmds = {
     printGrouped('BUGS', bugs, 'status', (b) => (SEV_COLOR[b.severity] || dim)(`[${b.severity}] `))
     console.log('')
   },
+  async members() {
+    const project = await resolveProject(args[0] || '')
+    const { members } = await api(`/projects/${project.id}/members`)
+    if (jsonFlag) return out(members)
+    console.log(`\n${bold(cyan(project.name))} ${dim('· members')} ${dim(`(${members.length})`)}\n`)
+    for (const m of members) console.log(`  ${bold(m.full_name || '—')}  ${dim(m.email || '')}  ${dim(`[${m.project_role}]`)}`)
+    console.log('')
+  },
 
   async task() {
     const id = args[0]
@@ -188,6 +197,14 @@ const cmds = {
     if (!id) { console.error(red('Usage: hypr task <id> [done|start|block|claim]')); process.exit(1) }
 
     if (sub === 'claim') { await api(`/tasks/${id}/claim`, { method: 'POST' }); console.log(green('✓ Claimed')); return }
+    if (sub === 'assign') {
+      const who = args.slice(2).join(' ').trim()
+      if (!who) { console.error(red('Usage: hypr task <id> assign <name|email|uuid> [--primary]')); process.exit(1) }
+      const r = await api(`/tasks/${id}/assign`, { method: 'POST', body: { assignee: who, primary: primaryFlag } })
+      if (jsonFlag) return out(r)
+      console.log(green(`✓ Assigned to ${r.assigned.full_name || r.assigned.email}${r.primary ? ' (primary)' : ''}${r.already ? dim(' — was already an assignee') : ''}`))
+      return
+    }
     if (sub === 'desc' || sub === 'describe' || sub === 'notes') {
       const text = await readText(args.slice(2))
       const { task } = await api(`/tasks/${id}`, { method: 'PATCH', body: { description: text } })
@@ -242,6 +259,8 @@ const cmds = {
   ${bold('hypr task')} <id>              task detail + comments  (id = T-ABC123 or uuid)
   ${bold('hypr task')} <id> done|start|block|todo
   ${bold('hypr task')} <id> claim        self-assign
+  ${bold('hypr task')} <id> assign <who> assign to a member by name/email  (--primary)
+  ${bold('hypr members')} <project>      who's assignable in a project
   ${bold('hypr task')} <id> desc "text"  edit the card description  (desc - reads stdin)
   ${bold('hypr task')} <id> title "text" rename the card
   ${bold('hypr request')} <id> desc|title "text"      edit a feature request  (id = uuid)

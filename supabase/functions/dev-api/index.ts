@@ -64,6 +64,39 @@ async function resolveTask(ident: string): Promise<{ id: string; project_id: str
   return data ?? null
 }
 
+type Member = { id: string; full_name: string | null; email: string | null; project_role: string }
+
+// Project members with their profile info (two queries — avoids FK-hint games).
+async function listMembers(projectId: string): Promise<Member[]> {
+  const { data: mem } = await admin.from('project_members').select('profile_id, role').eq('project_id', projectId)
+  const ids = (mem || []).map((r) => r.profile_id)
+  if (!ids.length) return []
+  const roleOf = new Map((mem || []).map((r) => [r.profile_id, r.role]))
+  const { data: profiles } = await admin.from('profiles').select('id, full_name, email').in('id', ids)
+  return (profiles || []).map((p) => ({ ...p, project_role: roleOf.get(p.id) ?? 'member' }))
+}
+
+// Resolve `needle` (uuid, or a case-insensitive name/email fragment) to exactly
+// one project member. Returns { member } | { error } — ambiguity lists the
+// candidates so a caller (human or LLM) can retry with a tighter needle.
+async function resolveMember(projectId: string, needle: string): Promise<{ member?: Member; error?: string }> {
+  const members = await listMembers(projectId)
+  if (/^[0-9a-fA-F-]{36}$/.test(needle)) {
+    const m = members.find((x) => x.id === needle)
+    return m ? { member: m } : { error: 'That profile is not a member of this project' }
+  }
+  const q = needle.trim().toLowerCase()
+  if (!q) return { error: 'assignee required (uuid, name, or email)' }
+  // Full-email match only when the needle has an @; otherwise match the name or
+  // the email LOCAL PART — a shared domain would make every fragment ambiguous.
+  const matches = members.filter((x) => q.includes('@')
+    ? (x.email || '').toLowerCase() === q
+    : (x.full_name || '').toLowerCase().includes(q) || (x.email || '').toLowerCase().split('@')[0].includes(q))
+  if (matches.length === 1) return { member: matches[0] }
+  if (matches.length === 0) return { error: `No project member matching "${needle}". Members: ${members.map((x) => x.full_name || x.email).join(', ')}` }
+  return { error: `"${needle}" is ambiguous: ${matches.map((x) => `${x.full_name} <${x.email}>`).join(', ')}` }
+}
+
 const TASK_STATUSES = ['Not Started', 'In Progress', 'Blocked', 'Done']
 const TASK_URGENCIES = ['Low', 'Med', 'High', 'Urgent']
 const BUG_SEVERITIES = ['Critical', 'High', 'Medium', 'Low']
@@ -183,7 +216,7 @@ Deno.serve(async (req) => {
     // GET /  → who am I + quick help
     if (seg.length === 0) {
       const { data: me } = await admin.from('profiles').select('id, full_name, email, role').eq('id', dev).maybeSingle()
-      return json({ ok: true, me, endpoints: ['GET /projects', 'GET /projects/:id/{tasks|requests|bugs}', 'POST /projects/:id/{tasks|requests|bugs}', 'GET /tasks/:id', 'PATCH /tasks/:id', 'PATCH /requests/:id', 'PATCH /bugs/:id', 'POST /tasks/:id/comments', 'POST /tasks/:id/claim', 'POST /tasks/:id/subtasks', 'POST /tasks/:id/{archive|unarchive}', 'POST /conversations/:id/messages'], note: 'No delete — archive only.' }, 200, cors)
+      return json({ ok: true, me, endpoints: ['GET /projects', 'GET /projects/:id/{tasks|requests|bugs|members}', 'POST /projects/:id/{tasks|requests|bugs}', 'GET /tasks/:id', 'PATCH /tasks/:id', 'PATCH /requests/:id', 'PATCH /bugs/:id', 'POST /tasks/:id/comments', 'POST /tasks/:id/claim', 'POST /tasks/:id/assign', 'POST /tasks/:id/subtasks', 'POST /tasks/:id/{archive|unarchive}', 'POST /conversations/:id/messages'], note: 'No delete — archive only.' }, 200, cors)
     }
 
     // GET /projects → projects the dev belongs to (+ role + counts)
@@ -217,6 +250,9 @@ Deno.serve(async (req) => {
           .select('id, title, status, severity, description').eq('project_id', pid).order('pos')
         return json({ bugs: data || [] }, 200, cors)
       }
+      if (lane === 'members') {
+        return json({ members: await listMembers(pid) }, 200, cors)
+      }
       return json({ error: 'Unknown lane' }, 404, cors)
     }
 
@@ -249,9 +285,11 @@ Deno.serve(async (req) => {
         }
         const urgency = TASK_URGENCIES.includes(body.urgency) ? body.urgency : 'Med'
         let assignedTo = dev
-        if (typeof body.assignee_id === 'string' && body.assignee_id) {
-          if (!(await isMember(body.assignee_id, pid))) return json({ error: 'assignee_id is not a member of this project' }, 400, cors)
-          assignedTo = body.assignee_id
+        const assigneeNeedle = String(body.assignee_id || body.assignee || '').trim()
+        if (assigneeNeedle) {
+          const { member, error: resolveErr } = await resolveMember(pid, assigneeNeedle)
+          if (!member) return json({ error: resolveErr }, 400, cors)
+          assignedTo = member.id
         }
         const res = await insertTask({
           dev, title, notes: description, urgency, dueDate: body.due_date || null, status,
@@ -361,6 +399,40 @@ Deno.serve(async (req) => {
         return json({ ok: true, claimed: true }, 201, cors)
       }
 
+      // POST /tasks/:id/assign  { assignee* (uuid | name | email), primary? }
+      // Assign the card to another project member — the prompt-friendly verb
+      // ("assign this to John"). Name/email fragments resolve against the
+      // project's member list; ambiguity 400s with the candidates. Adds to
+      // task_assignees (idempotent; the 062 trigger notifies the member).
+      // primary:true also makes them THE assignee (tasks.assigned_to).
+      if (seg.length === 3 && seg[2] === 'assign' && m === 'POST') {
+        const body = await req.json().catch(() => ({}))
+        const needle = String(body.assignee_id || body.assignee || '').trim()
+        if (!needle) return json({ error: 'assignee required (uuid, name, or email)' }, 400, cors)
+        const { member, error: resolveErr } = await resolveMember(pid, needle)
+        if (!member) return json({ error: resolveErr }, 400, cors)
+
+        const { data: existing } = await admin.from('task_assignees')
+          .select('task_id').eq('task_id', tid).eq('profile_id', member.id).maybeSingle()
+        if (!existing) {
+          const { error } = await admin.from('task_assignees').insert({ task_id: tid, profile_id: member.id, is_primary: false })
+          if (error) return json({ error: error.message }, 400, cors)
+        }
+        if (body.primary === true) {
+          // Keep the denormalized primary (tasks.assigned_to) + is_primary flags in sync.
+          const { error: pErr } = await admin.from('tasks').update({ assigned_to: member.id }).eq('id', tid)
+          if (pErr) return json({ error: pErr.message }, 400, cors)
+          await admin.from('task_assignees').update({ is_primary: false }).eq('task_id', tid).neq('profile_id', member.id)
+          await admin.from('task_assignees').update({ is_primary: true }).eq('task_id', tid).eq('profile_id', member.id)
+        }
+        return json({
+          ok: true,
+          assigned: { id: member.id, full_name: member.full_name, email: member.email },
+          already: !!existing,
+          primary: body.primary === true,
+        }, existing ? 200 : 201, cors)
+      }
+
       // POST /tasks/:id/archive  → personal archive (hides it from YOUR lists
       // only; collaborators still see it). Non-destructive, idempotent. This is
       // the sanctioned alternative to delete.
@@ -388,9 +460,11 @@ Deno.serve(async (req) => {
         const notes = (body.notes || body.description || '').trim() || null
         const urgency = TASK_URGENCIES.includes(body.urgency) ? body.urgency : 'Med'
         let assignedTo = dev
-        if (typeof body.assignee_id === 'string' && body.assignee_id) {
-          if (!(await isMember(body.assignee_id, pid))) return json({ error: 'assignee_id is not a member of this project' }, 400, cors)
-          assignedTo = body.assignee_id
+        const assigneeNeedle = String(body.assignee_id || body.assignee || '').trim()
+        if (assigneeNeedle) {
+          const { member, error: resolveErr } = await resolveMember(pid, assigneeNeedle)
+          if (!member) return json({ error: resolveErr }, 400, cors)
+          assignedTo = member.id
         }
         // Mirror the app: subtasks carry parent_task_id but no project_id/column,
         // so they stay off the board and inherit via the parent.
