@@ -53,7 +53,7 @@ The `hypr` CLI is just a convenience wrapper over these same calls — optional,
 | GET | `/` | — | `{ ok, me:{id,full_name,email,role}, endpoints[] }` — who the key belongs to |
 | GET | `/projects` | — | `{ projects:[{id,name,status,target_date,role}] }` — your projects |
 | GET | `/projects/:id/tasks` | — | `{ tasks:[{id,task_id,title,status,urgency,due_date,assigned_to,project_column_id,project_pos}] }` |
-| **POST** | `/projects/:id/tasks` | `{title*, notes?, urgency?, due_date?, status?, column_id?, assignee_id?}` | `{ task:{id,task_id,title,status} }` (201) — creates a **Feature card** |
+| **POST** | `/projects/:id/tasks` | `{title*, notes?, urgency?, due_date?, status?, column_id?, assignee?}` | `{ task:{id,task_id,title,status} }` (201) — creates a **Feature card**; `assignee` = name/email/uuid |
 | GET | `/projects/:id/members` | — | `{ members:[{id,full_name,email,project_role}] }` — who's assignable |
 | GET | `/projects/:id/requests` | — | `{ requests:[{id,title,status,description}] }` |
 | **POST** | `/projects/:id/requests` | `{title*, description?}` | `{ request:{id,title,status,description} }` (201) |
@@ -63,7 +63,7 @@ The `hypr` CLI is just a convenience wrapper over these same calls — optional,
 | PATCH | `/bugs/:id` | `{description?,title?,severity?}` | `{ bug:{id,title,status,severity,description} }` — edit a bug (`:id` is the uuid) |
 | GET | `/tasks/:id` | — | `{ task, assignees:[{profile_id,is_primary,completed_at,profile:{full_name}}], comments:[{id,content,created_at,author:{full_name}}] }` |
 | PATCH | `/tasks/:id` | `{status?,urgency?,due_date?,description?,title?}` | `{ task:{id,task_id,title,status,notes} }` — changing `status` **moves the board card** to the matching lane; `description` (alias `notes`) edits the card body |
-| **POST** | `/tasks/:id/subtasks` | `{title*, notes?, urgency?, due_date?, assignee_id?}` | `{ subtask:{id,task_id,title,status} }` (201) — single-level child |
+| **POST** | `/tasks/:id/subtasks` | `{title*, notes?, urgency?, due_date?, assignee?}` | `{ subtask:{id,task_id,title,status} }` (201) — single-level child; `assignee` = name/email/uuid |
 | GET | `/tasks/:id/comments` | — | `{ comments:[…] }` |
 | POST | `/tasks/:id/comments` | `{content}` | `{ comment:{id,content,created_at} }` (201) |
 | POST | `/tasks/:id/claim` | — | `{ ok, claimed }` or `{ ok, already }` — self-assign |
@@ -81,7 +81,7 @@ The `hypr` CLI is just a convenience wrapper over these same calls — optional,
 - **`POST /projects/:id/tasks`** — creates a real Feature task (a board card).
   - **Column:** explicit `column_id` wins; otherwise the column whose status mapping matches `status`; otherwise the project's *Not Started* (Backlog) column; otherwise the first column.
   - **`status`** defaults to `Not Started` (or, if you pass a `column_id`, the column's mapped status). Passing `status:"Done"` creates a completed card already marked done.
-  - **`assignee_id`** defaults to **you** (the key owner). If provided, it must be a member of the project.
+  - **`assignee`** defaults to **you** (the key owner). Accepts a **name fragment, email, or uuid**, resolved against the project's members (`assignee_id` with a uuid still works). Must resolve to exactly one member.
 - **`POST /tasks/:id/subtasks`** — adds a child task under an existing feature. Single-level only (you can't subtask a subtask → `400`). Subtasks don't appear as their own board card; they live under the parent.
 
 ### Moving a card between Kanban lanes
@@ -231,4 +231,4 @@ Config in `~/.config/hypr/config.json`; override with `HYPR_API_KEY` / `HYPR_API
 ## What the API does NOT do
 Scoped to project work only. You can create and work **tasks / requests / bugs / subtasks** inside your projects, and **post messages** to chats/Campfires you belong to, but it **cannot**: **delete anything** (archive only — see above), read message history / DMs, create/delete projects, manage members, manage users/teams/roles, or touch projects/conversations you're not a member of. There is no admin surface here by design.
 
-> The `hypr` CLI wrapper covers read / status-move / **description+title edits** / comment / claim. The **create** endpoints (new task/request/bug/subtask) and **chat posting** aren't wired into the CLI yet — use `curl` (above) for those.
+> The `hypr` CLI wrapper covers read / status-move / **description+title edits** / **assign + members** / comment / claim. The **create** endpoints (new task/request/bug/subtask) and **chat posting** aren't wired into the CLI yet — use `curl` (above) for those.
