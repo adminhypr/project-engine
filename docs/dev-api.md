@@ -58,9 +58,11 @@ The `hypr` CLI is just a convenience wrapper over these same calls — optional,
 | GET | `/projects/:id/requests` | — | `{ requests:[{id,title,status,description}] }` |
 | **POST** | `/projects/:id/requests` | `{title*, description?}` | `{ request:{id,title,status,description} }` (201) |
 | PATCH | `/requests/:id` | `{description?,title?}` | `{ request:{id,title,status,description} }` — edit a request (`:id` is the uuid) |
+| **POST** | `/requests/:id/promote` | `{column_id?, assignee?, urgency?, due_date?}` | `{ task:{id,task_id,title,status} }` (201) — **promote a request to a board Feature card**; marks the request `Promoted` + links it |
 | GET | `/projects/:id/bugs` | — | `{ bugs:[{id,title,status,severity,description}] }` |
 | **POST** | `/projects/:id/bugs` | `{title*, description?, severity?}` | `{ bug:{id,title,status,severity,description} }` (201) |
 | PATCH | `/bugs/:id` | `{description?,title?,severity?}` | `{ bug:{id,title,status,severity,description} }` — edit a bug (`:id` is the uuid) |
+| **POST** | `/bugs/:id/promote` | `{column_id?, assignee?, urgency?, due_date?}` | `{ task:{id,task_id,title,status} }` (201) — **promote a bug to a fix task** (🐛 icon, urgency from severity); marks the bug `Promoted` + links it |
 | GET | `/tasks/:id` | — | `{ task, assignees:[{profile_id,is_primary,completed_at,profile:{full_name}}], comments:[{id,content,created_at,author:{full_name}}] }` |
 | PATCH | `/tasks/:id` | `{status?,urgency?,due_date?,description?,title?}` | `{ task:{id,task_id,title,status,notes} }` — changing `status` **moves the board card** to the matching lane; `description` (alias `notes`) edits the card body |
 | **POST** | `/tasks/:id/subtasks` | `{title*, notes?, urgency?, due_date?, assignee?}` | `{ subtask:{id,task_id,title,status} }` (201) — single-level child; `assignee` = name/email/uuid |
@@ -83,6 +85,11 @@ The `hypr` CLI is just a convenience wrapper over these same calls — optional,
   - **`status`** defaults to `Not Started` (or, if you pass a `column_id`, the column's mapped status). Passing `status:"Done"` creates a completed card already marked done.
   - **`assignee`** defaults to **you** (the key owner). Accepts a **name fragment, email, or uuid**, resolved against the project's members (`assignee_id` with a uuid still works). Must resolve to exactly one member.
 - **`POST /tasks/:id/subtasks`** — adds a child task under an existing feature. Single-level only (you can't subtask a subtask → `400`). Subtasks don't appear as their own board card; they live under the parent.
+- **`POST /requests/:id/promote` / `POST /bugs/:id/promote`** — the API version of the app's Promote button.
+  - **Column:** explicit `column_id` wins; otherwise the *Not Started* (Backlog) column; otherwise the first column. `status` comes from the column's mapping.
+  - **`assignee`** defaults to **you**; same name/email/uuid resolution as task creation. `urgency` defaults to `Med` for requests, severity-mapped for bugs (`Critical→Urgent, High→High, Medium→Med, Low→Low`).
+  - Already-promoted rows return `409` with the linked `task_id`. Setting `{status:"Promoted"}` via PATCH is not a thing — promote is the only path, because it also creates + links the task.
+  - ⚠️ **Attachments do not carry over via the API** (the app's Promote copies them client-side). The response includes a `note` when the request/bug has attachments.
 
 ### Moving a card between Kanban lanes
 There is **no separate "move" endpoint** — you move a card by changing its **`status`**. A DB trigger then drops the card into the lane whose status mapping matches. The default mapping is:

@@ -99,6 +99,7 @@ async function resolveMember(projectId: string, needle: string): Promise<{ membe
 
 const TASK_STATUSES = ['Not Started', 'In Progress', 'Blocked', 'Done']
 const TASK_URGENCIES = ['Low', 'Med', 'High', 'Urgent']
+const SEV_TO_URGENCY: Record<string, string> = { Critical: 'Urgent', High: 'High', Medium: 'Med', Low: 'Low' }
 const BUG_SEVERITIES = ['Critical', 'High', 'Medium', 'Low']
 const POS_STEP = 1000
 
@@ -128,6 +129,7 @@ async function insertTask(opts: {
   assignedTo: string
   teamId: string | null
   markDone: boolean
+  icon?: string | null
 }): Promise<{ task?: Record<string, unknown>; error?: string }> {
   const nowIso = new Date().toISOString()
   let lastErr = 'insert failed'
@@ -148,6 +150,7 @@ async function insertTask(opts: {
       project_id:        opts.projectId,
       project_column_id: opts.columnId,
       project_pos:       opts.pos,
+      icon:              opts.icon ?? null,
     }).select('id, task_id, title, status').single()
     if (!error) {
       const assignee: Record<string, unknown> = { task_id: data.id, profile_id: opts.assignedTo, is_primary: true }
@@ -216,7 +219,7 @@ Deno.serve(async (req) => {
     // GET /  → who am I + quick help
     if (seg.length === 0) {
       const { data: me } = await admin.from('profiles').select('id, full_name, email, role').eq('id', dev).maybeSingle()
-      return json({ ok: true, me, endpoints: ['GET /projects', 'GET /projects/:id/{tasks|requests|bugs|members}', 'POST /projects/:id/{tasks|requests|bugs}', 'GET /tasks/:id', 'PATCH /tasks/:id', 'PATCH /requests/:id', 'PATCH /bugs/:id', 'POST /tasks/:id/comments', 'POST /tasks/:id/claim', 'POST /tasks/:id/assign', 'POST /tasks/:id/subtasks', 'POST /tasks/:id/{archive|unarchive}', 'POST /conversations/:id/messages'], note: 'No delete — archive only.' }, 200, cors)
+      return json({ ok: true, me, endpoints: ['GET /projects', 'GET /projects/:id/{tasks|requests|bugs|members}', 'POST /projects/:id/{tasks|requests|bugs}', 'GET /tasks/:id', 'PATCH /tasks/:id', 'PATCH /requests/:id', 'PATCH /bugs/:id', 'POST /requests/:id/promote', 'POST /bugs/:id/promote', 'POST /tasks/:id/comments', 'POST /tasks/:id/claim', 'POST /tasks/:id/assign', 'POST /tasks/:id/subtasks', 'POST /tasks/:id/{archive|unarchive}', 'POST /conversations/:id/messages'], note: 'No delete — archive only.' }, 200, cors)
     }
 
     // GET /projects → projects the dev belongs to (+ role + counts)
@@ -505,6 +508,78 @@ Deno.serve(async (req) => {
       const { data, error } = await admin.from(table).update(patch).eq('id', rid).select(sel).single()
       if (error) return json({ error: error.message }, 400, cors)
       return json(isReq ? { request: data } : { bug: data }, 200, cors)
+    }
+
+
+    // POST /requests/:id/promote | POST /bugs/:id/promote
+    // Mirrors the app (useFeatureRequests.promote / useBugs.promote): create
+    // the board task, then mark the row Promoted + link promoted_task_id.
+    // Body (all optional): { column_id, assignee | assignee_id, urgency, due_date }.
+    // Defaults: Not-Started column (else first), assigned to the key owner,
+    // urgency Med for requests / severity-mapped for bugs (bug tasks get the
+    // app's bug icon). Attachments do NOT carry over via the API — the app's
+    // promote copies them client-side; the response notes when any exist.
+    if ((seg[0] === 'requests' || seg[0] === 'bugs') && seg.length === 3 && seg[2] === 'promote' && m === 'POST') {
+      const isReq = seg[0] === 'requests'
+      const table = isReq ? 'feature_requests' : 'bugs'
+      const noun = isReq ? 'request' : 'bug'
+      const rid = seg[1]
+      const sel = isReq
+        ? 'id, project_id, title, description, status, attachments, promoted_task_id'
+        : 'id, project_id, title, description, status, severity, attachments, promoted_task_id'
+      const { data: row } = await admin.from(table).select(sel).eq('id', rid).maybeSingle()
+      if (!row) return json({ error: `${noun[0].toUpperCase()}${noun.slice(1)} not found` }, 404, cors)
+      if (!(await isMember(dev, row.project_id))) return json({ error: `Not a member of this ${noun}'s project` }, 403, cors)
+      if (row.status === 'Promoted' && row.promoted_task_id) {
+        return json({ error: 'Already promoted', task_id: row.promoted_task_id }, 409, cors)
+      }
+
+      const body = await req.json().catch(() => ({}))
+
+      // Column: explicit column_id -> Not-Started-mapped column -> first column.
+      const { data: cols } = await admin.from('project_columns')
+        .select('id, maps_to_status, pos').eq('project_id', row.project_id).order('pos')
+      const columns = cols || []
+      let columnId: string | null = null
+      let status = 'Not Started'
+      if (typeof body.column_id === 'string') {
+        const c = columns.find((x) => x.id === body.column_id)
+        if (!c) return json({ error: 'column_id is not a column of this project' }, 400, cors)
+        columnId = c.id
+        if (TASK_STATUSES.includes(c.maps_to_status)) status = c.maps_to_status
+      } else {
+        columnId = columns.find((c) => c.maps_to_status === 'Not Started')?.id ?? columns[0]?.id ?? null
+      }
+
+      let assignedTo = dev
+      const assigneeNeedle = String(body.assignee_id || body.assignee || '').trim()
+      if (assigneeNeedle) {
+        const { member, error: resolveErr } = await resolveMember(row.project_id, assigneeNeedle)
+        if (!member) return json({ error: resolveErr }, 400, cors)
+        assignedTo = member.id
+      }
+
+      const urgency = TASK_URGENCIES.includes(body.urgency)
+        ? body.urgency
+        : (isReq ? 'Med' : (SEV_TO_URGENCY[(row as { severity?: string }).severity ?? ''] || 'Med'))
+
+      const res = await insertTask({
+        dev, title: row.title as string, notes: (row.description as string | null) || null, urgency,
+        dueDate: body.due_date || null, status, projectId: row.project_id as string,
+        columnId, pos: await nextPos(columnId), parentTaskId: null,
+        assignedTo, teamId: await teamOf(assignedTo), markDone: status === 'Done',
+        icon: isReq ? null : '\u{1F41B}',
+      })
+      if (res.error) return json({ error: res.error }, 400, cors)
+
+      const { error: linkErr } = await admin.from(table)
+        .update({ status: 'Promoted', promoted_task_id: (res.task as { id: string }).id })
+        .eq('id', rid)
+      const out: Record<string, unknown> = { task: res.task }
+      if (linkErr) out.warning = `Task created but failed to mark the ${noun} Promoted: ${linkErr.message}`
+      const attachCount = Array.isArray(row.attachments) ? (row.attachments as unknown[]).length : 0
+      if (attachCount > 0) out.note = `${attachCount} attachment(s) not copied - promote from the app to carry attachments over`
+      return json(out, 201, cors)
     }
 
     // POST /conversations/:id/messages  → post a chat message as the key owner.
