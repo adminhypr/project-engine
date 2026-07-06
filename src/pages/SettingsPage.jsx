@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { PageHeader, showToast } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
-import { Star, X, Plus, Send, Mail, Pencil, Trash2, Check, AlertTriangle, Shield, ChevronDown, ChevronRight } from 'lucide-react'
+import { Star, X, Send, Mail, Pencil, Trash2, Check, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react'
 import { ModalWrapper } from '../components/ui/animations'
 import AvatarCard from '../components/settings/AvatarCard'
 import DisplayNameCard from '../components/settings/DisplayNameCard'
@@ -13,7 +13,8 @@ import EmailDigestCard from '../components/settings/EmailDigestCard'
 import ApiKeysCard from '../components/settings/ApiKeysCard'
 import { setPendingInvite } from '../lib/pendingInvites'
 import { usePageTitle } from '../hooks/usePageTitle'
-import { useUserAdmin } from '../hooks/useUserAdmin'
+import { getAccountType, getAccessLevel, summarizeTeams, filterUsers } from '../lib/userAccess'
+import UserDrawer from '../components/settings/UserDrawer'
 
 export default function SettingsPage() {
   usePageTitle('Settings')
@@ -28,7 +29,12 @@ export default function SettingsPage() {
   // expanded; ephemeral (no localStorage). Adding 'Other' would be a
   // no-op since that section only renders when non-empty.
   const [collapsedRoles, setCollapsedRoles] = useState(() => new Set())
-  const [saving,   setSaving]   = useState({})
+  // Users table filters + the drawer's selected user (drawer reads the LIVE
+  // profile row so refetches flow straight into it).
+  const [userSearch,     setUserSearch]     = useState('')
+  const [filterTeamId,   setFilterTeamId]   = useState('')
+  const [filterType,     setFilterType]     = useState('')
+  const [selectedUserId, setSelectedUserId] = useState(null)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole,  setInviteRole]  = useState('Staff')
   const [inviteTeamId, setInviteTeamId] = useState('')
@@ -57,14 +63,6 @@ export default function SettingsPage() {
     setProfiles(enriched)
     setTeams(t || [])
     setLoading(false)
-  }
-
-  async function updateProfile(id, updates) {
-    setSaving(s => ({ ...s, [id]: true }))
-    const { error } = await supabase.from('profiles').update(updates).eq('id', id)
-    setSaving(s => ({ ...s, [id]: false }))
-    if (error) showToast(error.message, 'error')
-    else { showToast('Updated'); fetchAll() }
   }
 
   async function addTeam() {
@@ -153,7 +151,12 @@ export default function SettingsPage() {
     })
     setDeleting(false)
     if (error) showToast(error.message || 'Failed to delete user', 'error')
-    else { showToast(`${deleteTarget.full_name} has been deleted`); setDeleteTarget(null); fetchAll() }
+    else {
+      showToast(`${deleteTarget.full_name} has been deleted`)
+      if (selectedUserId === deleteTarget.id) setSelectedUserId(null)
+      setDeleteTarget(null)
+      fetchAll()
+    }
   }
 
   // Manager: only teams where they have Manager role (per-team roles)
@@ -195,12 +198,23 @@ export default function SettingsPage() {
 
   const unassignedCount = profiles.filter(p => !p.profile_teams || p.profile_teams.length === 0).length
 
-  // Admin view: split the user list into role-based sections so the table
-  // mirrors the global role hierarchy (Admin / Manager / Staff / Agent /
-  // Client). Pure display-side grouping — `profiles.role` is already
-  // synced to the canonical value via the role-sync trigger (010).
-  // Manager view keeps the flat list — small enough that grouping adds
-  // no value, and the filter above narrows to unassigned users + self.
+  // Search + Type/Team filters applied before grouping.
+  const filteredProfiles = filterUsers(visibleProfiles, {
+    search: userSearch, teamId: filterTeamId, type: filterType,
+  })
+
+  // Admin view: pin team-less users in a "Needs setup" section on top, then
+  // split the rest into role-based sections mirroring the global hierarchy
+  // (Admin / Manager / Staff / Agent / Client). Pure display-side grouping —
+  // `profiles.role` is already synced to the canonical value via the
+  // role-sync trigger (010). Manager view keeps the flat list — the filter
+  // above narrows it to unassigned users + self.
+  const needsSetupProfiles = isAdmin
+    ? filteredProfiles.filter(p => !p.profile_teams || p.profile_teams.length === 0)
+    : []
+  const assignedProfiles = isAdmin
+    ? filteredProfiles.filter(p => p.profile_teams && p.profile_teams.length > 0)
+    : []
   const ROLE_SECTIONS = [
     { key: 'Admin',   label: 'Admins' },
     { key: 'Manager', label: 'Managers' },
@@ -209,13 +223,17 @@ export default function SettingsPage() {
     { key: 'Client',  label: 'Clients' },
   ]
   const profilesByRole = isAdmin
-    ? ROLE_SECTIONS.map(s => ({ ...s, users: visibleProfiles.filter(p => p.role === s.key) }))
+    ? ROLE_SECTIONS.map(s => ({ ...s, users: assignedProfiles.filter(p => p.role === s.key) }))
     : null
   // Defensive — surface any profile with an unrecognised role so we don't
   // silently hide them. Should be empty in practice.
   const unclassifiedProfiles = isAdmin
-    ? visibleProfiles.filter(p => !ROLE_SECTIONS.some(s => s.key === p.role))
+    ? assignedProfiles.filter(p => !ROLE_SECTIONS.some(s => s.key === p.role))
     : []
+
+  const selectedUser = selectedUserId
+    ? (profiles.find(p => p.id === selectedUserId) || null)
+    : null
 
   function toggleRoleSection(key) {
     setCollapsedRoles(prev => {
@@ -478,26 +496,79 @@ export default function SettingsPage() {
                 ? 'New users appear here after they sign in for the first time. Assign them teams and a role.'
                 : 'Assign new users to one of your teams so they can start using the app.'}
             </p>
+            {/* Search + filters */}
+            {isAdmin && (
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                <input
+                  value={userSearch}
+                  onChange={e => setUserSearch(e.target.value)}
+                  placeholder="Search name, email, or team..."
+                  className="form-input py-1.5 px-3 text-sm flex-1 min-w-[200px]"
+                  aria-label="Search users"
+                />
+                <select
+                  value={filterTeamId}
+                  onChange={e => setFilterTeamId(e.target.value)}
+                  className="form-input py-1.5 px-2 text-xs"
+                  aria-label="Filter by team"
+                >
+                  <option value="">All teams</option>
+                  {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+                <select
+                  value={filterType}
+                  onChange={e => setFilterType(e.target.value)}
+                  className="form-input py-1.5 px-2 text-xs"
+                  aria-label="Filter by account type"
+                >
+                  <option value="">All types</option>
+                  <option value="Internal">Internal</option>
+                  <option value="Agent">Agent</option>
+                  <option value="Client">Client</option>
+                </select>
+              </div>
+            )}
             {visibleProfiles.length === 0 ? (
               <p className="text-sm text-slate-400 dark:text-slate-500 py-4 text-center">No users need setup.</p>
+            ) : filteredProfiles.length === 0 ? (
+              <p className="text-sm text-slate-400 dark:text-slate-500 py-4 text-center">No users match the current filters.</p>
             ) : (
               <div className="overflow-x-auto -mx-4 sm:mx-0">
               <table className="w-full text-sm">
                 <thead>
                   <tr>
-                    <th className="table-th">Name</th>
-                    <th className="table-th">Email</th>
+                    <th className="table-th">User</th>
+                    <th className="table-th">Type</th>
+                    <th className="table-th">Access</th>
                     <th className="table-th">Teams</th>
-                    {isAdmin && <th className="table-th">Admin</th>}
                     {isAdmin && <th className="table-th">Reports To</th>}
-                    {isAdmin && <th className="table-th">Actions</th>}
+                    <th className="table-th" aria-label="Open" />
                   </tr>
                 </thead>
                 <tbody>
                   {isAdmin ? (
                     <>
+                      {needsSetupProfiles.length > 0 && (
+                        <>
+                          <tr>
+                            <td colSpan={6} className="pt-5 pb-2">
+                              <span className="flex items-center gap-1.5 text-[11px] font-semibold text-yellow-600 dark:text-yellow-400 uppercase tracking-wider">
+                                <AlertTriangle size={12} />
+                                Needs setup ({needsSetupProfiles.length})
+                              </span>
+                            </td>
+                          </tr>
+                          {needsSetupProfiles.map(p => (
+                            <UserSummaryRow key={p.id} user={p} isSelf={p.id === profile?.id} isAdmin={isAdmin} onOpen={() => setSelectedUserId(p.id)} />
+                          ))}
+                        </>
+                      )}
                       {profilesByRole.map(section => {
                         const isCollapsed = collapsedRoles.has(section.key)
+                        // With active filters, hide sections with no matches
+                        // instead of showing a misleading "No X yet".
+                        const filtering = !!(userSearch.trim() || filterTeamId || filterType)
+                        if (filtering && section.users.length === 0) return null
                         return (
                           <Fragment key={section.key}>
                             <tr>
@@ -522,19 +593,7 @@ export default function SettingsPage() {
                                 </tr>
                               ) : (
                                 section.users.map(p => (
-                                  <UserRow
-                                    key={p.id}
-                                    user={p}
-                                    teams={teams}
-                                    allProfiles={profiles}
-                                    isSelf={p.id === profile?.id}
-                                    saving={saving[p.id]}
-                                    onSave={(updates) => updateProfile(p.id, updates)}
-                                    onTeamsChange={fetchAll}
-                                    isAdmin={isAdmin}
-                                    approverName={profile?.full_name}
-                                    onDelete={() => setDeleteTarget(p)}
-                                  />
+                                  <UserSummaryRow key={p.id} user={p} isSelf={p.id === profile?.id} isAdmin={isAdmin} onOpen={() => setSelectedUserId(p.id)} />
                                 ))
                               )
                             )}
@@ -559,39 +618,15 @@ export default function SettingsPage() {
                               </td>
                             </tr>
                             {!isCollapsed && unclassifiedProfiles.map(p => (
-                              <UserRow
-                                key={p.id}
-                                user={p}
-                                teams={teams}
-                                allProfiles={profiles}
-                                isSelf={p.id === profile?.id}
-                                saving={saving[p.id]}
-                                onSave={(updates) => updateProfile(p.id, updates)}
-                                onTeamsChange={fetchAll}
-                                isAdmin={isAdmin}
-                                approverName={profile?.full_name}
-                                onDelete={() => setDeleteTarget(p)}
-                              />
+                              <UserSummaryRow key={p.id} user={p} isSelf={p.id === profile?.id} isAdmin={isAdmin} onOpen={() => setSelectedUserId(p.id)} />
                             ))}
                           </Fragment>
                         )
                       })()}
                     </>
                   ) : (
-                    visibleProfiles.map(p => (
-                      <UserRow
-                        key={p.id}
-                        user={p}
-                        teams={managerTeams}
-                        allProfiles={profiles}
-                        isSelf={p.id === profile?.id}
-                        saving={saving[p.id]}
-                        onSave={(updates) => updateProfile(p.id, updates)}
-                        onTeamsChange={fetchAll}
-                        isAdmin={isAdmin}
-                        approverName={profile?.full_name}
-                        onDelete={() => setDeleteTarget(p)}
-                      />
+                    filteredProfiles.map(p => (
+                      <UserSummaryRow key={p.id} user={p} isSelf={p.id === profile?.id} isAdmin={isAdmin} onOpen={() => setSelectedUserId(p.id)} />
                     ))
                   )}
                 </tbody>
@@ -599,6 +634,22 @@ export default function SettingsPage() {
               </div>
             )}
           </motion.div>
+          )}
+
+          {/* Per-user edit drawer — reads the LIVE profile row so refetches
+              flow straight in. Manager edit rules are enforced inside. */}
+          {isManager && !isExternal && (
+            <UserDrawer
+              user={selectedUser}
+              teams={isAdmin ? teams : managerTeams}
+              allProfiles={profiles}
+              isAdmin={isAdmin}
+              currentProfileId={profile?.id}
+              approverName={profile?.full_name}
+              onChanged={fetchAll}
+              onClose={() => setSelectedUserId(null)}
+              onDelete={(u) => setDeleteTarget(u)}
+            />
           )}
 
         </div>
@@ -704,260 +755,81 @@ export default function SettingsPage() {
   )
 }
 
-function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChange, isAdmin, approverName, onDelete }) {
-  const [reportsTo, setReportsTo] = useState(user.reports_to || '')
-  const [addingTeam, setAddingTeam] = useState(false)
-  const [editingName, setEditingName] = useState(false)
-  const [nameValue,   setNameValue]   = useState(user.full_name || '')
-  // Shared write-paths (extracted verbatim — phase 2 of the settings redesign)
-  const admin = useUserAdmin({ approverName, onChanged: onTeamsChange })
+// Read-only summary row for the Users table. All editing lives in UserDrawer
+// (click the row). See docs/plans/2026-07-05-settings-redesign-design.md.
+function UserSummaryRow({ user, isSelf, isAdmin, onOpen }) {
+  const accountType = getAccountType(user)
+  const accessLevel = getAccessLevel(user)
+  const { visible, overflow } = summarizeTeams(user.profile_teams)
+  const isUnassigned = !user.profile_teams || user.profile_teams.length === 0
 
-  // Multi-team data from profile_teams junction
-  const userTeams = (user.profile_teams || []).map(pt => ({
-    team_id: pt.team_id,
-    is_primary: pt.is_primary,
-    role: pt.role || 'Staff',
-    name: pt.team?.name || teams.find(t => t.id === pt.team_id)?.name || 'Unknown'
-  }))
-  const availableTeams = teams.filter(t => !userTeams.some(ut => ut.team_id === t.id))
-
-  const dirty = reportsTo !== (user.reports_to || '') || nameValue.trim() !== (user.full_name || '')
-
-  // For managers: can only edit unassigned users (not themselves or already-assigned users)
-  const isUnassigned = userTeams.length === 0
-  const canEdit = isAdmin ? !isSelf : (isUnassigned && !isSelf)
-
-  // Eligible managers: Managers and Admins, excluding self and anyone who reports to this user (circular)
-  const managerOptions = allProfiles.filter(p =>
-    (p.role === 'Manager' || p.role === 'Admin')
-    && p.id !== user.id
-    && p.reports_to !== user.id
-  )
-
-  async function addTeamToUser(teamId) {
-    await admin.addTeamToUser(user, teamId)
-    setAddingTeam(false)
-  }
-
-  const removeTeamFromUser = (teamId) => admin.removeTeamFromUser(user, teamId)
-  const setPrimaryTeam     = (teamId) => admin.setPrimaryTeam(user, teamId)
-  const updateTeamRole     = (teamId, newRole) => admin.updateTeamRole(user, teamId, newRole)
-
-  async function toggleAdmin() {
-    const newRole = user.role === 'Admin' ? (userTeams.some(t => t.role === 'Manager') ? 'Manager' : 'Staff') : 'Admin'
-    onSave({ role: newRole })
-  }
+  const typeBadge = accountType === 'Agent'
+    ? 'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300'
+    : accountType === 'Client'
+      ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300'
+      : 'bg-slate-100 text-slate-600 dark:bg-dark-hover dark:text-slate-300'
+  const accessBadge = accessLevel === 'Admin'
+    ? 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300'
+    : accessLevel === 'Manager'
+      ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'
+      : 'bg-slate-100 text-slate-500 dark:bg-dark-hover dark:text-slate-400'
 
   return (
-    <tr className={`border-b border-slate-100 dark:border-dark-border ${isUnassigned ? 'bg-yellow-500/5' : ''}`}>
-      <td className="table-td font-medium">
-        <div className="flex items-center gap-2">
+    <tr
+      onClick={onOpen}
+      className={`border-b border-slate-100 dark:border-dark-border cursor-pointer transition-colors
+        hover:bg-slate-50 dark:hover:bg-dark-hover/50 ${isUnassigned ? 'bg-yellow-500/5' : ''}`}
+    >
+      <td className="table-td">
+        <div className="flex items-center gap-2.5">
           {user.avatar_url
-            ? <img src={user.avatar_url} className="w-6 h-6 rounded-full" alt="" />
-            : <div className="w-6 h-6 rounded-full bg-brand-500 flex items-center justify-center text-white text-xs font-bold">
+            ? <img src={user.avatar_url} className="w-7 h-7 rounded-full" alt="" />
+            : <div className="w-7 h-7 rounded-full bg-brand-500 flex items-center justify-center text-white text-xs font-bold">
                 {user.full_name?.[0] || '?'}
               </div>
           }
-          {isAdmin && editingName ? (
-            <input
-              autoFocus
-              value={nameValue}
-              onChange={e => setNameValue(e.target.value)}
-              onBlur={() => setEditingName(false)}
-              onKeyDown={e => { if (e.key === 'Enter') setEditingName(false); if (e.key === 'Escape') { setNameValue(user.full_name || ''); setEditingName(false) } }}
-              className="form-input py-0.5 px-1.5 text-sm min-w-[8rem]"
-            />
-          ) : (
-            <span className="flex items-center gap-1 group/name">
-              {nameValue.trim() !== (user.full_name || '') ? nameValue : user.full_name}
-              {isAdmin && (
-                <button
-                  onClick={() => setEditingName(true)}
-                  className="text-slate-300 hover:text-brand-500 dark:text-slate-600 dark:hover:text-brand-400 opacity-0 group-hover/name:opacity-100 transition-all"
-                  title="Edit name"
-                >
-                  <Pencil size={11} />
-                </button>
-              )}
-            </span>
-          )}
-          {isUnassigned && <span className="badge bg-yellow-500/15 text-yellow-700 text-xs">Needs setup</span>}
-          {isSelf && <span className="badge bg-brand-50 text-brand-700 text-xs">You</span>}
+          <div className="min-w-0">
+            <div className="font-medium text-slate-900 dark:text-white flex items-center gap-1.5">
+              <span className="truncate">{user.full_name}</span>
+              {isSelf && <span className="badge bg-brand-50 text-brand-700 text-[10px]">You</span>}
+            </div>
+            <div className="text-xs text-slate-400 dark:text-slate-500 truncate">{user.email}</div>
+          </div>
         </div>
       </td>
-      <td className="table-td text-slate-500 dark:text-slate-400 text-xs">{user.email}</td>
       <td className="table-td">
-        <div className="flex flex-wrap items-center gap-1.5 min-w-[10rem]">
-          <AnimatePresence>
-            {userTeams.map(t => (
-              <motion.span
-                key={t.team_id}
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium border transition-colors
-                  ${t.is_primary
-                    ? 'bg-brand-50 text-brand-700 border-brand-200 dark:bg-brand-500/15 dark:text-brand-300 dark:border-brand-500/30'
-                    : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-dark-hover dark:text-slate-300 dark:border-dark-border'
-                  }`}
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                layout
-              >
-                {canEdit && !t.is_primary && (
-                  <button
-                    onClick={() => setPrimaryTeam(t.team_id)}
-                    className="text-slate-300 hover:text-brand-500 dark:text-slate-500 dark:hover:text-brand-400 transition-colors"
-                    title="Set as primary team"
-                  >
-                    <Star size={10} />
-                  </button>
-                )}
-                {t.is_primary && (
-                  <Star size={10} className="text-brand-500 dark:text-brand-400 fill-current" />
-                )}
-                {t.name}
-                {canEdit && !isSelf ? (() => {
-                  // Admin: Staff / Manager / Agent / Client
-                  // Manager: Staff / Agent / Client (no Manager option)
-                  const roleChoices = isAdmin
-                    ? ['Staff', 'Manager', 'Agent', 'Client']
-                    : ['Staff', 'Agent', 'Client']
-                  const current = roleChoices.includes(t.role) ? t.role : 'Staff'
-                  const labelClass =
-                    t.role === 'Manager'
-                      ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:hover:bg-amber-500/30'
-                    : t.role === 'Agent'
-                      ? 'bg-sky-100 text-sky-700 hover:bg-sky-200 dark:bg-sky-500/20 dark:text-sky-300 dark:hover:bg-sky-500/30'
-                    : t.role === 'Client'
-                      ? 'bg-violet-100 text-violet-700 hover:bg-violet-200 dark:bg-violet-500/20 dark:text-violet-300 dark:hover:bg-violet-500/30'
-                      : 'bg-slate-100 text-slate-400 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-500 dark:hover:bg-slate-600'
-                  return (
-                    <select
-                      value={current}
-                      onChange={e => updateTeamRole(t.team_id, e.target.value)}
-                      className={`text-[10px] font-semibold px-1 py-px rounded transition-colors ml-0.5 border-0 focus:outline-none focus:ring-1 focus:ring-brand-400 ${labelClass}`}
-                      title="Change role"
-                    >
-                      {roleChoices.map(r => (
-                        <option key={r} value={r}>
-                          {r === 'Manager' ? 'Mgr' : r}
-                        </option>
-                      ))}
-                    </select>
-                  )
-                })() : (
-                  (t.role && t.role !== 'Staff') && (
-                    <span className={`text-[10px] font-semibold px-1 py-px rounded ml-0.5 ${
-                      t.role === 'Manager'
-                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'
-                      : t.role === 'Agent'
-                        ? 'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300'
-                      : t.role === 'Client'
-                        ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300'
-                        : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
-                    }`}>
-                      {t.role === 'Manager' ? 'Mgr' : t.role}
-                    </span>
-                  )
-                )}
-                {canEdit && (
-                  <button
-                    onClick={() => removeTeamFromUser(t.team_id)}
-                    className="text-slate-300 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 transition-colors ml-0.5"
-                  >
-                    <X size={10} />
-                  </button>
-                )}
-              </motion.span>
-            ))}
-          </AnimatePresence>
-          {canEdit && (
-            addingTeam ? (
-              <select
-                autoFocus
-                className="form-input py-0.5 px-1.5 text-xs min-w-[7rem]"
-                onChange={e => { if (e.target.value) addTeamToUser(e.target.value) }}
-                onBlur={() => setAddingTeam(false)}
-                defaultValue=""
-              >
-                <option value="">Select team...</option>
-                {availableTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            ) : availableTeams.length > 0 && (
-              <button
-                onClick={() => setAddingTeam(true)}
-                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg text-xs text-slate-400 hover:text-brand-500 hover:bg-slate-50 dark:hover:bg-dark-hover dark:text-slate-500 dark:hover:text-brand-400 border border-dashed border-slate-200 dark:border-dark-border transition-colors"
-              >
-                <Plus size={10} />
-              </button>
-            )
-          )}
-        </div>
+        <span className={`badge text-[11px] ${typeBadge}`}>{accountType}</span>
       </td>
-      {isAdmin && (
-        <td className="table-td">
-          {isSelf ? (
-            <span className="inline-flex items-center gap-1 text-xs font-medium text-purple-700 dark:text-purple-300">
-              <Shield size={12} /> Admin
-            </span>
-          ) : (
-            <button
-              onClick={toggleAdmin}
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all
-                ${user.role === 'Admin'
-                  ? 'bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-500/20 dark:text-purple-300 dark:hover:bg-purple-500/30'
-                  : 'bg-slate-100 text-slate-400 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-500 dark:hover:bg-slate-600'
-                }`}
-              title={user.role === 'Admin' ? 'Remove Admin access' : 'Grant Admin access'}
-            >
-              <Shield size={12} />
-              {user.role === 'Admin' ? 'Admin' : '—'}
-            </button>
-          )}
-        </td>
-      )}
-      {isAdmin && (
-        <td className="table-td">
-          <select
-            value={reportsTo}
-            onChange={e => setReportsTo(e.target.value)}
-            className="form-input py-1 text-xs min-w-[10rem]"
-            disabled={isSelf}
-          >
-            <option value="">— None —</option>
-            {managerOptions.map(p => (
-              <option key={p.id} value={p.id}>{p.full_name} ({p.role})</option>
+      <td className="table-td">
+        {accessLevel
+          ? <span className={`badge text-[11px] ${accessBadge}`}>{accessLevel}</span>
+          : <span className="text-slate-300 dark:text-slate-600 text-xs">&mdash;</span>}
+      </td>
+      <td className="table-td">
+        {isUnassigned ? (
+          <span className="badge bg-yellow-500/15 text-yellow-700 text-[10px]">Needs setup</span>
+        ) : (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {visible.map(t => (
+              <span key={t.team_id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium bg-slate-50 text-slate-600 border border-slate-200 dark:bg-dark-hover dark:text-slate-300 dark:border-dark-border">
+                {t.is_primary && <Star size={9} className="text-brand-500 dark:text-brand-400 fill-current" />}
+                {t.name}
+              </span>
             ))}
-          </select>
-        </td>
-      )}
-      {isAdmin && (
-        <td className="table-td">
-          <div className="flex items-center gap-1.5">
-            {dirty && (isSelf ? nameValue.trim() !== (user.full_name || '') : true) && (
-              <motion.button
-                onClick={() => onSave(isSelf
-                  ? { full_name: nameValue.trim() || user.full_name }
-                  : { reports_to: reportsTo || null, full_name: nameValue.trim() || user.full_name }
-                )}
-                disabled={saving}
-                className="btn-primary py-1 px-3 text-xs"
-                whileTap={{ scale: 0.95 }}
-              >
-                {saving ? '...' : 'Save'}
-              </motion.button>
-            )}
-            {!isSelf && (
-              <button
-                onClick={onDelete}
-                className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 dark:text-slate-600 dark:hover:text-red-400 dark:hover:bg-red-500/10 transition-all"
-                title="Delete user"
-              >
-                <Trash2 size={14} />
-              </button>
+            {overflow > 0 && (
+              <span className="text-xs text-slate-400 dark:text-slate-500">+{overflow}</span>
             )}
           </div>
+        )}
+      </td>
+      {isAdmin && (
+        <td className="table-td text-xs text-slate-500 dark:text-slate-400">
+          {user.manager?.full_name || <span className="text-slate-300 dark:text-slate-600">&mdash;</span>}
         </td>
       )}
+      <td className="table-td w-8 text-right">
+        <ChevronRight size={14} className="inline text-slate-300 dark:text-slate-600" />
+      </td>
     </tr>
   )
 }
