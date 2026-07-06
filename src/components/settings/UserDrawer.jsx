@@ -212,7 +212,7 @@ export default function UserDrawer({
                       <select
                         value={t.role === 'Manager' ? 'Manager' : 'Staff'}
                         onChange={e => admin.updateTeamRole(user, t.team_id, e.target.value)}
-                        className="form-input py-0.5 px-1.5 text-xs"
+                        className="form-input w-auto shrink-0 py-0.5 px-1.5 text-xs"
                         aria-label={`Role in ${t.name}`}
                       >
                         <option value="Staff">Staff</option>
