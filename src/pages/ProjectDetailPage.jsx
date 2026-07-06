@@ -7,6 +7,8 @@ import { useTasks, useTaskActions } from '../hooks/useTasks'
 import { useProjectColumns, useProjectFeatures } from '../hooks/useProjectBoard'
 import { useFeatureRequests } from '../hooks/useFeatureRequests'
 import { projectProgress, featureProgress, filterFeatures, EMPTY_FEATURE_FILTERS } from '../lib/projectBoard'
+import { dueDateForDay } from '../lib/calendar'
+import { ModalWrapper } from '../components/ui/animations'
 import FeaturesFilterBar from '../components/projects/FeaturesFilterBar'
 import ProjectStats from '../components/projects/ProjectStats'
 import { LoadingScreen, EmptyState, showToast } from '../components/ui'
@@ -62,6 +64,23 @@ export default function ProjectDetailPage() {
   }
   const currentUserId = profile?.id || null
   const [showMembers, setShowMembers] = useState(false)
+  // Calendar day-cell quick-create: iso day the + was clicked on (null = closed)
+  const [quickAddDate, setQuickAddDate] = useState(null)
+  const [quickAddTitle, setQuickAddTitle] = useState('')
+  const [quickAddBusy, setQuickAddBusy] = useState(false)
+
+  async function handleQuickAddFeature(e) {
+    e.preventDefault()
+    if (!quickAddTitle.trim() || quickAddBusy) return
+    setQuickAddBusy(true)
+    const res = await addFeature({
+      title: quickAddTitle.trim(),
+      columnId: columns[0]?.id || null,
+      dueDate: dueDateForDay(null, quickAddDate),
+    })
+    setQuickAddBusy(false)
+    if (res?.ok) { setQuickAddDate(null); setQuickAddTitle('') }
+  }
   const [showImport, setShowImport] = useState(false)
 
   // Features filter (Mine / Urgency / Due). Applies to the Features board + list
@@ -211,6 +230,7 @@ export default function ProjectDetailPage() {
                 tasks={visibleFeatures}
                 onOpenTask={(t) => setActiveTaskId(t.id)}
                 onReschedule={handleCalendarReschedule}
+                onQuickCreate={(iso) => { setQuickAddDate(iso); setQuickAddTitle('') }}
               />
             ) : (
               <FeatureList
@@ -278,6 +298,28 @@ export default function ProjectDetailPage() {
             onClose={() => setShowImport(false)}
           />
         )}
+
+        <ModalWrapper isOpen={!!quickAddDate} onClose={() => setQuickAddDate(null)}>
+          <form onSubmit={handleQuickAddFeature} className="p-5">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">New Feature</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+              Due {quickAddDate} · lands in {columns[0]?.name || 'the first column'} · assigned to you
+            </p>
+            <input
+              autoFocus
+              value={quickAddTitle}
+              onChange={e => setQuickAddTitle(e.target.value)}
+              placeholder="Feature title..."
+              className="form-input w-full"
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <button type="button" onClick={() => setQuickAddDate(null)} className="btn-ghost text-sm px-4 py-2">Cancel</button>
+              <button type="submit" disabled={quickAddBusy || !quickAddTitle.trim()} className="btn-primary text-sm px-4 py-2">
+                {quickAddBusy ? 'Adding...' : 'Add Feature'}
+              </button>
+            </div>
+          </form>
+        </ModalWrapper>
 
         {showMembers && (
           <ProjectMembersModal

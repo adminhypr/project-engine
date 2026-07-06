@@ -31,6 +31,7 @@ export default function AdminOverviewPage() {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [showBulkDelete, setShowBulkDelete] = useState(false)
   const [quickAddStatus, setQuickAddStatus] = useState(null)
+  const [quickAddDate, setQuickAddDate] = useState('')   // calendar day-cell +
   const [sidebarTeamFilter, setSidebarTeamFilter] = useState(null)
 
   // Calendar drag-to-reschedule — same updateTask path as every other
@@ -438,13 +439,14 @@ export default function AdminOverviewPage() {
 
         <QuickAddModal
           isOpen={!!quickAddStatus}
-          onClose={() => setQuickAddStatus(null)}
+          onClose={() => { setQuickAddStatus(null); setQuickAddDate('') }}
           status={quickAddStatus || 'Not Started'}
           profile={profile}
           profiles={profiles}
           assignTask={assignTask}
           updateTask={updateTask}
           refetch={refetch}
+          initialDueDate={quickAddDate}
         />
       </div>
     </PageTransition>

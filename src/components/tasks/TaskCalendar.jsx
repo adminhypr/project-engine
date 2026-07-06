@@ -9,7 +9,7 @@ import {
   useDraggable,
   useDroppable,
 } from '@dnd-kit/core'
-import { ChevronLeft, ChevronRight, CalendarX2, SlidersHorizontal, Check } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarX2, SlidersHorizontal, Check, Plus } from 'lucide-react'
 import { monthMatrix, weekMatrix, bucketTasksByDay, formatMonthTitle, formatWeekTitle, shiftAnchor, toIsoDay, dueDateForDay, dueDayIso } from '../../lib/calendar'
 import { CALENDAR_PROPS, loadCalendarProps, saveCalendarProps, loadCalendarMode, saveCalendarMode } from '../../lib/calendarProps'
 
@@ -137,7 +137,7 @@ function Pill({ task, onOpen, overlay = false, visibleProps = [] }) {
   )
 }
 
-function DayCell({ cell, tasks, expanded, onToggleExpand, onOpenTask, visibleProps, weekMode = false }) {
+function DayCell({ cell, tasks, expanded, onToggleExpand, onOpenTask, onQuickCreate, visibleProps, weekMode = false }) {
   const { setNodeRef, isOver } = useDroppable({ id: `day-${cell.iso}` })
   const cap = weekMode ? 12 : MAX_VISIBLE
   const visible = expanded ? tasks : tasks.slice(0, cap)
@@ -147,8 +147,20 @@ function DayCell({ cell, tasks, expanded, onToggleExpand, onOpenTask, visiblePro
       ref={setNodeRef}
       className={`${weekMode ? 'min-h-[420px]' : 'min-h-[104px]'} p-1.5 border-t border-l border-slate-100 dark:border-dark-border flex flex-col gap-1
         ${cell.inMonth ? 'bg-white dark:bg-dark-surface' : 'bg-slate-50/60 dark:bg-dark-bg/40'}
-        ${isOver ? 'ring-2 ring-inset ring-brand-400 bg-brand-50/40 dark:bg-brand-500/10' : ''}`}
+        ${isOver ? 'ring-2 ring-inset ring-brand-400 bg-brand-50/40 dark:bg-brand-500/10' : ''}
+        group/day`}
     >
+      <span className="flex items-center justify-between">
+        {onQuickCreate ? (
+          <button
+            onClick={() => onQuickCreate(cell.iso)}
+            className="p-0.5 rounded-md text-slate-300 hover:text-brand-500 hover:bg-brand-50 dark:text-slate-600 dark:hover:text-brand-400 dark:hover:bg-brand-500/10 opacity-0 group-hover/day:opacity-100 transition-all"
+            title={`Add task due ${cell.iso}`}
+            aria-label={`Add task due ${cell.iso}`}
+          >
+            <Plus size={12} />
+          </button>
+        ) : <span />}
       <span
         className={`self-end text-[11px] leading-none px-1.5 py-1 rounded-full font-medium
           ${cell.isToday
@@ -158,6 +170,7 @@ function DayCell({ cell, tasks, expanded, onToggleExpand, onOpenTask, visiblePro
               : 'text-slate-300 dark:text-slate-600'}`}
       >
         {cell.dayOfMonth}
+      </span>
       </span>
       {visible.map(t => <Pill key={t.id} task={t} onOpen={onOpenTask} visibleProps={visibleProps} />)}
       {hidden > 0 && (
@@ -212,7 +225,7 @@ function NoDateTray({ undated, open, onToggle, onClose, onOpenTask, visibleProps
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-export default function TaskCalendar({ tasks, onOpenTask, onReschedule }) {
+export default function TaskCalendar({ tasks, onOpenTask, onReschedule, onQuickCreate }) {
   const today = new Date()
   const [mode, setMode] = useState(() => loadCalendarMode()) // 'month' | 'week'
   const [anchor, setAnchor] = useState(() => toIsoDay(today))
@@ -388,6 +401,7 @@ export default function TaskCalendar({ tasks, onOpenTask, onReschedule }) {
               expanded={expandedDays.has(cell.iso)}
               onToggleExpand={toggleExpand}
               onOpenTask={onOpenTask}
+              onQuickCreate={onQuickCreate}
               visibleProps={visibleProps}
               weekMode={mode === 'week'}
             />

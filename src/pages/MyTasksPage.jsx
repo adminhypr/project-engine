@@ -63,6 +63,7 @@ export default function MyTasksPage() {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [showBulkDelete, setShowBulkDelete] = useState(false)
   const [quickAddStatus, setQuickAddStatus] = useState(null)
+  const [quickAddDate, setQuickAddDate] = useState('')   // calendar day-cell +
   const [hideSubtasks, setHideSubtasks] = useState(false) // off by default on My Tasks
 
   // Persist view preference
@@ -497,6 +498,7 @@ export default function MyTasksPage() {
               tasks={filtered}
               onOpenTask={(t) => setActiveTaskId(t.id)}
               onReschedule={handleCalendarReschedule}
+              onQuickCreate={(iso) => { setQuickAddDate(iso); setQuickAddStatus('Not Started') }}
             />
           </div>
         ) : (
@@ -591,13 +593,14 @@ export default function MyTasksPage() {
 
         <QuickAddModal
           isOpen={!!quickAddStatus}
-          onClose={() => setQuickAddStatus(null)}
+          onClose={() => { setQuickAddStatus(null); setQuickAddDate('') }}
           status={quickAddStatus || 'Not Started'}
           profile={profile}
           profiles={profiles}
           assignTask={assignTask}
           updateTask={updateTask}
           refetch={refetch}
+          initialDueDate={quickAddDate}
         />
       </div>
     </PageTransition>

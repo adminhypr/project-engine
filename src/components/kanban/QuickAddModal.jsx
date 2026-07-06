@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ModalWrapper } from '../ui/animations'
 import { showToast } from '../ui'
+import { dueDateForDay } from '../../lib/calendar'
 
 const URGENCY_OPTIONS = ['High', 'Med', 'Low']
 
-export default function QuickAddModal({ isOpen, onClose, status, profile, profiles, assignTask, updateTask, refetch }) {
+export default function QuickAddModal({ isOpen, onClose, status, profile, profiles, assignTask, updateTask, refetch, initialDueDate = '' }) {
   const [title, setTitle] = useState('')
   const [assigneeId, setAssigneeId] = useState(profile?.id || '')
   const [urgency, setUrgency] = useState('Med')
@@ -12,6 +13,11 @@ export default function QuickAddModal({ isOpen, onClose, status, profile, profil
   const [submitting, setSubmitting] = useState(false)
 
   const today = new Date().toISOString().split('T')[0]
+
+  // Calendar day-cell quick-create prefills the clicked day.
+  useEffect(() => {
+    if (isOpen) setDueDate(initialDueDate || '')
+  }, [isOpen, initialDueDate])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -23,7 +29,7 @@ export default function QuickAddModal({ isOpen, onClose, status, profile, profil
       assigneeIds: [assigneeId || profile?.id],
       title: title.trim(),
       urgency,
-      dueDate: dueDate ? new Date(dueDate).toISOString() : null,
+      dueDate: dueDate ? dueDateForDay(null, dueDate) : null,
       allProfiles: profiles,
       teamId: profile?.team_id,
     })

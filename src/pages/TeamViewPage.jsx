@@ -69,6 +69,7 @@ export default function TeamViewPage() {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [showBulkDelete, setShowBulkDelete] = useState(false)
   const [quickAddStatus, setQuickAddStatus] = useState(null)
+  const [quickAddDate, setQuickAddDate] = useState('')   // calendar day-cell +
   const [hideSubtasks, setHideSubtasks] = useState(true) // on by default in Team View
 
   // Calendar drag-to-reschedule — same updateTask path as every other
@@ -342,6 +343,7 @@ export default function TeamViewPage() {
               tasks={filtered}
               onOpenTask={(t) => setActiveTaskId(t.id)}
               onReschedule={handleCalendarReschedule}
+              onQuickCreate={(iso) => { setQuickAddDate(iso); setQuickAddStatus('Not Started') }}
             />
           </div>
         ) : (
@@ -497,13 +499,14 @@ export default function TeamViewPage() {
 
         <QuickAddModal
           isOpen={!!quickAddStatus}
-          onClose={() => setQuickAddStatus(null)}
+          onClose={() => { setQuickAddStatus(null); setQuickAddDate('') }}
           status={quickAddStatus || 'Not Started'}
           profile={profile}
           profiles={profiles}
           assignTask={assignTask}
           updateTask={updateTask}
           refetch={refetch}
+          initialDueDate={quickAddDate}
         />
       </div>
     </PageTransition>
