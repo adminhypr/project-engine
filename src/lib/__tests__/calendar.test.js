@@ -5,6 +5,8 @@ import {
   addMonths,
   formatMonthTitle,
   toIsoDay,
+  dueDateForDay,
+  dueDayIso,
 } from '../calendar'
 
 // month is 0-based throughout (JS Date convention).
@@ -93,6 +95,43 @@ describe('formatMonthTitle', () => {
   it('renders "Month Year"', () => {
     expect(formatMonthTitle(2026, 6)).toBe('July 2026')
     expect(formatMonthTitle(2027, 0)).toBe('January 2027')
+  })
+})
+
+describe('dueDateForDay', () => {
+  // tasks.due_date is timestamptz — writing a bare 'YYYY-MM-DD' stores UTC
+  // midnight, which renders as the PREVIOUS local day for negative-UTC
+  // users (and due times drive the 4h/24h reminder emails). Rescheduling
+  // must keep the local time-of-day and change only the day.
+  it('keeps the local time-of-day when moving to another day', () => {
+    const prev = new Date(2026, 6, 5, 20, 30).toISOString() // Jul 5 8:30 PM local
+    const next = dueDateForDay(prev, '2026-07-10')
+    const d = new Date(next)
+    expect(toIsoDay(d)).toBe('2026-07-10')
+    expect(d.getHours()).toBe(20)
+    expect(d.getMinutes()).toBe(30)
+  })
+  it('defaults to 17:00 local when the task had no due date (tray drop)', () => {
+    const d = new Date(dueDateForDay(null, '2026-07-15'))
+    expect(toIsoDay(d)).toBe('2026-07-15')
+    expect(d.getHours()).toBe(17)
+  })
+  it('returns a full ISO timestamp, not a bare date', () => {
+    expect(dueDateForDay(null, '2026-07-15')).toMatch(/T\d{2}:\d{2}/)
+  })
+  it('returns null for an invalid target day', () => {
+    expect(dueDateForDay(null, 'not-a-day')).toBeNull()
+  })
+})
+
+describe('dueDayIso', () => {
+  it('returns the LOCAL day for a timestamptz value', () => {
+    const prev = new Date(2026, 6, 14, 20, 0).toISOString()
+    expect(dueDayIso(prev)).toBe('2026-07-14')
+  })
+  it('passes through date-only strings and handles null', () => {
+    expect(dueDayIso('2026-07-05')).toBe('2026-07-05')
+    expect(dueDayIso(null)).toBeNull()
   })
 })
 

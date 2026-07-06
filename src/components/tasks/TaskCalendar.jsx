@@ -10,7 +10,7 @@ import {
   useDroppable,
 } from '@dnd-kit/core'
 import { ChevronLeft, ChevronRight, CalendarX2 } from 'lucide-react'
-import { monthMatrix, bucketTasksByDay, addMonths, formatMonthTitle } from '../../lib/calendar'
+import { monthMatrix, bucketTasksByDay, addMonths, formatMonthTitle, dueDateForDay, dueDayIso } from '../../lib/calendar'
 
 // Notion-style month calendar (design:
 // docs/plans/2026-07-05-calendar-view-design.md). Purely presentational —
@@ -172,10 +172,11 @@ export default function TaskCalendar({ tasks, onOpenTask, onReschedule }) {
     }
     const iso = String(over.id).startsWith('day-') ? String(over.id).slice(4) : null
     if (!iso) return
-    // No-op when dropped back on its own day
-    const current = (task.due_date || '').slice(0, 10)
-    if (iso === current) return
-    onReschedule(task.id, iso)
+    // No-op when dropped back on its own LOCAL day
+    if (iso === dueDayIso(task.due_date)) return
+    // Keep the task's local time-of-day — due_date is timestamptz and due
+    // times feed the reminder emails. Tray drops default to 17:00 local.
+    onReschedule(task.id, dueDateForDay(task.due_date, iso))
   }
 
   return (

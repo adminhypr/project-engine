@@ -68,6 +68,31 @@ export function bucketTasksByDay(tasks) {
   return { byDay, undated }
 }
 
+// Local calendar day ('YYYY-MM-DD') a due_date falls on, or null.
+export function dueDayIso(due) {
+  const d = parseDueLocal(due)
+  return d ? toIsoDay(d) : null
+}
+
+// New due_date value for dropping a task on `iso`. tasks.due_date is
+// timestamptz: a bare 'YYYY-MM-DD' would store UTC midnight and render on
+// the PREVIOUS local day for negative-UTC users, and due TIMES feed the
+// 4h/24h reminder emails — so keep the task's local time-of-day and change
+// only the day. Tray drops (no prior date) default to 17:00 local.
+export function dueDateForDay(prevDue, iso, { defaultHour = 17 } = {}) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '')
+  if (!m) return null
+  let hours = defaultHour, minutes = 0
+  if (prevDue) {
+    const prev = new Date(prevDue)
+    if (!isNaN(prev.getTime()) && /T|\s\d{2}:/.test(String(prevDue))) {
+      hours = prev.getHours()
+      minutes = prev.getMinutes()
+    }
+  }
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), hours, minutes).toISOString()
+}
+
 export function addMonths(year, month, delta) {
   const d = new Date(year, month + delta, 1)
   return { year: d.getFullYear(), month: d.getMonth() }
