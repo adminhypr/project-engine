@@ -30,7 +30,17 @@ export function useUserAdmin({ approverName, onChanged }) {
     // If this is the user's first team and they have a pending invite that
     // specified a role (Agent/Client/Manager/Staff), apply that role to the
     // new profile_teams row. Otherwise default to 'Staff' per the DB default.
-    const pending = isPrimary ? getPendingInvite(user.email) : null
+    // Invites live in pending_invites (migration 114) so ANY admin's first
+    // team-grant applies them; localStorage is a read-only legacy fallback
+    // for invites sent before that migration.
+    let pending = null
+    if (isPrimary && user.email) {
+      const { data } = await supabase.from('pending_invites')
+        .select('role')
+        .eq('email', user.email.toLowerCase())
+        .maybeSingle()
+      pending = data || getPendingInvite(user.email)
+    }
     const invitedRole = pending?.role
     const insertBody = {
       profile_id: user.id,
@@ -58,7 +68,10 @@ export function useUserAdmin({ approverName, onChanged }) {
         body: { type: 'approved', userId: user.id, approverName: approverName || 'An administrator' }
       }).catch(() => {}) // Non-blocking — don't fail the team assignment if email fails
 
-      if (pending) clearPendingInvite(user.email)
+      if (pending) {
+        await supabase.from('pending_invites').delete().eq('email', user.email.toLowerCase())
+        clearPendingInvite(user.email)
+      }
     }
 
     showToast(isPrimary ? 'Team added — approval email sent' : 'Team added')
@@ -152,12 +165,16 @@ export function useUserAdmin({ approverName, onChanged }) {
   async function setAccountType(user, type) {
     if (user.role === 'Admin') { showToast('Remove Admin access first', 'error'); return }
     const targetRole = type === 'Internal' ? 'Staff' : type
-    const { error } = await supabase.from('profiles').update({ role: targetRole }).eq('id', user.id)
-    if (error) { showToast(error.message, 'error'); return }
+    // profile_teams FIRST, profiles LAST: the sync trigger fires on
+    // profile_teams writes, so the global role write must come after it.
+    // (The trigger's sticky guard is fixed in migration 115, but this order
+    // is the one the legacy flow proved for years — keep both defenses.)
     const { error: ptError } = await supabase.from('profile_teams')
       .update({ role: targetRole })
       .eq('profile_id', user.id)
     if (ptError) { showToast(ptError.message, 'error'); return }
+    const { error } = await supabase.from('profiles').update({ role: targetRole }).eq('id', user.id)
+    if (error) { showToast(error.message, 'error'); return }
     showToast(type === 'Internal' ? 'Converted to internal user' : `Account type set to ${type}`)
     onChanged()
   }

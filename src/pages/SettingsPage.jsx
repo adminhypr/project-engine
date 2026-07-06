@@ -11,7 +11,6 @@ import DisplayNameCard from '../components/settings/DisplayNameCard'
 import NotificationSoundCard from '../components/settings/NotificationSoundCard'
 import EmailDigestCard from '../components/settings/EmailDigestCard'
 import ApiKeysCard from '../components/settings/ApiKeysCard'
-import { setPendingInvite } from '../lib/pendingInvites'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { getAccountType, getAccessLevel, summarizeTeams, filterUsers } from '../lib/userAccess'
 import UserDrawer from '../components/settings/UserDrawer'
@@ -35,6 +34,7 @@ export default function SettingsPage() {
   const [filterTeamId,   setFilterTeamId]   = useState('')
   const [filterType,     setFilterType]     = useState('')
   const [selectedUserId, setSelectedUserId] = useState(null)
+  const [pendingInvites, setPendingInvites] = useState([])
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole,  setInviteRole]  = useState('Staff')
   const [inviteTeamId, setInviteTeamId] = useState('')
@@ -50,9 +50,11 @@ export default function SettingsPage() {
   useEffect(() => { fetchAll() }, [])
 
   async function fetchAll() {
-    const [{ data: p }, { data: t }] = await Promise.all([
+    const [{ data: p }, { data: t }, { data: pi }] = await Promise.all([
       supabase.from('profiles').select('*, teams!profiles_team_id_fkey(id, name), profile_teams!profile_teams_profile_id_fkey(team_id, is_primary, role, team:teams!profile_teams_team_id_fkey(id, name))').order('full_name'),
-      supabase.from('teams').select('*').order('name')
+      supabase.from('teams').select('*').order('name'),
+      // RLS: Admin/Manager only — returns [] for everyone else.
+      supabase.from('pending_invites').select('*, team:teams!pending_invites_team_id_fkey(id, name)').order('created_at', { ascending: false }),
     ])
     const profileList = p || []
     const profileMap = Object.fromEntries(profileList.map(pr => [pr.id, pr]))
@@ -62,6 +64,7 @@ export default function SettingsPage() {
     }))
     setProfiles(enriched)
     setTeams(t || [])
+    setPendingInvites(pi || [])
     setLoading(false)
   }
 
@@ -123,24 +126,38 @@ export default function SettingsPage() {
     if (!email) return
     if (!inviteTeamId) { showToast('Pick a team for the invite', 'error'); return }
     setInviting(true)
-    // Record intended role + team so the first team-assignment in the Users
-    // table (post sign-in) can apply them. Stored per-browser in localStorage.
-    setPendingInvite(email, {
+    // Record intended role + team server-side (pending_invites, migration 114)
+    // so ANY admin's first team-grant applies them — not just this browser.
+    const { error: inviteError } = await supabase.from('pending_invites').upsert({
+      email,
       role: inviteRole,
-      teamId: inviteTeamId,
-      inviterName: profile?.full_name || 'A team member'
+      team_id: inviteTeamId,
+      invited_by: profile?.id || null,
+      inviter_name: profile?.full_name || 'A team member',
     })
+    if (inviteError) {
+      setInviting(false)
+      showToast(inviteError.message || 'Failed to record invite', 'error')
+      return
+    }
     const { error } = await supabase.functions.invoke('user-notify', {
       body: { type: 'invite', email, inviterName: profile?.full_name || 'A team member' }
     })
     setInviting(false)
-    if (error) showToast('Failed to send invite', 'error')
-    else {
-      showToast('Invite sent to ' + email)
-      setInviteEmail('')
-      setInviteRole('Staff')
-      // Keep inviteTeamId so repeat invites to the same team are quick
-    }
+    // The pending row is kept even if the email fails — the invite intent
+    // still applies when the user signs in; re-sending just updates the row.
+    if (error) showToast('Invite recorded, but the email failed to send', 'error')
+    else showToast('Invite sent to ' + email)
+    setInviteEmail('')
+    setInviteRole('Staff')
+    // Keep inviteTeamId so repeat invites to the same team are quick
+    fetchAll()
+  }
+
+  async function cancelInvite(email) {
+    const { error } = await supabase.from('pending_invites').delete().eq('email', email)
+    if (error) showToast(error.message, 'error')
+    else { showToast('Invite cancelled'); fetchAll() }
   }
 
   async function deleteProfile() {
@@ -466,6 +483,35 @@ export default function SettingsPage() {
                 {inviting ? 'Sending...' : 'Send Invite'}
               </button>
             </div>
+
+            {/* Pending invites — applied automatically when the invited user
+                signs in and gets their first team. Visible to every
+                Admin/Manager (server-side since migration 114). */}
+            {pendingInvites.length > 0 && (
+              <div className="mt-5 pt-4 border-t border-slate-100 dark:border-dark-border">
+                <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-2">
+                  Pending invites ({pendingInvites.length})
+                </p>
+                <div className="space-y-1.5">
+                  {pendingInvites.map(inv => (
+                    <div key={inv.email} className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                      <Mail size={11} className="text-slate-300 dark:text-slate-600 shrink-0" />
+                      <span className="font-medium truncate">{inv.email}</span>
+                      <span className="badge bg-slate-100 text-slate-500 dark:bg-dark-hover dark:text-slate-400 text-[10px]">{inv.role}</span>
+                      {inv.team?.name && <span className="text-slate-400 dark:text-slate-500 truncate">→ {inv.team.name}</span>}
+                      {inv.inviter_name && <span className="text-slate-300 dark:text-slate-600 hidden sm:inline">by {inv.inviter_name}</span>}
+                      <button
+                        onClick={() => cancelInvite(inv.email)}
+                        className="ml-auto p-1 rounded text-slate-300 hover:text-red-500 dark:text-slate-600 dark:hover:text-red-400 transition-colors"
+                        title={`Cancel invite for ${inv.email}`}
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </motion.div>
           )}
 
