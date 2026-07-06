@@ -1,18 +1,19 @@
 import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { List, Columns3, ArrowLeft, Users as UsersIcon, Upload } from 'lucide-react'
+import { List, Columns3, CalendarDays, ArrowLeft, Users as UsersIcon, Upload } from 'lucide-react'
 import { useProjects, useProjectMembers } from '../hooks/useProjects'
 import { useAuth } from '../hooks/useAuth'
-import { useTasks } from '../hooks/useTasks'
+import { useTasks, useTaskActions } from '../hooks/useTasks'
 import { useProjectColumns, useProjectFeatures } from '../hooks/useProjectBoard'
 import { useFeatureRequests } from '../hooks/useFeatureRequests'
 import { projectProgress, featureProgress, filterFeatures, EMPTY_FEATURE_FILTERS } from '../lib/projectBoard'
 import FeaturesFilterBar from '../components/projects/FeaturesFilterBar'
 import ProjectStats from '../components/projects/ProjectStats'
-import { LoadingScreen, EmptyState } from '../components/ui'
+import { LoadingScreen, EmptyState, showToast } from '../components/ui'
 import { PageTransition } from '../components/ui/animations'
 import { usePageTitle } from '../hooks/usePageTitle'
 import TaskDetailPanel from '../components/tasks/TaskDetailPanel'
+import TaskCalendar from '../components/tasks/TaskCalendar'
 import RequestEditModal from '../components/projects/RequestEditModal'
 import FeatureList from '../components/projects/FeatureList'
 import FeatureBoard from '../components/projects/FeatureBoard'
@@ -49,6 +50,16 @@ export default function ProjectDetailPage() {
   const projectMembers = useProjectMembers(projectId)
   const members = projectMembers.members
   const { tasks, refetch: refetchTasks } = useTasks()
+  const { updateTask } = useTaskActions()
+
+  // Calendar drag-to-reschedule for feature cards — same updateTask path as
+  // the task pages; features derive from the useTasks context so the grid
+  // repaints on refetch.
+  async function handleCalendarReschedule(taskId, isoDate) {
+    const result = await updateTask(taskId, { due_date: isoDate })
+    if (result.ok) { showToast(isoDate ? 'Due date updated' : 'Due date cleared'); refetchTasks(true) }
+    else { showToast(result.msg || 'Failed to update due date', 'error'); refetchTasks(true) }
+  }
   const currentUserId = profile?.id || null
   const [showMembers, setShowMembers] = useState(false)
   const [showImport, setShowImport] = useState(false)
@@ -124,6 +135,13 @@ export default function ProjectDetailPage() {
       >
         <Columns3 size={16} />
       </button>
+      <button
+        onClick={() => switchView('calendar')}
+        className={`p-1.5 rounded-md transition-all ${view === 'calendar' ? 'bg-white dark:bg-dark-card text-slate-900 dark:text-white shadow-soft' : 'text-slate-400 dark:text-slate-500'}`}
+        title="Calendar view"
+      >
+        <CalendarDays size={16} />
+      </button>
     </div>
   )
 
@@ -187,6 +205,12 @@ export default function ProjectDetailPage() {
                 onUpdateColumn={updateColumn}
                 onDeleteColumn={deleteColumn}
                 onOpenFeature={(t) => setActiveTaskId(t.id)}
+              />
+            ) : view === 'calendar' ? (
+              <TaskCalendar
+                tasks={visibleFeatures}
+                onOpenTask={(t) => setActiveTaskId(t.id)}
+                onReschedule={handleCalendarReschedule}
               />
             ) : (
               <FeatureList
