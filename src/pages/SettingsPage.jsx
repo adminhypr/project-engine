@@ -11,8 +11,9 @@ import DisplayNameCard from '../components/settings/DisplayNameCard'
 import NotificationSoundCard from '../components/settings/NotificationSoundCard'
 import EmailDigestCard from '../components/settings/EmailDigestCard'
 import ApiKeysCard from '../components/settings/ApiKeysCard'
-import { setPendingInvite, getPendingInvite, clearPendingInvite } from '../lib/pendingInvites'
+import { setPendingInvite } from '../lib/pendingInvites'
 import { usePageTitle } from '../hooks/usePageTitle'
+import { useUserAdmin } from '../hooks/useUserAdmin'
 
 export default function SettingsPage() {
   usePageTitle('Settings')
@@ -708,6 +709,8 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
   const [addingTeam, setAddingTeam] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [nameValue,   setNameValue]   = useState(user.full_name || '')
+  // Shared write-paths (extracted verbatim — phase 2 of the settings redesign)
+  const admin = useUserAdmin({ approverName, onChanged: onTeamsChange })
 
   // Multi-team data from profile_teams junction
   const userTeams = (user.profile_teams || []).map(pt => ({
@@ -732,118 +735,13 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
   )
 
   async function addTeamToUser(teamId) {
-    const isPrimary = userTeams.length === 0 // First team = primary
-
-    // If this is the user's first team and they have a pending invite that
-    // specified a role (Agent/Client/Manager/Staff), apply that role to the
-    // new profile_teams row. Otherwise default to 'Staff' per the DB default.
-    const pending = isPrimary ? getPendingInvite(user.email) : null
-    const invitedRole = pending?.role
-    const insertBody = {
-      profile_id: user.id,
-      team_id: teamId,
-      is_primary: isPrimary
-    }
-    if (invitedRole) insertBody.role = invitedRole
-
-    const { error } = await supabase.from('profile_teams').insert(insertBody)
-    if (error) { showToast(error.message, 'error'); return }
-
-    // Sync profiles.team_id to primary team
-    if (isPrimary) {
-      const profileUpdates = { team_id: teamId }
-      // Sticky roles: set profiles.role directly for Agent/Client so the
-      // role-sync trigger (migration 038) leaves it untouched on future
-      // per-team changes. 'Manager'/'Staff' are left to the trigger.
-      if (invitedRole === 'Agent' || invitedRole === 'Client') {
-        profileUpdates.role = invitedRole
-      }
-      await supabase.from('profiles').update(profileUpdates).eq('id', user.id)
-
-      // First team = user approved — send approval notification email
-      supabase.functions.invoke('user-notify', {
-        body: { type: 'approved', userId: user.id, approverName: approverName || 'An administrator' }
-      }).catch(() => {}) // Non-blocking — don't fail the team assignment if email fails
-
-      if (pending) clearPendingInvite(user.email)
-    }
-
-    showToast(isPrimary ? 'Team added — approval email sent' : 'Team added')
+    await admin.addTeamToUser(user, teamId)
     setAddingTeam(false)
-    onTeamsChange()
   }
 
-  async function removeTeamFromUser(teamId) {
-    const team = userTeams.find(t => t.team_id === teamId)
-    const { error } = await supabase.from('profile_teams').delete()
-      .eq('profile_id', user.id)
-      .eq('team_id', teamId)
-    if (error) { showToast(error.message, 'error'); return }
-
-    // If we removed the primary, promote the next team (if any)
-    if (team?.is_primary) {
-      const remaining = userTeams.filter(t => t.team_id !== teamId)
-      if (remaining.length > 0) {
-        await supabase.from('profile_teams')
-          .update({ is_primary: true })
-          .eq('profile_id', user.id)
-          .eq('team_id', remaining[0].team_id)
-        await supabase.from('profiles').update({ team_id: remaining[0].team_id }).eq('id', user.id)
-      } else {
-        await supabase.from('profiles').update({ team_id: null }).eq('id', user.id)
-      }
-    }
-
-    showToast('Team removed')
-    onTeamsChange()
-  }
-
-  async function setPrimaryTeam(teamId) {
-    // Unset current primary
-    await supabase.from('profile_teams')
-      .update({ is_primary: false })
-      .eq('profile_id', user.id)
-      .eq('is_primary', true)
-
-    // Set new primary
-    const { error } = await supabase.from('profile_teams')
-      .update({ is_primary: true })
-      .eq('profile_id', user.id)
-      .eq('team_id', teamId)
-    if (error) { showToast(error.message, 'error'); return }
-
-    // Sync profiles.team_id
-    await supabase.from('profiles').update({ team_id: teamId }).eq('id', user.id)
-
-    showToast('Primary team updated')
-    onTeamsChange()
-  }
-
-  async function updateTeamRole(teamId, newRole) {
-    const { error } = await supabase.from('profile_teams')
-      .update({ role: newRole })
-      .eq('profile_id', user.id)
-      .eq('team_id', teamId)
-    if (error) { showToast(error.message, 'error'); return }
-
-    // Sticky global roles: Agent/Client must also be set on profiles.role
-    // (the role-sync trigger treats them as sticky and will NEVER write
-    // those values itself — it only syncs Staff/Manager). Admin is
-    // preserved as-is and is set via the Admin toggle elsewhere.
-    if (newRole === 'Agent' || newRole === 'Client') {
-      if (user.role !== newRole && user.role !== 'Admin') {
-        await supabase.from('profiles').update({ role: newRole }).eq('id', user.id)
-      }
-    } else if ((newRole === 'Staff' || newRole === 'Manager') &&
-               (user.role === 'Agent' || user.role === 'Client')) {
-      // Converting an external back to an internal: clear sticky role so
-      // the trigger can resume syncing from per-team rows.
-      await supabase.from('profiles').update({ role: newRole }).eq('id', user.id)
-    }
-
-    showToast(`Role updated to ${newRole}`)
-    onTeamsChange()
-  }
+  const removeTeamFromUser = (teamId) => admin.removeTeamFromUser(user, teamId)
+  const setPrimaryTeam     = (teamId) => admin.setPrimaryTeam(user, teamId)
+  const updateTeamRole     = (teamId, newRole) => admin.updateTeamRole(user, teamId, newRole)
 
   async function toggleAdmin() {
     const newRole = user.role === 'Admin' ? (userTeams.some(t => t.role === 'Manager') ? 'Manager' : 'Staff') : 'Admin'
