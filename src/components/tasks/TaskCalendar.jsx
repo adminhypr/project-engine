@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -34,6 +34,24 @@ const DOT = {
 }
 
 const MAX_VISIBLE = 3
+
+// Close a popover on outside mousedown or Escape (same idiom as
+// ReactionPicker). Listener only attached while open.
+function useCloseOnOutside(open, onClose) {
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const onDocClick = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose() }
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('mousedown', onDocClick)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDocClick)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open, onClose])
+  return ref
+}
 
 const STATUS_BADGE = {
   'Not Started': 'bg-slate-100 text-slate-500 dark:bg-dark-hover dark:text-slate-400',
@@ -161,10 +179,11 @@ function DayCell({ cell, tasks, expanded, onToggleExpand, onOpenTask, visiblePro
   )
 }
 
-function NoDateTray({ undated, open, onToggle, onOpenTask, visibleProps }) {
+function NoDateTray({ undated, open, onToggle, onClose, onOpenTask, visibleProps }) {
   const { setNodeRef, isOver } = useDroppable({ id: 'no-date-tray' })
+  const rootRef = useCloseOnOutside(open, onClose)
   return (
-    <div className="relative">
+    <div className="relative" ref={rootRef}>
       <button
         ref={setNodeRef}
         onClick={onToggle}
@@ -197,6 +216,7 @@ export default function TaskCalendar({ tasks, onOpenTask, onReschedule }) {
   const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() })
   const [trayOpen, setTrayOpen] = useState(false)
   const [propsOpen, setPropsOpen] = useState(false)
+  const propsPopoverRef = useCloseOnOutside(propsOpen, () => setPropsOpen(false))
   const [visibleProps, setVisibleProps] = useState(() => loadCalendarProps())
 
   function toggleProp(key) {
@@ -274,7 +294,7 @@ export default function TaskCalendar({ tasks, onOpenTask, onReschedule }) {
             Today
           </button>
           <div className="ml-auto flex items-center gap-2">
-            <div className="relative">
+            <div className="relative" ref={propsPopoverRef}>
               <button
                 onClick={() => setPropsOpen(o => !o)}
                 className={`btn text-xs px-2.5 py-1.5 inline-flex items-center gap-1.5 ${visibleProps.length ? 'text-brand-600 dark:text-brand-400' : ''}`}
@@ -311,7 +331,7 @@ export default function TaskCalendar({ tasks, onOpenTask, onReschedule }) {
                 </div>
               )}
             </div>
-            <NoDateTray undated={undated} open={trayOpen} onToggle={() => setTrayOpen(o => !o)} onOpenTask={onOpenTask} visibleProps={visibleProps} />
+            <NoDateTray undated={undated} open={trayOpen} onToggle={() => setTrayOpen(o => !o)} onClose={() => setTrayOpen(false)} onOpenTask={onOpenTask} visibleProps={visibleProps} />
           </div>
         </div>
 
