@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import {
   monthMatrix,
+  weekMatrix,
   bucketTasksByDay,
   addMonths,
   formatMonthTitle,
+  formatWeekTitle,
+  shiftAnchor,
   toIsoDay,
   dueDateForDay,
   dueDayIso,
@@ -44,6 +47,47 @@ describe('monthMatrix', () => {
     expect(july.flat().find(c => c.isToday)?.iso).toBe('2026-07-05')
     const august = monthMatrix(2026, 7, { now })
     expect(august.flat().filter(c => c.isToday && c.inMonth)).toEqual([])
+  })
+})
+
+describe('weekMatrix', () => {
+  it('returns the Monday-start week containing the anchor', () => {
+    const week = weekMatrix('2026-07-05') // a Sunday
+    expect(week.length).toBe(7)
+    expect(week[0].iso).toBe('2026-06-29') // Monday
+    expect(week[6].iso).toBe('2026-07-05')
+    expect(week.every(c => c.inMonth)).toBe(true) // week view has no spillover concept
+  })
+  it('anchor already Monday stays put', () => {
+    expect(weekMatrix('2026-07-06')[0].iso).toBe('2026-07-06')
+  })
+  it('marks today via injectable now', () => {
+    const now = new Date(2026, 6, 5, 9, 0)
+    const week = weekMatrix('2026-07-01', { now })
+    expect(week.find(c => c.isToday)?.iso).toBe('2026-07-05')
+  })
+})
+
+describe('formatWeekTitle', () => {
+  it('same-month week: "Jul 6 – 12, 2026"', () => {
+    expect(formatWeekTitle(weekMatrix('2026-07-06'))).toBe('Jul 6 – 12, 2026')
+  })
+  it('cross-month week: "Jun 29 – Jul 5, 2026"', () => {
+    expect(formatWeekTitle(weekMatrix('2026-07-05'))).toBe('Jun 29 – Jul 5, 2026')
+  })
+  it('cross-year week: "Dec 29, 2025 – Jan 4, 2026"', () => {
+    expect(formatWeekTitle(weekMatrix('2026-01-01'))).toBe('Dec 29, 2025 – Jan 4, 2026')
+  })
+})
+
+describe('shiftAnchor', () => {
+  it('month mode moves by calendar month (first of month)', () => {
+    expect(shiftAnchor('2026-07-15', 'month', 1)).toBe('2026-08-01')
+    expect(shiftAnchor('2026-01-15', 'month', -1)).toBe('2025-12-01')
+  })
+  it('week mode moves by 7 days', () => {
+    expect(shiftAnchor('2026-07-05', 'week', 1)).toBe('2026-07-12')
+    expect(shiftAnchor('2026-07-05', 'week', -1)).toBe('2026-06-28')
   })
 })
 

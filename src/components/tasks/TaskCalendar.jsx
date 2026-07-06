@@ -10,8 +10,8 @@ import {
   useDroppable,
 } from '@dnd-kit/core'
 import { ChevronLeft, ChevronRight, CalendarX2, SlidersHorizontal, Check } from 'lucide-react'
-import { monthMatrix, bucketTasksByDay, addMonths, formatMonthTitle, dueDateForDay, dueDayIso } from '../../lib/calendar'
-import { CALENDAR_PROPS, loadCalendarProps, saveCalendarProps } from '../../lib/calendarProps'
+import { monthMatrix, weekMatrix, bucketTasksByDay, formatMonthTitle, formatWeekTitle, shiftAnchor, toIsoDay, dueDateForDay, dueDayIso } from '../../lib/calendar'
+import { CALENDAR_PROPS, loadCalendarProps, saveCalendarProps, loadCalendarMode, saveCalendarMode } from '../../lib/calendarProps'
 
 // Notion-style month calendar (design:
 // docs/plans/2026-07-05-calendar-view-design.md). Purely presentational —
@@ -137,14 +137,15 @@ function Pill({ task, onOpen, overlay = false, visibleProps = [] }) {
   )
 }
 
-function DayCell({ cell, tasks, expanded, onToggleExpand, onOpenTask, visibleProps }) {
+function DayCell({ cell, tasks, expanded, onToggleExpand, onOpenTask, visibleProps, weekMode = false }) {
   const { setNodeRef, isOver } = useDroppable({ id: `day-${cell.iso}` })
-  const visible = expanded ? tasks : tasks.slice(0, MAX_VISIBLE)
+  const cap = weekMode ? 12 : MAX_VISIBLE
+  const visible = expanded ? tasks : tasks.slice(0, cap)
   const hidden = tasks.length - visible.length
   return (
     <div
       ref={setNodeRef}
-      className={`min-h-[104px] p-1.5 border-t border-l border-slate-100 dark:border-dark-border flex flex-col gap-1
+      className={`${weekMode ? 'min-h-[420px]' : 'min-h-[104px]'} p-1.5 border-t border-l border-slate-100 dark:border-dark-border flex flex-col gap-1
         ${cell.inMonth ? 'bg-white dark:bg-dark-surface' : 'bg-slate-50/60 dark:bg-dark-bg/40'}
         ${isOver ? 'ring-2 ring-inset ring-brand-400 bg-brand-50/40 dark:bg-brand-500/10' : ''}`}
     >
@@ -167,7 +168,7 @@ function DayCell({ cell, tasks, expanded, onToggleExpand, onOpenTask, visiblePro
           +{hidden} more
         </button>
       )}
-      {expanded && tasks.length > MAX_VISIBLE && (
+      {expanded && tasks.length > cap && (
         <button
           onClick={() => onToggleExpand(cell.iso)}
           className="text-[10px] text-slate-400 hover:text-brand-500 dark:text-slate-500 dark:hover:text-brand-400 text-left px-1.5 transition-colors"
@@ -213,7 +214,8 @@ const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 export default function TaskCalendar({ tasks, onOpenTask, onReschedule }) {
   const today = new Date()
-  const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() })
+  const [mode, setMode] = useState(() => loadCalendarMode()) // 'month' | 'week'
+  const [anchor, setAnchor] = useState(() => toIsoDay(today))
   const [trayOpen, setTrayOpen] = useState(false)
   const [propsOpen, setPropsOpen] = useState(false)
   const propsPopoverRef = useCloseOnOutside(propsOpen, () => setPropsOpen(false))
@@ -234,7 +236,18 @@ export default function TaskCalendar({ tasks, onOpenTask, onReschedule }) {
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   )
 
-  const weeks = useMemo(() => monthMatrix(cursor.year, cursor.month), [cursor])
+  const anchorDate = useMemo(() => {
+    const [y, m, d] = anchor.split('-').map(Number)
+    return new Date(y, m - 1, d)
+  }, [anchor])
+  const weeks = useMemo(() => (
+    mode === 'week'
+      ? [weekMatrix(anchor)]
+      : monthMatrix(anchorDate.getFullYear(), anchorDate.getMonth())
+  ), [mode, anchor, anchorDate])
+  const title = mode === 'week'
+    ? formatWeekTitle(weeks[0])
+    : formatMonthTitle(anchorDate.getFullYear(), anchorDate.getMonth())
   const { byDay, undated } = useMemo(() => bucketTasksByDay(tasks), [tasks])
 
   function toggleExpand(iso) {
@@ -246,7 +259,13 @@ export default function TaskCalendar({ tasks, onOpenTask, onReschedule }) {
   }
 
   function move(delta) {
-    setCursor(c => addMonths(c.year, c.month, delta))
+    setAnchor(a => shiftAnchor(a, mode, delta))
+    setExpandedDays(new Set())
+  }
+
+  function switchMode(m) {
+    setMode(m)
+    saveCalendarMode(m)
     setExpandedDays(new Set())
   }
 
@@ -278,21 +297,36 @@ export default function TaskCalendar({ tasks, onOpenTask, onReschedule }) {
       <div className="card p-0 overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 dark:border-dark-border flex-wrap">
-          <button onClick={() => move(-1)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-dark-hover dark:hover:text-slate-200 transition-colors" aria-label="Previous month">
+          <button onClick={() => move(-1)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-dark-hover dark:hover:text-slate-200 transition-colors" aria-label={mode === 'week' ? 'Previous week' : 'Previous month'}>
             <ChevronLeft size={16} />
           </button>
           <h3 className="text-sm font-semibold text-slate-900 dark:text-white min-w-[8.5rem] text-center">
-            {formatMonthTitle(cursor.year, cursor.month)}
+            {title}
           </h3>
-          <button onClick={() => move(1)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-dark-hover dark:hover:text-slate-200 transition-colors" aria-label="Next month">
+          <button onClick={() => move(1)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-dark-hover dark:hover:text-slate-200 transition-colors" aria-label={mode === 'week' ? 'Next week' : 'Next month'}>
             <ChevronRight size={16} />
           </button>
           <button
-            onClick={() => { setCursor({ year: today.getFullYear(), month: today.getMonth() }); setExpandedDays(new Set()) }}
+            onClick={() => { setAnchor(toIsoDay(new Date())); setExpandedDays(new Set()) }}
             className="btn text-xs px-2.5 py-1.5"
           >
             Today
           </button>
+          <div className="inline-flex rounded-lg bg-slate-100 dark:bg-dark-hover p-0.5 gap-0.5 ml-1">
+            {['month', 'week'].map(m => (
+              <button
+                key={m}
+                onClick={() => switchMode(m)}
+                className={`px-2 py-1 rounded-md text-xs font-medium capitalize transition-all ${
+                  mode === m
+                    ? 'bg-white dark:bg-dark-card text-slate-900 dark:text-white shadow-soft'
+                    : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
           <div className="ml-auto flex items-center gap-2">
             <div className="relative" ref={propsPopoverRef}>
               <button
@@ -355,6 +389,7 @@ export default function TaskCalendar({ tasks, onOpenTask, onReschedule }) {
               onToggleExpand={toggleExpand}
               onOpenTask={onOpenTask}
               visibleProps={visibleProps}
+              weekMode={mode === 'week'}
             />
           ))}
         </div>

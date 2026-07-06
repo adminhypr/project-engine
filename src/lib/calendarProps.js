@@ -31,3 +31,15 @@ export function saveCalendarProps(keys) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify((keys || []).filter(k => VALID.has(k))))
   } catch { /* storage full/blocked — view still works, just not persisted */ }
 }
+
+// Month vs week layout ("Show calendar as" in Notion terms).
+export const MODE_KEY = 'pe-calendar-mode'
+
+export function loadCalendarMode() {
+  const v = localStorage.getItem(MODE_KEY)
+  return v === 'week' ? 'week' : 'month'
+}
+
+export function saveCalendarMode(mode) {
+  try { localStorage.setItem(MODE_KEY, mode === 'week' ? 'week' : 'month') } catch { /* non-fatal */ }
+}

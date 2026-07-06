@@ -3,6 +3,8 @@ import {
   CALENDAR_PROPS,
   loadCalendarProps,
   saveCalendarProps,
+  loadCalendarMode,
+  saveCalendarMode,
   STORAGE_KEY,
 } from '../calendarProps'
 
@@ -35,5 +37,19 @@ describe('load/saveCalendarProps', () => {
   it('survives a non-array payload', () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ status: true }))
     expect(loadCalendarProps()).toEqual([])
+  })
+})
+
+describe('load/saveCalendarMode', () => {
+  it('defaults to month', () => {
+    expect(loadCalendarMode()).toBe('month')
+  })
+  it('round-trips week', () => {
+    saveCalendarMode('week')
+    expect(loadCalendarMode()).toBe('week')
+  })
+  it('ignores unknown values', () => {
+    localStorage.setItem('pe-calendar-mode', 'fortnight')
+    expect(loadCalendarMode()).toBe('month')
   })
 })

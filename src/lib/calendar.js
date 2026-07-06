@@ -68,6 +68,58 @@ export function bucketTasksByDay(tasks) {
   return { byDay, undated }
 }
 
+// Single Monday-start week containing `anchor` (iso 'YYYY-MM-DD' or Date).
+// Same cell shape as monthMatrix; week view has no spillover concept, so
+// every cell is inMonth.
+export function weekMatrix(anchor, { now = new Date() } = {}) {
+  const todayIso = toIsoDay(now)
+  const a = anchor instanceof Date ? new Date(anchor) : (() => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(anchor))
+    return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date()
+  })()
+  const cursor = new Date(a.getFullYear(), a.getMonth(), a.getDate() - ((a.getDay() + 6) % 7))
+  const week = []
+  for (let i = 0; i < 7; i++) {
+    const iso = toIsoDay(cursor)
+    week.push({ iso, dayOfMonth: cursor.getDate(), inMonth: true, isToday: iso === todayIso })
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return week
+}
+
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+const cellDate = (c) => {
+  const [y, m, d] = c.iso.split('-').map(Number)
+  return { y, m: m - 1, d }
+}
+
+// "Jul 6 – 12, 2026" / "Jun 29 – Jul 5, 2026" / "Dec 29, 2025 – Jan 4, 2026"
+export function formatWeekTitle(week) {
+  const a = cellDate(week[0])
+  const b = cellDate(week[week.length - 1])
+  if (a.y !== b.y) {
+    return `${MONTHS_SHORT[a.m]} ${a.d}, ${a.y} – ${MONTHS_SHORT[b.m]} ${b.d}, ${b.y}`
+  }
+  if (a.m !== b.m) {
+    return `${MONTHS_SHORT[a.m]} ${a.d} – ${MONTHS_SHORT[b.m]} ${b.d}, ${a.y}`
+  }
+  return `${MONTHS_SHORT[a.m]} ${a.d} – ${b.d}, ${a.y}`
+}
+
+// Move the calendar anchor: month mode jumps whole calendar months
+// (normalized to the 1st); week mode jumps 7 days.
+export function shiftAnchor(anchorIso, mode, delta) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(anchorIso))
+  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date()
+  if (mode === 'week') {
+    d.setDate(d.getDate() + delta * 7)
+    return toIsoDay(d)
+  }
+  return toIsoDay(new Date(d.getFullYear(), d.getMonth() + delta, 1))
+}
+
 // Local calendar day ('YYYY-MM-DD') a due_date falls on, or null.
 export function dueDayIso(due) {
   const d = parseDueLocal(due)
