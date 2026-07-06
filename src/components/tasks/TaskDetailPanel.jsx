@@ -141,6 +141,9 @@ export default function TaskDetailPanel({ task, tasks = [], onClose, onUpdated }
   const isPending = task?.acceptance_status === 'Pending'
   const isDeclined = task?.acceptance_status === 'Declined'
   const isMyTask = task?.assigned_to === profile?.id || task?.task_assignees?.some(ta => ta.profile_id === profile?.id)
+  // Any assignee can invite more people onto the task (RLS: migration 117).
+  // Removing assignees stays owner-only.
+  const canAddAssignee = isOwner || isMyTask
   const canAcceptDecline = isPending && isMyTask
   const canReassign = isDeclined && (task?.assigned_by === profile?.id || isAdmin)
 
@@ -679,7 +682,7 @@ export default function TaskDetailPanel({ task, tasks = [], onClose, onUpdated }
                     </span>
                   )
                 })}
-                {isOwner && (
+                {canAddAssignee && (
                   showAddAssignee ? (
                     <select
                       autoFocus
