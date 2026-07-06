@@ -264,6 +264,13 @@ describe('projectStats', () => {
     const s = projectStats(null, null, null, now)
     expect(s).toEqual({ features: 0, done: 0, inProgress: 0, overdue: 0, pct: 0, openRequests: 0, openBugs: 0, criticalBugs: 0 })
   })
+  it('treats truthy non-arrays as empty instead of throwing (Sentry: hook object passed for a lane)', () => {
+    // Regression for 3dbf9be: `<ProjectStats requests={hookObject}>` crashed the
+    // project page with "...filter is not a function" in production.
+    const hookShaped = { requests: [], loading: false }
+    const s = projectStats(hookShaped, { requests }, { bugs }, now)
+    expect(s).toEqual({ features: 0, done: 0, inProgress: 0, overdue: 0, pct: 0, openRequests: 0, openBugs: 0, criticalBugs: 0 })
+  })
 })
 
 describe('filterFeatures', () => {
@@ -295,5 +302,8 @@ describe('filterFeatures', () => {
   })
   it('combines dimensions (AND)', () => {
     expect(filterFeatures(feats, { mine: true, urgencies: ['Urgent'], due: 'overdue' }, 'me', now).map(f => f.id)).toEqual(['a'])
+  })
+  it('treats a truthy non-array features value as empty instead of throwing', () => {
+    expect(filterFeatures({ features: feats }, EMPTY_FEATURE_FILTERS, 'me', now)).toEqual([])
   })
 })

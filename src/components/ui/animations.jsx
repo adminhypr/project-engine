@@ -235,7 +235,10 @@ export const rowHoverProps = {
 export function AnimatedList({ children, className = '' }) {
   return (
     <motion.div layout className={className}>
-      <AnimatePresence mode="popLayout">
+      {/* Default mode, not popLayout — popLayout re-parents exiting nodes and
+          can crash react-dom (removeChild NotFoundError) when items are
+          removed by a realtime refetch mid-animation. */}
+      <AnimatePresence>
         {children}
       </AnimatePresence>
     </motion.div>

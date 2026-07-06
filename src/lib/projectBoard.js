@@ -7,6 +7,10 @@
 // untouched (Trello's `pos` float trick).
 const POS_STEP = 1000
 
+// A truthy non-array (e.g. a whole hook object passed where its array field
+// was meant — the 3dbf9be prod crash) must degrade to empty, not throw.
+const asArray = (v) => (Array.isArray(v) ? v : [])
+
 // Canonical Feature Request statuses, in board (left→right) order.
 export const REQUEST_STATUSES = [
   'Requested',
@@ -181,7 +185,7 @@ export function mapQAItem(raw) {
 // injectable for deterministic tests. Overdue mirrors filterFeatures exactly
 // (due in the past, not Done) so the strip and the filter never disagree.
 export function projectStats(features, requests, bugs, now = new Date()) {
-  const feats = features || []
+  const feats = asArray(features)
   let done = 0, inProgress = 0, overdue = 0
   for (const f of feats) {
     if (f?.status === 'Done') done++
@@ -192,13 +196,13 @@ export function projectStats(features, requests, bugs, now = new Date()) {
   const pct = projectProgress(feats.map(f => ({ pct: featureProgress(f).pct })))
 
   const isOpenBug = (b) => b?.status === 'Reported' || b?.status === 'Confirmed'
-  const bugList = bugs || []
+  const bugList = asArray(bugs)
   const openBugs = bugList.filter(isOpenBug).length
   const criticalBugs = bugList.filter(
     (b) => isOpenBug(b) && (b?.severity === 'Critical' || b?.severity === 'High'),
   ).length
 
-  const openRequests = (requests || []).filter(
+  const openRequests = asArray(requests).filter(
     (r) => r?.status !== 'Promoted' && r?.status !== 'Rejected',
   ).length
 
@@ -222,7 +226,7 @@ export function filterFeatures(features, filters = {}, currentUserId = null, now
   const startOfToday = new Date(now); startOfToday.setHours(0, 0, 0, 0)
   const weekAhead = new Date(startOfToday); weekAhead.setDate(weekAhead.getDate() + 7)
 
-  return (features || []).filter(f => {
+  return asArray(features).filter(f => {
     if (mine && !isAssignedTo(f, currentUserId)) return false
     if (urgencies.length && !urgencies.includes(f?.urgency)) return false
     if (due !== 'any') {

@@ -154,12 +154,14 @@ export default function KanbanColumn({
             ${isOverLimit ? 'ring-1 ring-red-200 dark:ring-red-500/20' : ''}`}
           style={{ maxHeight: 'calc(100vh - 310px)' }}
         >
-          <AnimatePresence mode="popLayout">
+          {/* No popLayout / layoutId here: they re-parent exiting nodes, which
+              fights dnd-kit + realtime refetch over the same DOM and crashed
+              prod with react-dom removeChild NotFoundError. */}
+          <AnimatePresence>
             {tasks.map((task, i) => (
               <motion.div
                 key={task.id}
                 layout
-                layoutId={task.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95 }}

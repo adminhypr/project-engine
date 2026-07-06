@@ -890,7 +890,7 @@ function UserRow({ user, teams, allProfiles, isSelf, saving, onSave, onTeamsChan
       <td className="table-td text-slate-500 dark:text-slate-400 text-xs">{user.email}</td>
       <td className="table-td">
         <div className="flex flex-wrap items-center gap-1.5 min-w-[10rem]">
-          <AnimatePresence mode="popLayout">
+          <AnimatePresence>
             {userTeams.map(t => (
               <motion.span
                 key={t.team_id}
