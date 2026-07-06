@@ -1,6 +1,9 @@
 # Calendar Multi-Day Spans — Notion-style bars
 
-**Date:** 2026-07-05 · **Status:** approved scope, ready to implement
+**Date:** 2026-07-05 · **Status:** PARKED (Ian, 2026-07-05) — do NOT apply
+migration 116 or start implementation until explicitly resumed. Ian wants no
+DB movement for now. Everything below is ready when that changes; re-read
+the LIVE trigger bodies before writing the migration (they may drift).
 **Scope decisions (Ian):** span strip above the pills (single-day pills
 unchanged) · v1 includes bar-move AND edge-resize + a Start-date field in the
 task panel.
