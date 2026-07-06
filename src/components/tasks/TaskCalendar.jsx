@@ -9,8 +9,9 @@ import {
   useDraggable,
   useDroppable,
 } from '@dnd-kit/core'
-import { ChevronLeft, ChevronRight, CalendarX2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarX2, SlidersHorizontal, Check } from 'lucide-react'
 import { monthMatrix, bucketTasksByDay, addMonths, formatMonthTitle, dueDateForDay, dueDayIso } from '../../lib/calendar'
+import { CALENDAR_PROPS, loadCalendarProps, saveCalendarProps } from '../../lib/calendarProps'
 
 // Notion-style month calendar (design:
 // docs/plans/2026-07-05-calendar-view-design.md). Purely presentational —
@@ -34,7 +35,62 @@ const DOT = {
 
 const MAX_VISIBLE = 3
 
-function Pill({ task, onOpen, overlay = false }) {
+const STATUS_BADGE = {
+  'Not Started': 'bg-slate-100 text-slate-500 dark:bg-dark-hover dark:text-slate-400',
+  'In Progress': 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300',
+  'Blocked':     'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300',
+  'Done':        'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300',
+}
+const URGENCY_BADGE = {
+  Urgent: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300',
+  High:   'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300',
+  Med:    'bg-slate-100 text-slate-500 dark:bg-dark-hover dark:text-slate-400',
+  Low:    'bg-slate-100 text-slate-400 dark:bg-dark-hover dark:text-slate-500',
+}
+
+function dueTimeLabel(due) {
+  if (!due || !/T|\s\d{2}:/.test(String(due))) return null
+  const d = new Date(due)
+  if (isNaN(d.getTime())) return null
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+// Notion-style property rows under the pill title ("Property visibility").
+function PillProps({ task, visibleProps }) {
+  if (!visibleProps?.length) return null
+  const time = visibleProps.includes('due_time') ? dueTimeLabel(task.due_date) : null
+  return (
+    <span className="flex flex-wrap items-center gap-1 pl-3">
+      {visibleProps.includes('status') && task.status && (
+        <span className={`px-1.5 py-px rounded text-[9px] font-semibold ${STATUS_BADGE[task.status] || STATUS_BADGE['Not Started']}`}>
+          {task.status}
+        </span>
+      )}
+      {visibleProps.includes('urgency') && task.urgency && (
+        <span className={`px-1.5 py-px rounded text-[9px] font-semibold ${URGENCY_BADGE[task.urgency] || URGENCY_BADGE.Med}`}>
+          {task.urgency}
+        </span>
+      )}
+      {visibleProps.includes('assignee') && task.assignee?.full_name && (
+        <span className="inline-flex items-center gap-1 text-[9px] text-slate-500 dark:text-slate-400 min-w-0">
+          {task.assignee.avatar_url
+            ? <img src={task.assignee.avatar_url} className="w-3 h-3 rounded-full" alt="" />
+            : <span className="w-3 h-3 rounded-full bg-brand-500 text-white text-[7px] font-bold flex items-center justify-center">{task.assignee.full_name[0]}</span>}
+          <span className="truncate max-w-[90px]">{task.assignee.full_name}</span>
+        </span>
+      )}
+      {visibleProps.includes('team') && task.team?.name && (
+        <span className="text-[9px] text-slate-400 dark:text-slate-500 truncate max-w-[90px]">{task.team.name}</span>
+      )}
+      {visibleProps.includes('task_id') && task.task_id && (
+        <span className="text-[9px] font-mono text-slate-400 dark:text-slate-500">{task.task_id}</span>
+      )}
+      {time && <span className="text-[9px] text-slate-400 dark:text-slate-500">{time}</span>}
+    </span>
+  )
+}
+
+function Pill({ task, onOpen, overlay = false, visibleProps = [] }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: task.id,
     data: { task },
@@ -46,7 +102,7 @@ function Pill({ task, onOpen, overlay = false }) {
       {...(overlay ? {} : { ...listeners, ...attributes })}
       onClick={() => !overlay && onOpen?.(task)}
       title={task.title}
-      className={`w-full flex items-center gap-1.5 px-1.5 py-1 rounded-md text-left text-[11px] font-medium
+      className={`w-full flex flex-col items-start gap-0.5 px-1.5 py-1 rounded-md text-left text-[11px] font-medium
         bg-white dark:bg-dark-card border border-slate-200/70 dark:border-dark-border
         text-slate-700 dark:text-slate-200 shadow-soft dark:shadow-none
         hover:border-brand-300 dark:hover:border-brand-500/40 transition-colors
@@ -54,13 +110,16 @@ function Pill({ task, onOpen, overlay = false }) {
         ${overlay ? 'shadow-elevated rotate-2 cursor-grabbing' : 'cursor-grab'}
         ${task.status === 'Done' ? 'opacity-55 line-through decoration-slate-400' : ''}`}
     >
-      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${DOT[task.priority] || 'bg-slate-300'}`} />
-      <span className="truncate">{task.title}</span>
+      <span className="flex items-center gap-1.5 w-full min-w-0">
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${DOT[task.priority] || 'bg-slate-300'}`} />
+        <span className="truncate">{task.title}</span>
+      </span>
+      <PillProps task={task} visibleProps={visibleProps} />
     </button>
   )
 }
 
-function DayCell({ cell, tasks, expanded, onToggleExpand, onOpenTask }) {
+function DayCell({ cell, tasks, expanded, onToggleExpand, onOpenTask, visibleProps }) {
   const { setNodeRef, isOver } = useDroppable({ id: `day-${cell.iso}` })
   const visible = expanded ? tasks : tasks.slice(0, MAX_VISIBLE)
   const hidden = tasks.length - visible.length
@@ -81,7 +140,7 @@ function DayCell({ cell, tasks, expanded, onToggleExpand, onOpenTask }) {
       >
         {cell.dayOfMonth}
       </span>
-      {visible.map(t => <Pill key={t.id} task={t} onOpen={onOpenTask} />)}
+      {visible.map(t => <Pill key={t.id} task={t} onOpen={onOpenTask} visibleProps={visibleProps} />)}
       {hidden > 0 && (
         <button
           onClick={() => onToggleExpand(cell.iso)}
@@ -102,7 +161,7 @@ function DayCell({ cell, tasks, expanded, onToggleExpand, onOpenTask }) {
   )
 }
 
-function NoDateTray({ undated, open, onToggle, onOpenTask }) {
+function NoDateTray({ undated, open, onToggle, onOpenTask, visibleProps }) {
   const { setNodeRef, isOver } = useDroppable({ id: 'no-date-tray' })
   return (
     <div className="relative">
@@ -123,7 +182,7 @@ function NoDateTray({ undated, open, onToggle, onOpenTask }) {
               Every task has a due date.
             </p>
           ) : (
-            undated.map(t => <Pill key={t.id} task={t} onOpen={onOpenTask} />)
+            undated.map(t => <Pill key={t.id} task={t} onOpen={onOpenTask} visibleProps={visibleProps} />)
           )}
         </div>
       )}
@@ -137,6 +196,16 @@ export default function TaskCalendar({ tasks, onOpenTask, onReschedule }) {
   const today = new Date()
   const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() })
   const [trayOpen, setTrayOpen] = useState(false)
+  const [propsOpen, setPropsOpen] = useState(false)
+  const [visibleProps, setVisibleProps] = useState(() => loadCalendarProps())
+
+  function toggleProp(key) {
+    setVisibleProps(prev => {
+      const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+      saveCalendarProps(next)
+      return next
+    })
+  }
   const [expandedDays, setExpandedDays] = useState(() => new Set())
   const [activeTask, setActiveTask] = useState(null)
 
@@ -204,8 +273,45 @@ export default function TaskCalendar({ tasks, onOpenTask, onReschedule }) {
           >
             Today
           </button>
-          <div className="ml-auto">
-            <NoDateTray undated={undated} open={trayOpen} onToggle={() => setTrayOpen(o => !o)} onOpenTask={onOpenTask} />
+          <div className="ml-auto flex items-center gap-2">
+            <div className="relative">
+              <button
+                onClick={() => setPropsOpen(o => !o)}
+                className={`btn text-xs px-2.5 py-1.5 inline-flex items-center gap-1.5 ${visibleProps.length ? 'text-brand-600 dark:text-brand-400' : ''}`}
+                title="Choose which properties show on cards"
+              >
+                <SlidersHorizontal size={13} />
+                Display
+                {visibleProps.length > 0 && (
+                  <span className="text-[10px] font-semibold bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-300 rounded-full px-1.5">
+                    {visibleProps.length}
+                  </span>
+                )}
+              </button>
+              {propsOpen && (
+                <div className="absolute right-0 top-full mt-1.5 z-30 w-48 rounded-xl border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card shadow-panel p-1.5">
+                  <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    Properties on cards
+                  </p>
+                  {CALENDAR_PROPS.map(p => {
+                    const on = visibleProps.includes(p.key)
+                    return (
+                      <button
+                        key={p.key}
+                        onClick={() => toggleProp(p.key)}
+                        className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-dark-hover transition-colors"
+                        role="menuitemcheckbox"
+                        aria-checked={on}
+                      >
+                        {p.label}
+                        {on && <Check size={13} className="text-brand-500" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+            <NoDateTray undated={undated} open={trayOpen} onToggle={() => setTrayOpen(o => !o)} onOpenTask={onOpenTask} visibleProps={visibleProps} />
           </div>
         </div>
 
@@ -228,13 +334,14 @@ export default function TaskCalendar({ tasks, onOpenTask, onReschedule }) {
               expanded={expandedDays.has(cell.iso)}
               onToggleExpand={toggleExpand}
               onOpenTask={onOpenTask}
+              visibleProps={visibleProps}
             />
           ))}
         </div>
       </div>
 
       <DragOverlay dropAnimation={null}>
-        {activeTask && <div className="w-44"><Pill task={activeTask} overlay /></div>}
+        {activeTask && <div className="w-44"><Pill task={activeTask} overlay visibleProps={visibleProps} /></div>}
       </DragOverlay>
     </DndContext>
   )
