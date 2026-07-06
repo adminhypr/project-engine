@@ -144,6 +144,9 @@ curl -s $H -X POST $BASE/conversations/$CID/messages \
 ## Errors
 JSON `{ "error": "…" }` with status: `401` invalid/missing/revoked key · `403` not a member of the project · `404` unknown task/route · `400` bad input.
 
+## Rate limits
+There are **none** at the API layer. Calls are independent and safe to run in parallel — a burst of 12 concurrent `promote` calls completes in ~2s total (measured 2026-07-06). Each individual call takes ~1s (several DB round-trips), so a **sequential** loop over N items feels slow at ~N seconds; parallelize instead (`Promise.all`, `xargs -P`, etc.). Re-promoting an already-promoted row returns `409` — treat that as success-already, not an error to retry.
+
 ## curl examples
 ```bash
 KEY=hypr_xxxx
