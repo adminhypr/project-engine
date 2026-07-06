@@ -14,7 +14,8 @@ import MassActionBar from '../components/tasks/MassActionBar'
 import DeleteConfirmModal from '../components/tasks/DeleteConfirmModal'
 import KanbanBoard from '../components/kanban/KanbanBoard'
 import QuickAddModal from '../components/kanban/QuickAddModal'
-import { Bookmark, X, List, Columns3 } from 'lucide-react'
+import { Bookmark, X, List, Columns3, CalendarDays } from 'lucide-react'
+import TaskCalendar from '../components/tasks/TaskCalendar'
 import { usePageTitle } from '../hooks/usePageTitle'
 
 const SAVED_VIEW_KEY = 'pe-team-view-filters'
@@ -69,6 +70,14 @@ export default function TeamViewPage() {
   const [showBulkDelete, setShowBulkDelete] = useState(false)
   const [quickAddStatus, setQuickAddStatus] = useState(null)
   const [hideSubtasks, setHideSubtasks] = useState(true) // on by default in Team View
+
+  // Calendar drag-to-reschedule — same updateTask path as every other
+  // due-date edit; a failed write toasts and the refetch snaps the pill back.
+  async function handleCalendarReschedule(taskId, isoDate) {
+    const result = await updateTask(taskId, { due_date: isoDate })
+    if (result.ok) showToast(isoDate ? 'Due date updated' : 'Due date cleared')
+    else { showToast(result.msg || 'Failed to update due date', 'error'); refetch(true) }
+  }
 
   function switchView(v) {
     setView(v)
@@ -215,6 +224,17 @@ export default function TeamViewPage() {
       >
         <Columns3 size={16} />
       </button>
+      <button
+        onClick={() => switchView('calendar')}
+        className={`p-1.5 rounded-md transition-all duration-150 ${
+          view === 'calendar'
+            ? 'bg-white dark:bg-dark-card text-slate-900 dark:text-white shadow-soft'
+            : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+        }`}
+        title="Calendar view"
+      >
+        <CalendarDays size={16} />
+      </button>
     </div>
   )
 
@@ -307,6 +327,23 @@ export default function TeamViewPage() {
               />
             </div>
           </>
+        ) : view === 'calendar' ? (
+          <div className="p-4 sm:p-6 space-y-4">
+            <div className="card">
+              <FilterRow
+                filters={filters}
+                onChange={(k, v) => setFilters(f => ({ ...f, [k]: v }))}
+                onClear={() => setFilters({})}
+                showTeamFilter={isAdmin}
+                teams={allTeams}
+              />
+            </div>
+            <TaskCalendar
+              tasks={filtered}
+              onOpenTask={(t) => setActiveTaskId(t.id)}
+              onReschedule={handleCalendarReschedule}
+            />
+          </div>
         ) : (
           <div className="p-4 sm:p-6">
             <div className="card">

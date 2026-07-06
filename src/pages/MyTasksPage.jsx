@@ -18,7 +18,8 @@ import DeleteConfirmModal from '../components/tasks/DeleteConfirmModal'
 import MassActionBar from '../components/tasks/MassActionBar'
 import KanbanBoard from '../components/kanban/KanbanBoard'
 import QuickAddModal from '../components/kanban/QuickAddModal'
-import { List, Columns3 } from 'lucide-react'
+import { List, Columns3, CalendarDays } from 'lucide-react'
+import TaskCalendar from '../components/tasks/TaskCalendar'
 import { usePageTitle } from '../hooks/usePageTitle'
 
 const VIEW_KEY = 'pe-task-view'
@@ -90,6 +91,16 @@ export default function MyTasksPage() {
 
   // The Archived tab is a flat bin — the kanban board is meaningless there.
   const boardView = view === 'board' && tab !== 'archived'
+  const calendarView = view === 'calendar' && tab !== 'archived'
+
+  // Calendar drag-to-reschedule (or drop on the No-due-date tray → null).
+  // Same updateTask path as every other due-date edit; realtime refetch
+  // repaints the grid, and a failed write snaps the pill back.
+  async function handleCalendarReschedule(taskId, isoDate) {
+    const result = await updateTask(taskId, { due_date: isoDate })
+    if (result.ok) showToast(isoDate ? 'Due date updated' : 'Due date cleared')
+    else { showToast(result.msg || 'Failed to update due date', 'error'); refetch(true) }
+  }
 
   // Two sources of "open this task":
   //   • location.state.openTaskId — pushed by NotificationBell when the user
@@ -306,6 +317,17 @@ export default function MyTasksPage() {
       >
         <Columns3 size={16} />
       </button>
+      <button
+        onClick={() => switchView('calendar')}
+        className={`p-1.5 rounded-md transition-all duration-150 ${
+          view === 'calendar'
+            ? 'bg-white dark:bg-dark-card text-slate-900 dark:text-white shadow-soft'
+            : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+        }`}
+        title="Calendar view"
+      >
+        <CalendarDays size={16} />
+      </button>
     </div>
   )
 
@@ -462,6 +484,21 @@ export default function MyTasksPage() {
               />
             </div>
           </>
+        ) : calendarView ? (
+          <div className="p-4 sm:p-6 space-y-4">
+            <div className="card">
+              <FilterRow
+                filters={filters}
+                onChange={(k, v) => setFilters(f => ({ ...f, [k]: v }))}
+                onClear={() => setFilters({ statuses: ['Not Started', 'In Progress', 'Blocked'] })}
+              />
+            </div>
+            <TaskCalendar
+              tasks={filtered}
+              onOpenTask={(t) => setActiveTaskId(t.id)}
+              onReschedule={handleCalendarReschedule}
+            />
+          </div>
         ) : (
           <div className="p-4 sm:p-6">
             <div className="card">
