@@ -10,10 +10,13 @@ export function formatChatTime(iso, fmt = '12h') {
     if (!iso) return ''
     const d = new Date(iso)
     if (Number.isNaN(d.getTime())) return ''
+    // Locale pinned to en-US: the promised outputs ('2:40 PM', '00:00') are
+    // locale-dependent — e.g. en-CA renders '2:40 p.m.' — and the 12h/24h
+    // toggle is the user-facing preference, not the browser locale.
     if (fmt === '24h') {
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+      return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
     }
-    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
   } catch {
     return ''
   }

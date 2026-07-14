@@ -178,6 +178,49 @@ function renderDigestHtml(rows: OutboxRow[], userName: string): { subject: strin
     return `${prefix}${escape(r.payload.actor_name || 'Someone')} ${verb} ${titleLinked}: <em style="color:#6b7280;">${escape(r.payload.snippet || '').slice(0, 100)}</em>`
   })
 
+  // Dev Projects activity (migration 119). One section for all six event
+  // types, grouped chronologically. A promote fires BOTH feature_created
+  // (task insert) and promotion (bug/request update) — mirror the bell's
+  // collapse and show only the promotion for the same task.
+  const promotedTaskIds = new Set(
+    (byType['project_promotion'] || []).map((r) => r.payload.task_id).filter(Boolean),
+  )
+  const projectRows = [
+    ...(byType['project_bug_reported'] || []),
+    ...(byType['project_request_created'] || []),
+    ...(byType['project_feature_created'] || []).filter((r) => !promotedTaskIds.has(r.payload.task_id)),
+    ...(byType['project_feature_moved'] || []),
+    ...(byType['project_comment'] || []),
+    ...(byType['project_promotion'] || []),
+  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  totalCount -= ((byType['project_feature_created'] || []).length - (byType['project_feature_created'] || []).filter((r) => !promotedTaskIds.has(r.payload.task_id)).length)
+  section('Dev Projects activity', projectRows, (r) => {
+    const p = r.payload
+    const projectName = `<strong>${escape(p.project_name || 'a project')}</strong>`
+    const projectLinked = asLink(projectName, p.project_id ? `${PUBLIC_APP_URL}/projects/${escape(p.project_id)}` : null)
+    const actor = escape(p.actor_name || 'A teammate')
+    const snippet = p.snippet ? `: <em style="color:#6b7280;">${escape(p.snippet).slice(0, 100)}</em>` : ''
+    switch (r.event_type) {
+      case 'project_bug_reported':
+        return `🐛 ${actor} reported <strong>[${escape(p.severity || '—')}] ${escape(p.bug_title || 'a bug')}</strong> in ${projectLinked}${snippet}`
+      case 'project_request_created':
+        return `💡 ${actor} filed <strong>${escape(p.request_title || 'a request')}</strong> in ${projectLinked}${snippet}`
+      case 'project_feature_created':
+        return `${actor} added <strong>${escape([p.task_display_id, p.task_title].filter(Boolean).join(' ') || 'a feature')}</strong> to ${projectLinked}${snippet}`
+      case 'project_feature_moved': {
+        const from = escape(p.from_column || p.from_status || '—')
+        const to = escape(p.to_column || p.to_status || '—')
+        return `${actor} moved <strong>${escape(p.task_title || 'a feature')}</strong> (${from} → ${to}) in ${projectLinked}`
+      }
+      case 'project_comment':
+        return `${actor} commented on <strong>${escape(p.task_title || 'a task')}</strong> in ${projectLinked}${snippet}`
+      case 'project_promotion':
+        return `🚀 ${actor} promoted ${p.source === 'bug' ? 'bug' : 'request'} <strong>${escape(p.source_title || 'an item')}</strong> → <strong>${escape(p.task_display_id || p.task_title || 'a task')}</strong> in ${projectLinked}`
+      default:
+        return `${actor} did something in ${projectLinked}`
+    }
+  })
+
   // Other task events (declined / completed / reassigned) — currently the
   // existing `notify` function emails these instantly. We enqueue them too
   // as a future-proof; for now they'll appear here only if the instant path

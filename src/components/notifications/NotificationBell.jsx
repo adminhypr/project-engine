@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useId } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Bell, CheckCircle, AlertTriangle, Clock, UserPlus, UserCog, MessageSquare, Boxes, AtSign, X } from 'lucide-react'
+import { Bell, CheckCircle, AlertTriangle, Clock, UserPlus, UserCog, MessageSquare, Boxes, AtSign, X, Bug, Lightbulb, FolderKanban, ArrowRightLeft, Rocket } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useTasks } from '../../hooks/useTasks'
 import { useAuth } from '../../hooks/useAuth'
@@ -9,10 +9,41 @@ import { formatDate } from '../../lib/helpers'
 import { useMentionNotifications } from '../../hooks/useMentionNotifications'
 import { useConversations } from '../../hooks/useConversations'
 import { useTodoAssignmentNotifications } from '../../hooks/useTodoAssignmentNotifications'
+import { useProjectActivityNotifications } from '../../hooks/useProjectActivityNotifications'
+import { formatProjectActivity } from '../../lib/projectActivity'
 
-function getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInvites, hubMentions, dmConversations, todoAssignments = []) {
+// Dev Projects activity (migration 119) — icon/color per event kind.
+const PROJECT_ACTIVITY_STYLES = {
+  project_bug_reported:    { icon: <Bug size={14} />,            color: 'text-red-600 bg-red-500/15' },
+  project_request_created: { icon: <Lightbulb size={14} />,      color: 'text-amber-600 bg-amber-500/15' },
+  project_feature_created: { icon: <FolderKanban size={14} />,   color: 'text-violet-600 bg-violet-500/15' },
+  project_feature_moved:   { icon: <ArrowRightLeft size={14} />, color: 'text-sky-600 bg-sky-500/15' },
+  project_comment:         { icon: <MessageSquare size={14} />,  color: 'text-brand-600 bg-brand-500/15' },
+  project_promotion:       { icon: <Rocket size={14} />,         color: 'text-emerald-600 bg-emerald-500/15' },
+}
+
+function getNotifications(myTasks, profile, unsetupUsers, recentComments, hubInvites, hubMentions, dmConversations, todoAssignments = [], projectActivities = []) {
   const notifications = []
   const now = new Date()
+
+  // Dev Projects activity — outbox rows preformatted by projectActivity.js.
+  projectActivities.forEach(row => {
+    const n = formatProjectActivity(row)
+    if (!n) return
+    const style = PROJECT_ACTIVITY_STYLES[n.kind] || { icon: <FolderKanban size={14} />, color: 'text-violet-600 bg-violet-500/15' }
+    notifications.push({
+      id: `proj-${row.id}`,
+      type: 'project-activity',
+      icon: style.icon,
+      color: style.color,
+      title: n.title,
+      body: n.body,
+      link: n.link,
+      outboxId: row.id,
+      time: n.time,
+      priority: 0.45,
+    })
+  })
 
   // Hub invitations
   hubInvites.forEach(inv => {
@@ -241,6 +272,7 @@ export default function NotificationBell({ onTaskClick }) {
   const { mentions: hubMentions, markSeen: markMentionSeen } = useMentionNotifications()
   const { conversations: dmConversations } = useConversations()
   const todoAssignments = useTodoAssignmentNotifications()
+  const { activities: projectActivities, markSeen: markProjectSeen, markAllSeen: markAllProjectSeen } = useProjectActivityNotifications()
   const [dismissed, setDismissed] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('pe-dismissed-notifs') || '[]')
@@ -372,7 +404,7 @@ export default function NotificationBell({ onTaskClick }) {
   // meant to clear a task off your lists, so the bell shouldn't keep nagging
   // about an archived task being overdue / pending / due-soon.
   const activeMyTasks = myTasks.filter(t => !t.archived)
-  const allNotifications = getNotifications(activeMyTasks, profile, unsetupUsers, recentComments, hubInvites, hubMentions, dmConversations, todoAssignments)
+  const allNotifications = getNotifications(activeMyTasks, profile, unsetupUsers, recentComments, hubInvites, hubMentions, dmConversations, todoAssignments, projectActivities)
   const notifications = allNotifications.filter(n => !dismissed.includes(n.id))
   const count = notifications.length
 
@@ -396,13 +428,22 @@ export default function NotificationBell({ onTaskClick }) {
     setDismissed(prev => [...prev, id])
   }
 
+  // Project-activity rows use a durable DB seen-flag (delivered_to_bell_at)
+  // instead of localStorage, so dismissals survive across devices.
+  function handleDismiss(n) {
+    dismiss(n.id)
+    if (n.outboxId) markProjectSeen(n.outboxId)
+  }
+
   function clearAll() {
     setDismissed(allNotifications.map(n => n.id))
+    markAllProjectSeen()
     setIsOpen(false)
   }
 
   function handleNotifClick(n) {
     dismiss(n.id)
+    if (n.outboxId) markProjectSeen(n.outboxId)
     if (n.mentionId) markMentionSeen(n.mentionId)
     if (n.taskChatTaskId) {
       // Open the task detail (which hosts the task chat). Seen-tracking
@@ -490,7 +531,7 @@ export default function NotificationBell({ onTaskClick }) {
                       <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{timeAgo(n.time)}</p>
                     </div>
                     <button
-                      onClick={(e) => { e.stopPropagation(); dismiss(n.id) }}
+                      onClick={(e) => { e.stopPropagation(); handleDismiss(n) }}
                       className="p-1 rounded-lg text-slate-300 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-dark-hover transition-colors flex-shrink-0"
                       aria-label="Dismiss notification"
                     >

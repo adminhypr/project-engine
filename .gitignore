@@ -8,3 +8,6 @@ supabase/.temp/
 .vercel
 .worktrees/
 .env*.local
+
+# macOS AppleDouble junk (created when the repo was copied through a non-APFS filesystem)
+._*
