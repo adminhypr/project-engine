@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, KanbanSquare, Users as UsersIcon } from 'lucide-react'
+import { Plus, KanbanSquare, Users as UsersIcon, Pencil } from 'lucide-react'
 import { useProjects } from '../hooks/useProjects'
+import ProjectEditModal from '../components/projects/ProjectEditModal'
 import { useTasks } from '../hooks/useTasks'
 import { featureProgress, projectProgress } from '../lib/projectBoard'
 import { PageHeader, LoadingScreen, EmptyState, showToast } from '../components/ui'
@@ -18,9 +19,10 @@ const STATUS_STYLES = {
 export default function ProjectsPage() {
   usePageTitle('Dev Projects')
   const navigate = useNavigate()
-  const { projects, loading, createProject } = useProjects()
+  const { projects, loading, createProject, updateProject } = useProjects()
   const { tasks } = useTasks()
   const [showNew, setShowNew] = useState(false)
+  const [editing, setEditing] = useState(null)
 
   // Per-project overall progress + feature count, derived from the already-
   // loaded tasks context (no extra fetch).
@@ -59,11 +61,15 @@ export default function ProjectsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {projects.map(p => {
                 const prog = progressByProject.get(p.id) || { pct: 0, count: 0 }
+                const canEdit = p.my_role === 'owner' || p.my_role === 'admin'
                 return (
-                  <button
+                  <div
                     key={p.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => navigate(`/projects/${p.id}`)}
-                    className="card text-left hover:shadow-elevated transition-shadow p-4 flex flex-col gap-3"
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/projects/${p.id}`) } }}
+                    className="card text-left hover:shadow-elevated transition-shadow p-4 flex flex-col gap-3 cursor-pointer"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
@@ -72,9 +78,20 @@ export default function ProjectsPage() {
                         </span>
                         <span className="font-semibold text-slate-900 dark:text-white truncate">{p.name}</span>
                       </div>
-                      <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0 ${STATUS_STYLES[p.status] || STATUS_STYLES.Active}`}>
-                        {p.status}
-                      </span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {canEdit && (
+                          <button
+                            onClick={e => { e.stopPropagation(); setEditing(p) }}
+                            className="p-1 rounded-md text-slate-300 dark:text-slate-600 hover:text-brand-500 dark:hover:text-brand-300 hover:bg-slate-100 dark:hover:bg-dark-hover transition-colors"
+                            title="Edit project"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                        )}
+                        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[p.status] || STATUS_STYLES.Active}`}>
+                          {p.status}
+                        </span>
+                      </div>
                     </div>
 
                     {p.description && (
@@ -95,12 +112,23 @@ export default function ProjectsPage() {
                       <span className="inline-flex items-center gap-1"><UsersIcon size={12} /> {p.member_count}</span>
                       {p.target_date && <span>Due {new Date(p.target_date).toLocaleDateString()}</span>}
                     </div>
-                  </button>
+                  </div>
                 )
               })}
             </div>
           )}
         </div>
+
+        <ProjectEditModal
+          isOpen={!!editing}
+          onClose={() => setEditing(null)}
+          project={editing}
+          onSave={async (updates) => {
+            const ok = await updateProject(editing.id, updates)
+            if (ok) showToast('Project updated')
+            return ok
+          }}
+        />
 
         <NewProjectModal
           isOpen={showNew}

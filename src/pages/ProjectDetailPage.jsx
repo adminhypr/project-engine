@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { List, Columns3, CalendarDays, ArrowLeft, Users as UsersIcon, Upload } from 'lucide-react'
+import { List, Columns3, CalendarDays, ArrowLeft, Users as UsersIcon, Upload, Pencil } from 'lucide-react'
 import { useProjects, useProjectMembers } from '../hooks/useProjects'
 import { useAuth } from '../hooks/useAuth'
 import { useTasks, useTaskActions } from '../hooks/useTasks'
@@ -27,6 +27,7 @@ import BugBoard from '../components/projects/BugBoard'
 import BugEditModal from '../components/projects/BugEditModal'
 import ProjectMembersModal from '../components/projects/ProjectMembersModal'
 import ImportQAModal from '../components/projects/ImportQAModal'
+import ProjectEditModal from '../components/projects/ProjectEditModal'
 
 const VIEW_KEY = 'pe-project-view'
 
@@ -41,7 +42,7 @@ export default function ProjectDetailPage() {
   const { projectId } = useParams()
   const navigate = useNavigate()
   const { profile } = useAuth()
-  const { projects, loading: projectsLoading } = useProjects()
+  const { projects, loading: projectsLoading, updateProject } = useProjects()
   const project = useMemo(() => projects.find(p => p.id === projectId), [projects, projectId])
   usePageTitle(project?.name || 'Project')
 
@@ -82,6 +83,7 @@ export default function ProjectDetailPage() {
     if (res?.ok) { setQuickAddDate(null); setQuickAddTitle('') }
   }
   const [showImport, setShowImport] = useState(false)
+  const [showEditProject, setShowEditProject] = useState(false)
 
   // Features filter (Mine / Urgency / Due). Applies to the Features board + list
   // only — Requests/Bugs are status backlogs without these fields.
@@ -176,6 +178,15 @@ export default function ProjectDetailPage() {
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-xl font-bold text-slate-900 dark:text-white truncate">{project.name}</h1>
+                {isAdmin && (
+                  <button
+                    onClick={() => setShowEditProject(true)}
+                    className="p-1 rounded-md text-slate-300 dark:text-slate-600 hover:text-brand-500 dark:hover:text-brand-300 hover:bg-slate-100 dark:hover:bg-dark-hover transition-colors"
+                    title="Edit project"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                )}
                 <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[project.status] || STATUS_STYLES.Active}`}>{project.status}</span>
               </div>
               <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400">
@@ -320,6 +331,17 @@ export default function ProjectDetailPage() {
             </div>
           </form>
         </ModalWrapper>
+
+        <ProjectEditModal
+          isOpen={showEditProject}
+          onClose={() => setShowEditProject(false)}
+          project={project}
+          onSave={async (updates) => {
+            const ok = await updateProject(project.id, updates)
+            if (ok) showToast('Project updated')
+            return ok
+          }}
+        />
 
         {showMembers && (
           <ProjectMembersModal
