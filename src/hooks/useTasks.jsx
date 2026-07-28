@@ -75,6 +75,23 @@ const TASK_SELECT_FALLBACK = `
   team:teams(id, name)
 `
 
+// PostgREST caps EVERY response (tables and set-returning RPCs) at 1000 rows.
+// Past ~1000 visible tasks the unpaged SELECT silently dropped the oldest rows
+// — projects whose features predate the cutoff showed 0 features / 0% on
+// /projects. Page with .range() until a short page signals the end. buildQuery
+// must include a deterministic ORDER BY (ties across page boundaries skip or
+// duplicate rows otherwise).
+const PAGE_SIZE = 1000
+async function fetchAllPages(buildQuery) {
+  let all = []
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1)
+    if (error) return { data: all, error }
+    all = all.concat(data || [])
+    if (!data || data.length < PAGE_SIZE) return { data: all, error: null }
+  }
+}
+
 // Shared task state. Mounted once via <TasksProvider>; every useTasks() call
 // reads from this context instead of spawning its own fetch/realtime channel.
 // Before: NotificationBell + MyTasksPage each ran the full enrichment chain
@@ -115,14 +132,20 @@ function useTasksImpl() {
     // `comments(count)` embed — fine for a few rows, brutal for 100+.
     let usedFallback = false
     const [tasksRes, commentCountsRes] = await Promise.all([
-      supabase.from('tasks').select(TASK_SELECT_FULL).order('date_assigned', { ascending: false }),
-      supabase.rpc('get_user_task_comment_counts'),
+      fetchAllPages(() => supabase.from('tasks').select(TASK_SELECT_FULL)
+        .order('date_assigned', { ascending: false }).order('id', { ascending: true })),
+      // The RPC returns one row per visible task (LEFT JOIN) — same 1000-row
+      // cap, so paginate it too. RPC row order isn't guaranteed; order by
+      // task_id for stable pages.
+      fetchAllPages(() => supabase.rpc('get_user_task_comment_counts')
+        .order('task_id', { ascending: true })),
     ])
     let { data, error } = tasksRes
     if (error) {
       console.warn('task_assignees join failed, using fallback query:', error.message)
       usedFallback = true
-      const retry = await supabase.from('tasks').select(TASK_SELECT_FALLBACK).order('date_assigned', { ascending: false })
+      const retry = await fetchAllPages(() => supabase.from('tasks').select(TASK_SELECT_FALLBACK)
+        .order('date_assigned', { ascending: false }).order('id', { ascending: true }))
       data = retry.data
       error = retry.error
     }
@@ -140,9 +163,10 @@ function useTasksImpl() {
     // If fallback was used, fetch task_assignees separately
     let assigneesMap = {}
     if (usedFallback && data?.length) {
-      const { data: taData } = await supabase
+      const { data: taData } = await fetchAllPages(() => supabase
         .from('task_assignees')
         .select('task_id, profile_id, is_primary, completed_at, completed_by, profile:profiles(id, full_name, avatar_url)')
+        .order('task_id', { ascending: true }).order('profile_id', { ascending: true }))
       if (taData) {
         for (const ta of taData) {
           if (!assigneesMap[ta.task_id]) assigneesMap[ta.task_id] = []
@@ -169,8 +193,9 @@ function useTasksImpl() {
     const taskIds = (data || []).map(t => t.id).filter(Boolean)
     const unreadByTaskId = new Map()
     if (taskIds.length > 0) {
-      const { data: unreadRows, error: unreadErr } = await supabase
-        .rpc('get_user_task_chat_unreads', { p_task_ids: taskIds })
+      const { data: unreadRows, error: unreadErr } = await fetchAllPages(() =>
+        supabase.rpc('get_user_task_chat_unreads', { p_task_ids: taskIds })
+          .order('task_id', { ascending: true }))
       if (unreadErr) {
         console.warn('get_user_task_chat_unreads failed:', unreadErr.message)
       } else if (unreadRows) {
